@@ -40,29 +40,37 @@ export default function SignUpPage() {
   }, [step]);
 
   useEffect(() => {
-    const fragment = new URLSearchParams(window.location.hash.slice(1));
-    const accessToken = fragment.get("access_token");
-    const refreshToken = fragment.get("refresh_token");
-    const authType = fragment.get("type");
-    const authError = fragment.get("error_description");
-    if (!accessToken && authError) {
-      setError(authError);
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      if (cancelled) return;
+      const fragment = new URLSearchParams(window.location.hash.slice(1));
+      const accessToken = fragment.get("access_token");
+      const refreshToken = fragment.get("refresh_token");
+      const authType = fragment.get("type");
+      const authError = fragment.get("error_description");
+      if (!accessToken && authError) {
+        setError(authError);
+        window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+        return;
+      }
+      if (!accessToken || !refreshToken || !["signup", "magiclink", "email"].includes(authType || "") || actionInFlight.current) return;
+      actionInFlight.current = true;
+      setBusy(true);
       window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
-      return;
-    }
-    if (!accessToken || !refreshToken || !["signup", "magiclink", "email"].includes(authType || "") || actionInFlight.current) return;
-    actionInFlight.current = true;
-    setBusy(true);
-    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
-    void AuthService.acceptSignupLink(accessToken, refreshToken).then((result) => {
-      setEmail(result.email);
-      setStep("password");
-    }).catch((cause) => {
-      setError(cause instanceof Error ? cause.message : "This verification link is invalid or expired.");
-    }).finally(() => {
-      setBusy(false);
-      actionInFlight.current = false;
-    });
+      void AuthService.acceptSignupLink(accessToken, refreshToken).then((result) => {
+        setEmail(result.email);
+        setStep("password");
+      }).catch((cause) => {
+        setError(cause instanceof Error ? cause.message : "This verification link is invalid or expired.");
+      }).finally(() => {
+        setBusy(false);
+        actionInFlight.current = false;
+      });
+    }, 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, []);
 
   const requestCode = async (event?: React.FormEvent) => {

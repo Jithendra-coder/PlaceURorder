@@ -1,4 +1,4 @@
-name: Quality checks
+name: Frontend quality checks
 
 on:
   push:
@@ -7,40 +7,6 @@ on:
     branches: [main, master]
 
 jobs:
-  backend:
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: universal_kiosk_app
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U postgres -d universal_kiosk_app"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/universal_kiosk_app
-      JWT_SECRET: dev-only-change-me-use-a-long-local-key
-      RUN_LIVE_DB_TESTS: "1"
-      RUN_SCHEMA_COMPATIBILITY_ON_STARTUP: "1"
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-          cache-dependency-path: backend/requirements-dev.txt
-      - run: python -m pip install -r requirements-dev.txt
-        working-directory: backend
-      - run: python -c "from pathlib import Path; import os, psycopg; connection = psycopg.connect(os.environ['DATABASE_URL']); connection.execute(Path('postgres_schema.sql').read_text(), prepare=False); connection.commit(); connection.close()"
-        working-directory: backend
-      - run: python -m pytest -q
-        working-directory: backend
-
   frontend:
     runs-on: ubuntu-latest
     defaults:

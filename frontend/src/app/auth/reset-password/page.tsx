@@ -18,11 +18,14 @@ function ResetPasswordForm() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
-    const fragment = new URLSearchParams(window.location.hash.slice(1));
-    const accessToken = fragment.get("access_token");
-    if (fragment.get("type") === "recovery" && accessToken) setToken(accessToken);
-    if (fragment.get("error_description")) setError(fragment.get("error_description") || "This reset link has expired.");
-    if (window.location.hash) window.history.replaceState({}, "", window.location.pathname + window.location.search);
+    const timer = window.setTimeout(() => {
+      const fragment = new URLSearchParams(window.location.hash.slice(1));
+      const accessToken = fragment.get("access_token");
+      if (fragment.get("type") === "recovery" && accessToken) setToken(accessToken);
+      if (fragment.get("error_description")) setError(fragment.get("error_description") || "This reset link has expired.");
+      if (window.location.hash) window.history.replaceState({}, "", window.location.pathname + window.location.search);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
   const passwordValid = password.length >= 8 && /[A-Z]/.test(password) && /\d/.test(password);
   const valid = Boolean(token) && passwordValid && password === confirm;
