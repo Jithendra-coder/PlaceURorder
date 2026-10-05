@@ -395,7 +395,8 @@ class RpcQuery:
 
 def new_connection() -> Connection:
     settings = get_settings()
-    return connect(settings.database_url, row_factory=dict_row)
+    # Supabase's transaction pooler does not support server-side prepared statements.
+    return connect(settings.database_url, row_factory=dict_row, prepare_threshold=None)
 
 
 def _safe_rollback(client: DbClient) -> None:

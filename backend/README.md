@@ -44,6 +44,8 @@ PEXELS_PER_PAGE=12
 
 The session-pooler URL above targets this Supabase project. Replace `[YOUR-PASSWORD]` in your ignored local `.env` file with the database password from **Supabase Dashboard → Connect**; never commit or share that value. Keep `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` pointed at this same project.
 
+For the Vercel serverless API, use the **Transaction pooler** connection string from Supabase Dashboard → Connect (port `6543`) as the production `DATABASE_URL`. The backend disables Psycopg prepared statements for compatibility with transaction pooling. Add the rotated connection string directly to the Vercel `universal-kiosk-api` project's Production environment; never commit it or paste it into chat.
+
 The project schema is tracked in `supabase/migrations`. Set the Supabase Auth Site URL to the deployed frontend and allow the frontend’s `/auth/sign-up` and `/auth/reset-password` URLs as redirects (also allow `http://localhost:3000` during local development). Signup and password reset links are sent by Supabase Auth; uploaded business images are stored in the public `business-assets` bucket with authenticated, business-scoped upload policies. This project’s initial schema migration has already been applied to its hosted project.
 
 Use a Supabase database for local development as well: Auth sessions and user records are stored alongside application data. Keep `DATABASE_URL`, `SUPABASE_URL`, and `SUPABASE_PUBLISHABLE_KEY` pointed at the same Supabase project.
