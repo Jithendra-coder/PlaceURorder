@@ -102,6 +102,18 @@ universal-kiosk-app/
 - **Python** 3.11+
 - **PostgreSQL** 14+
 
+### One-command local demo
+
+With Docker Engine and Docker Compose v2 installed, run from the repository root:
+
+```bash
+docker compose up --build
+```
+
+Open `http://localhost:3000`; the API is at `http://localhost:8000`. The first startup creates the database schema and local volumes for uploads and email previews. The services are bound to localhost. Stop with `Ctrl+C`; `docker compose down` stops the services while keeping demo data.
+
+> **Local demo only:** the Compose credentials are documented development defaults. Change them and review the security settings before any deployment with real data.
+
 ---
 
 ### 1. Database Setup

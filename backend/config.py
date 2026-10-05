@@ -8,6 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PRODUCTION_PLACEHOLDERS = {
     "dev-only-change-me",
+    "dev-only-change-me-use-a-long-local-key",
     "replace-with-a-long-random-secret-at-least-32-characters",
     "replace-with-a-long-random-maintenance-secret",
     "change-this-local-dev-secret-before-production",
@@ -22,7 +23,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://postgres:postgres@localhost:5432/universal_kiosk_app"
     supabase_url: str | None = None
     supabase_publishable_key: str | None = None
-    jwt_secret: str = "dev-only-change-me"
+    jwt_secret: str = "dev-only-change-me-use-a-long-local-key"
     jwt_algorithm: str = "HS256"
     jwt_access_token_minutes: int = 60 * 24
 

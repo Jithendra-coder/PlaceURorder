@@ -1,0 +1,65 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: menutap
+      POSTGRES_PASSWORD: local-demo-only
+      POSTGRES_DB: menutap
+    volumes:
+      - menutap_db:/var/lib/postgresql/data
+      - ./backend/postgres_schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U menutap -d menutap"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://menutap:local-demo-only@db:5432/menutap
+      JWT_SECRET: dev-only-change-me-use-a-long-local-key
+      ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      PUBLIC_BASE_URL: http://localhost:8000
+      FRONTEND_BASE_URL: http://localhost:3000
+      UPLOAD_ROOT: /app/uploads
+      EMAIL_OUTBOX_DIR: /app/email_outbox
+    volumes:
+      - menutap_uploads:/app/uploads
+      - menutap_email_outbox:/app/email_outbox
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 20s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        BACKEND_API_ORIGIN: http://api:8000
+    environment:
+      BACKEND_API_ORIGIN: http://api:8000
+      NEXT_PUBLIC_API_URL: /api
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  menutap_db:
+  menutap_uploads:
+  menutap_email_outbox:
