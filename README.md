@@ -1,4 +1,4 @@
-﻿# Universal Kiosk App (MenuTap)
+﻿# Universal Kiosk App (PlaceURorder)
 
 > A modern, responsive self-service kiosk, counter point-of-sale (POS), kitchen display system (KDS), and merchant administration platform built with **Next.js 16 (React 19)** and **FastAPI (PostgreSQL)**.
 
