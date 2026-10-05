@@ -26,6 +26,7 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/universal_kiosk_app
       JWT_SECRET: dev-only-change-me-use-a-long-local-key
       RUN_LIVE_DB_TESTS: "1"
+      RUN_SCHEMA_COMPATIBILITY_ON_STARTUP: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -58,5 +59,4 @@ jobs:
       - run: npm run lint
       - run: npm run check:styles
       - run: npm run check:typography
-      - run: docker compose config --quiet
-        working-directory: ..
+      - run: docker compose -f ../compose.yaml config --quiet
