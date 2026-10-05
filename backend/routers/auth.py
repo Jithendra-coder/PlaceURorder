@@ -1,4 +1,10 @@
+import hashlib
+import secrets
+from base64 import urlsafe_b64encode
+from urllib.parse import urlencode
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import JSONResponse
 
 from config import Settings, get_settings
 from database import DbClient, get_db_client
@@ -12,6 +18,7 @@ from schemas import (
     AuthUser,
     ForgotPasswordRequest,
     ForgotPasswordResponse,
+    GoogleOAuthExchange,
     ResendVerificationRequest,
     ResetPasswordRequest,
     SignupEmailComplete,
@@ -34,6 +41,9 @@ LOGIN_LIMIT = RateLimitRule("auth:login", 8, 60)
 FORGOT_PASSWORD_LIMIT = RateLimitRule("auth:forgot-password", 5, 60)
 RESET_PASSWORD_LIMIT = RateLimitRule("auth:reset-password", 5, 60)
 REAUTHENTICATE_LIMIT = RateLimitRule("auth:reauthenticate", 10, 60)
+GOOGLE_OAUTH_START_LIMIT = RateLimitRule("auth:google-oauth-start", 8, 60)
+GOOGLE_OAUTH_EXCHANGE_LIMIT = RateLimitRule("auth:google-oauth-exchange", 8, 60)
+GOOGLE_OAUTH_VERIFIER_COOKIE = "menutap_google_oauth_verifier"
 
 
 @router.post("/signup", response_model=SignupStartResponse)
@@ -143,6 +153,68 @@ def login(
 ):
     assert_rate_limit(request, LOGIN_LIMIT, identity_parts=[payload.email])
     session = auth_service.login(client, payload)
+    _set_session_cookie(response, session, settings)
+    return session
+
+
+@router.get("/oauth/google/start")
+def start_google_oauth(request: Request, settings: Settings = Depends(get_settings)):
+    assert_rate_limit(request, GOOGLE_OAUTH_START_LIMIT)
+    if not settings.supabase_url or not settings.supabase_publishable_key:
+        raise HTTPException(status_code=503, detail="Supabase authentication is not configured.")
+
+    auth_settings = auth_service.auth_request("settings", method="GET")
+    if not (auth_settings.get("external") or {}).get("google"):
+        raise HTTPException(status_code=503, detail="Google sign-in is not enabled in Supabase Auth yet.")
+
+    verifier = secrets.token_urlsafe(32)
+    challenge = urlsafe_b64encode(hashlib.sha256(verifier.encode("ascii")).digest()).decode("ascii").rstrip("=")
+    redirect_to = f"{settings.frontend_base_url.rstrip('/')}/auth/callback"
+    query = urlencode({
+        "provider": "google",
+        "redirect_to": redirect_to,
+        "scopes": "email profile",
+        "flow_type": "pkce",
+        "code_challenge": challenge,
+        "code_challenge_method": "s256",
+        "apikey": settings.supabase_publishable_key,
+    })
+    response = JSONResponse({
+        "authorization_url": f"{settings.supabase_url.rstrip('/')}/auth/v1/authorize?{query}"
+    })
+    response.set_cookie(
+        GOOGLE_OAUTH_VERIFIER_COOKIE,
+        verifier,
+        max_age=600,
+        httponly=True,
+        secure=_secure_cookie(settings),
+        samesite="lax",
+        path="/api/auth/oauth/google",
+    )
+    return response
+
+
+@router.post("/oauth/google/exchange", response_model=AuthSession)
+def exchange_google_oauth(
+    payload: GoogleOAuthExchange,
+    request: Request,
+    response: Response,
+    client: DbClient = Depends(get_db_client),
+    settings: Settings = Depends(get_settings),
+):
+    assert_rate_limit(request, GOOGLE_OAUTH_EXCHANGE_LIMIT)
+    verifier = request.cookies.get(GOOGLE_OAUTH_VERIFIER_COOKIE)
+    if not verifier:
+        raise HTTPException(status_code=401, detail="Google sign-in expired. Please try again.")
+    try:
+        session = auth_service.exchange_google_oauth_code(client, payload.code, verifier)
+    finally:
+        response.delete_cookie(
+            GOOGLE_OAUTH_VERIFIER_COOKIE,
+            path="/api/auth/oauth/google",
+            secure=_secure_cookie(settings),
+            samesite="lax",
+        )
     _set_session_cookie(response, session, settings)
     return session
 

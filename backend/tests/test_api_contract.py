@@ -28,6 +28,8 @@ def test_public_health_and_openapi_contract():
         "/api/auth/signup/verify",
         "/api/auth/signup/complete",
         "/api/auth/login",
+        "/api/auth/oauth/google/start",
+        "/api/auth/oauth/google/exchange",
         "/api/businesses/{business_id}/products",
         "/api/businesses/{business_id}/availability",
         "/api/businesses/{business_id}/availability/rules",
@@ -154,11 +156,11 @@ def test_protected_routes_reject_missing_bearer_token():
     assert bypass_attempt.status_code == 401
 
 
-def test_login_sets_httponly_cookie_without_json_access_token(monkeypatch):
+def test_login_sets_httponly_cookie_without_json_access_token(monkeypatch, issue_supabase_access_token):
     reset_rate_limits()
     local_client = TestClient(app)
     user_id = uuid4()
-    token = auth_service.create_access_token(user_id, "owner@example.test", session_id=uuid4())
+    token = issue_supabase_access_token(user_id, session_id=uuid4())
     app.dependency_overrides[get_db_client] = lambda: object()
     monkeypatch.setattr(
         auth_service,
@@ -184,27 +186,24 @@ def test_login_sets_httponly_cookie_without_json_access_token(monkeypatch):
     assert "samesite=lax" in set_cookie.lower()
 
 
-def test_staged_signup_uses_short_lived_httponly_completion_cookie(monkeypatch):
+def test_staged_signup_uses_short_lived_httponly_completion_cookie(monkeypatch, issue_supabase_access_token):
     reset_rate_limits()
     local_client = TestClient(app)
     user_id = uuid4()
-    signup_token = auth_service.create_signup_completion_token(user_id, "owner@example.test")
-    session_token = auth_service.create_access_token(user_id, "owner@example.test")
+    signup_token = issue_supabase_access_token(user_id)
+    session_token = issue_supabase_access_token(user_id)
     app.dependency_overrides[get_db_client] = lambda: object()
-    monkeypatch.setattr(
-        auth_service,
-        "verify_staged_signup",
-        lambda _client, payload: {
-            "email": payload.email,
-            "message": "Email verified. Create your password to finish.",
-            auth_service.INTERNAL_SIGNUP_TOKEN_FIELD: signup_token,
-        },
-    )
+    monkeypatch.setattr(auth_service, "verify_staged_signup", lambda _client, payload: {
+        "email": payload.email,
+        "message": "Email verified. Create your password to finish.",
+        auth_service.INTERNAL_SIGNUP_TOKEN_FIELD: signup_token,
+        auth_service.INTERNAL_REFRESH_TOKEN_FIELD: "signup-refresh-token",
+    })
     monkeypatch.setattr(auth_service, "decode_signup_completion_token", lambda _token: user_id)
     monkeypatch.setattr(
         auth_service,
         "complete_staged_signup",
-        lambda _client, _user_id, _payload: {
+        lambda _client, _token, _refresh_token, _payload: {
             "access_token": None,
             "token_type": "bearer",
             "user": {"id": str(user_id), "email": "owner@example.test", "is_active": True},
@@ -236,39 +235,41 @@ def test_staged_signup_uses_short_lived_httponly_completion_cookie(monkeypatch):
     assert auth_service.SIGNUP_SESSION_COOKIE_NAME not in local_client.cookies
 
 
-def test_legacy_verify_remains_idempotent_for_active_users():
+def test_email_verification_persists_supabase_session(monkeypatch, issue_supabase_access_token):
     user_id = uuid4()
+    access_token = issue_supabase_access_token(user_id)
+    database_commands = []
 
-    class ActiveUserClient:
-        calls = 0
+    monkeypatch.setattr(
+        auth_service,
+        "auth_request",
+        lambda *_args, **_kwargs: {
+            "access_token": access_token,
+            "refresh_token": "refresh-token",
+            "user": {"id": str(user_id), "email": "owner@example.test"},
+        },
+    )
 
-        def execute_one(self, _query, _params):
-            self.calls += 1
-            return {
-                "id": user_id,
-                "email": "owner@example.test",
-                "full_name": "Owner",
-                "is_active": True,
-                "created_at": None,
-            }
-
-        def execute_command(self, _query, _params):
+    class SupabaseSessionClient:
+        def execute_command(self, query, params):
+            database_commands.append((query, params))
             return 1
 
-    db = ActiveUserClient()
+    db = SupabaseSessionClient()
     session = auth_service.verify_email(
         db,
         SimpleNamespace(email="owner@example.test", code="123456"),
     )
 
-    assert db.calls == 2
     assert session["user"]["is_active"] is True
+    assert session["user"]["id"] == str(user_id)
+    assert "insert into auth_sessions" in database_commands[0][0]
 
 
-def test_auth_me_accepts_session_cookie_and_rejects_missing_or_invalid_cookie(monkeypatch):
+def test_auth_me_accepts_session_cookie_and_rejects_missing_or_invalid_cookie(monkeypatch, issue_supabase_access_token):
     local_client = TestClient(app)
     user_id = uuid4()
-    token = auth_service.create_access_token(user_id, "owner@example.test", session_id=uuid4())
+    token = issue_supabase_access_token(user_id, session_id=uuid4())
     public_user = {"id": str(user_id), "email": "owner@example.test", "is_active": True}
 
     app.dependency_overrides[get_db_client] = lambda: object()
@@ -348,7 +349,7 @@ def test_device_token_exchange_sets_httponly_cookie_and_clean_launch_path(monkey
     assert "samesite=lax" in set_cookie.lower()
 
 
-def test_device_and_admin_session_cookies_are_not_interchangeable():
+def test_device_and_admin_session_cookies_are_not_interchangeable(issue_supabase_access_token):
     local_client = TestClient(app)
     business_id = uuid4()
     device = {
@@ -358,7 +359,9 @@ def test_device_and_admin_session_cookies_are_not_interchangeable():
         "device_type": "kiosk",
     }
     device_cookie = device_service.create_device_session_token(device)
-    admin_cookie = auth_service.create_access_token(uuid4(), "owner@example.test")
+    admin_cookie = issue_supabase_access_token(uuid4())
+
+    app.dependency_overrides[get_db_client] = lambda: object()
 
     local_client.cookies.set(device_service.DEVICE_SESSION_COOKIE_NAME, device_cookie)
     admin_response = local_client.get("/api/businesses/me")
@@ -366,14 +369,17 @@ def test_device_and_admin_session_cookies_are_not_interchangeable():
 
     local_client.cookies.clear()
     local_client.cookies.set(auth_service.SESSION_COOKIE_NAME, admin_cookie)
-    device_response = local_client.get("/api/devices/live/session")
+    try:
+        device_response = local_client.get("/api/devices/live/session")
+    finally:
+        app.dependency_overrides.clear()
     assert device_response.status_code == 401
 
 
-def test_bearer_fallback_still_works_without_cookie(monkeypatch):
+def test_bearer_fallback_still_works_without_cookie(monkeypatch, issue_supabase_access_token):
     local_client = TestClient(app)
     user_id = uuid4()
-    token = auth_service.create_access_token(user_id, "owner@example.test", session_id=uuid4())
+    token = issue_supabase_access_token(user_id, session_id=uuid4())
     public_user = {"id": str(user_id), "email": "owner@example.test", "is_active": True}
 
     monkeypatch.setattr(deps, "assert_session_active", lambda _client, _token: user_id)
@@ -447,10 +453,10 @@ def test_payment_status_rejects_query_token_and_accepts_body(monkeypatch):
         reset_rate_limits()
 
 
-def test_valid_session_reaches_onboarding_and_business_routes(monkeypatch):
+def test_valid_session_reaches_onboarding_and_business_routes(monkeypatch, issue_supabase_access_token):
     local_client = TestClient(app)
     user_id, session_id = uuid4(), uuid4()
-    token = auth_service.create_access_token(user_id, "owner@example.test", session_id=session_id)
+    token = issue_supabase_access_token(user_id, session_id=session_id)
 
     class SessionDb:
         def execute_one(self, query, _params):

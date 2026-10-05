@@ -224,6 +224,10 @@ class AuthLogin(BaseModel):
     password: str = Field(..., min_length=8, max_length=128)
 
 
+class GoogleOAuthExchange(BaseModel):
+    code: str = Field(..., min_length=20, max_length=4096)
+
+
 class ReauthenticateRequest(BaseModel):
     password: str = Field(..., min_length=8, max_length=128)
 

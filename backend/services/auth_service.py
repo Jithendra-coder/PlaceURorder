@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime, timedelta, timezone
-from urllib.parse import quote, urlencode
+from urllib.parse import urlencode
 from uuid import UUID
 
 import jwt
@@ -80,6 +80,20 @@ def login(client: DbClient, payload: AuthLogin) -> dict:
     user_id = session["user"]["id"]
     client.execute_one("update app_users set last_login_at=now() where id=%(id)s returning id", {"id": user_id})
     return session
+
+
+def exchange_google_oauth_code(client: DbClient, code: str, code_verifier: str) -> dict:
+    session = auth_request(
+        "token?grant_type=pkce",
+        body={"auth_code": code, "code_verifier": code_verifier},
+    )
+    token = session.get("access_token") or ""
+    claims = verify_access_token(token)
+    user = session.get("user") or {}
+    app_metadata = claims.get("app_metadata") or {}
+    if app_metadata.get("provider") != "google" or str(user.get("id")) != str(claims.get("sub")):
+        raise HTTPException(status_code=401, detail="The Google sign-in session is invalid.")
+    return _session(client, session)
 
 
 def verify_email(client: DbClient, payload: VerifyEmailRequest) -> dict:
@@ -198,14 +212,6 @@ def reset_password(client: DbClient, payload: ResetPasswordRequest) -> None:
     user_id = UUID(str(claims["sub"]))
     auth_request("user", method="PUT", token=payload.token, body={"password": payload.password})
     client.execute_command("update auth_sessions set revoked_at=coalesce(revoked_at,now()) where user_id=%(user_id)s", {"user_id": str(user_id)})
-
-
-def create_password_reset_url(client: DbClient, user_id: str) -> str:
-    user = client.execute_one("select email,is_active from app_users where id=%(id)s", {"id": user_id})
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found.")
-    page = "auth/sign-in" if user.get("is_active") else "auth/sign-up"
-    return f"{get_settings().frontend_base_url.rstrip('/')}/{page}?email={quote(user['email'])}"
 
 
 def _unverified_claims(token: str) -> dict:

@@ -1,52 +1,53 @@
 from types import SimpleNamespace
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
 from services import auth_service
 
 
-class AuthClient:
-    def execute_one(self, sql: str, _params: dict):
-        if "select id from app_users" in sql:
-            return {"id": "00000000-0000-0000-0000-000000000001"}
-        return {"id": "00000000-0000-0000-0000-000000000002"}
-
-
 @pytest.mark.parametrize("environment", ["prod", "production"])
-def test_production_without_smtp_never_exposes_auth_secrets(monkeypatch, environment):
+def test_auth_emails_are_delegated_to_supabase_without_exposing_secrets(
+    monkeypatch, environment
+):
     settings = SimpleNamespace(
         environment=environment,
-        dev_expose_reset_links=True,
         frontend_base_url="https://app.menutap.example",
     )
+    auth_requests = []
     monkeypatch.setattr(auth_service, "get_settings", lambda: settings)
-    monkeypatch.setattr(auth_service.mail_service, "is_configured", lambda: False)
-    monkeypatch.setattr(auth_service.mail_service, "send_email_verification", lambda *_args: False)
-    monkeypatch.setattr(auth_service.mail_service, "send_password_reset", lambda *_args: False)
-
-    verification = auth_service._send_verification_code(
-        AuthClient(),
-        "00000000-0000-0000-0000-000000000001",
-        "owner@example.test",
+    monkeypatch.setattr(
+        auth_service,
+        "auth_request",
+        lambda path, **kwargs: auth_requests.append((path, kwargs)) or {},
     )
-    reset = auth_service.create_password_reset(AuthClient(), "owner@example.test")
+
+    verification = auth_service.send_signup_otp("owner@example.test")
+    reset = auth_service.create_password_reset(object(), "owner@example.test")
 
     assert verification["dev_otp"] is None
     assert reset["reset_url"] is None
     assert reset["message"] == "If that email exists, a password reset email has been sent."
+    assert [path.split("?", 1)[0] for path, _ in auth_requests] == ["otp", "recover"]
+    assert all("password" not in kwargs.get("body", {}) for _, kwargs in auth_requests)
 
 
-def test_reset_links_always_use_configured_frontend(monkeypatch):
+def test_password_reset_email_uses_configured_frontend_redirect(monkeypatch):
     settings = SimpleNamespace(
-        environment="local",
-        dev_expose_reset_links=True,
         frontend_base_url="https://dashboard.menutap.example/base/",
     )
+    auth_requests = []
     monkeypatch.setattr(auth_service, "get_settings", lambda: settings)
-
-    url = auth_service.create_password_reset_url(
-        AuthClient(),
-        "00000000-0000-0000-0000-000000000001",
+    monkeypatch.setattr(
+        auth_service,
+        "auth_request",
+        lambda path, **kwargs: auth_requests.append((path, kwargs)) or {},
     )
 
-    assert url.startswith("https://dashboard.menutap.example/base/auth/reset-password?token=")
+    result = auth_service.create_password_reset(object(), "owner@example.test")
+
+    path, options = auth_requests[0]
+    redirect = parse_qs(urlsplit("https://supabase.invalid/" + path).query)["redirect_to"][0]
+    assert redirect == "https://dashboard.menutap.example/base/auth/reset-password"
+    assert options["body"] == {"email": "owner@example.test"}
+    assert result["reset_url"] is None

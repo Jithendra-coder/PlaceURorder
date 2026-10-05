@@ -41,6 +41,8 @@ class DummySettings:
     def __init__(self, upload_root: str):
         self.upload_root = upload_root
         self.public_base_url = "http://testserver"
+        self.supabase_url = "https://project.supabase.co"
+        self.supabase_publishable_key = "sb_publishable_test"
 
 
 class DummyUpload:
@@ -224,13 +226,14 @@ def test_upload_rejects_oversized_image(monkeypatch, tmp_path):
 
 def test_upload_accepts_supported_image_signature(monkeypatch, tmp_path):
     monkeypatch.setattr(storage_service, "get_settings", lambda: DummySettings(str(tmp_path)))
+    monkeypatch.setattr(storage_service, "_upload_to_supabase", lambda *_args: None)
     file = DummyUpload(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC"), "image/png", "logo.png")
 
     result = asyncio.run(async_upload(file))
 
-    assert result["bucket"] == "local"
-    assert result["path"].startswith("/uploads/")
-    assert (tmp_path / result["path"].replace("/uploads/", "")).exists()
+    assert result["bucket"] == "business-assets"
+    assert "/brand/" in result["path"]
+    assert result["public_url"].startswith("https://project.supabase.co/storage/v1/object/public/business-assets/")
 
 
 def test_modifier_group_limits_must_be_consistent():
@@ -985,7 +988,7 @@ def test_expiring_online_payment_marks_order_cancelled_and_restores_inventory(mo
 
 
 async def async_upload(file: DummyUpload) -> dict:
-    return await storage_service.upload_asset(uuid4(), file, "brand")
+    return await storage_service.upload_asset(uuid4(), file, "brand", "supabase-user-access-token")
 
 
 def test_bearer_token_case_insensitive():

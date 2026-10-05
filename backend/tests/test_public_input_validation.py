@@ -31,9 +31,9 @@ def test_malformed_or_oversized_route_identifiers_are_rejected(adapter, value):
 
 
 def test_schema_boundaries_and_unknown_fields_remain_compatible():
-    assert ResetPasswordRequest(token="a" * 160, password="password123")
+    assert ResetPasswordRequest(token="a" * 4096, password="password123")
     with pytest.raises(ValidationError):
-        ResetPasswordRequest(token="a" * 161, password="password123")
+        ResetPasswordRequest(token="a" * 4097, password="password123")
     with pytest.raises(ValidationError):
         DeviceActivate(activation_code="123 456")
 

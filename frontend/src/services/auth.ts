@@ -18,6 +18,14 @@ export const AuthService = {
     return { user: withOnboarding(session.user, status.onboarding_completed), nextRoute: status.next_route };
   },
 
+  startGoogleSignIn() {
+    return api.startGoogleOAuth();
+  },
+
+  completeGoogleSignIn(code: string) {
+    return api.exchangeGoogleOAuth(code);
+  },
+
   signUp(email: string, password: string) {
     return api.signup(email, password);
   },

@@ -1,4 +1,4 @@
-import type { BusinessLocation, OnboardingStatus } from "@/lib/types";
+import type { AuthSession, BusinessLocation, OnboardingStatus } from "@/lib/types";
 import { apiRequest as request } from "@/lib/api";
 
 export type KioskLayoutId = "side-navigation" | "top-navigation" | "category-first";
@@ -106,6 +106,10 @@ type SessionUser = { id: string; email: string; full_name?: string | null };
 export const api = {
   login: (email: string, password: string) =>
     request<{ user: SessionUser }>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+  startGoogleOAuth: () =>
+    request<{ authorization_url: string }>("/auth/oauth/google/start"),
+  exchangeGoogleOAuth: (code: string) =>
+    request<AuthSession>("/auth/oauth/google/exchange", { method: "POST", body: JSON.stringify({ code }) }),
   logout: () => request("/auth/logout", { method: "POST" }),
   signup: (email: string, password: string) =>
     request<{ requires_verification: boolean; email: string; message: string; dev_otp?: string | null }>("/auth/signup", { method: "POST", body: JSON.stringify({ email, password }) }),

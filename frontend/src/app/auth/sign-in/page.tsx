@@ -42,6 +42,19 @@ export default function SignInPage() {
     }
   };
 
+  const startGoogleSignIn = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const { authorization_url } = await AuthService.startGoogleSignIn();
+      window.location.assign(authorization_url);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Google sign-in could not be started.");
+      setBusy(false);
+    }
+  };
+
   return (
     <AuthShell title="Welcome Back" description="Sign in to continue to your account">
       <AuthStatus>{error}</AuthStatus>
@@ -60,7 +73,7 @@ export default function SignInPage() {
       </form>
       <AuthDivider />
       <div className="mt-auth-providers">
-        <AuthProviderButton icon={<GoogleIcon />} onClick={() => setError("Google sign-in is not configured for this workspace.")} disabled={busy}>Google</AuthProviderButton>
+        <AuthProviderButton icon={<GoogleIcon />} onClick={() => void startGoogleSignIn()} disabled={busy}>Google</AuthProviderButton>
         <AuthProviderButton icon={<PhoneIcon />} onClick={() => router.push("/auth/phone")} disabled={busy}>Phone</AuthProviderButton>
       </div>
       <AuthFooter text="Don't have an account?" linkText="Sign up" href="/auth/sign-up" />
