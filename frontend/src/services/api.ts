@@ -111,6 +111,8 @@ export const api = {
     request<{ requires_verification: boolean; email: string; message: string; dev_otp?: string | null }>("/auth/signup", { method: "POST", body: JSON.stringify({ email, password }) }),
   startSignup: (email: string) =>
     request<{ requires_verification: boolean; email: string; message: string; dev_otp?: string | null }>("/auth/signup/start", { method: "POST", body: JSON.stringify({ email }) }),
+  acceptSignupLink: (access_token: string, refresh_token: string) =>
+    request<{ email: string; message: string }>("/auth/signup/accept", { method: "POST", body: JSON.stringify({ access_token, refresh_token }) }),
   verifySignup: (email: string, code: string) =>
     request<{ email: string; message: string }>("/auth/signup/verify", { method: "POST", body: JSON.stringify({ email, code }) }),
   completeSignup: (password: string) =>

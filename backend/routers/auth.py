@@ -17,6 +17,7 @@ from schemas import (
     SignupEmailComplete,
     SignupEmailStart,
     SignupEmailVerified,
+    SignupLinkAccept,
     SignupStartResponse,
     VerifyEmailRequest,
 )
@@ -47,6 +48,23 @@ def start_staged_signup(payload: SignupEmailStart, request: Request, client: DbC
     return auth_service.start_staged_signup(client, payload.email)
 
 
+@router.post("/signup/accept", response_model=SignupEmailVerified)
+def accept_signup_link(
+    payload: SignupLinkAccept,
+    request: Request,
+    response: Response,
+    client: DbClient = Depends(get_db_client),
+    settings: Settings = Depends(get_settings),
+):
+    assert_rate_limit(request, SIGNUP_VERIFY_LIMIT, identity_parts=["signup-link"])
+    session = auth_service.accept_signup_link(client, payload.access_token, payload.refresh_token)
+    access_token = session.pop(auth_service.INTERNAL_SESSION_TOKEN_FIELD)
+    refresh_token = session.pop(auth_service.INTERNAL_REFRESH_TOKEN_FIELD)
+    _set_cookie(response, auth_service.SIGNUP_SESSION_COOKIE_NAME, access_token, settings, max_age=15 * 60, path="/api/auth/signup")
+    _set_cookie(response, auth_service.SIGNUP_REFRESH_COOKIE_NAME, refresh_token, settings, max_age=15 * 60, path="/api/auth/signup")
+    return {"email": session["user"]["email"], "message": "Email verified. Create your password to finish."}
+
+
 @router.post("/signup/verify", response_model=SignupEmailVerified)
 def verify_staged_signup(
     payload: VerifyEmailRequest,
@@ -58,15 +76,9 @@ def verify_staged_signup(
     assert_rate_limit(request, SIGNUP_VERIFY_LIMIT, identity_parts=[payload.email])
     result = auth_service.verify_staged_signup(client, payload)
     token = result.pop(auth_service.INTERNAL_SIGNUP_TOKEN_FIELD)
-    response.set_cookie(
-        key=auth_service.SIGNUP_SESSION_COOKIE_NAME,
-        value=token,
-        max_age=15 * 60,
-        httponly=True,
-        secure=_secure_cookie(settings),
-        samesite="lax",
-        path="/api/auth/signup",
-    )
+    refresh_token = result.pop(auth_service.INTERNAL_REFRESH_TOKEN_FIELD)
+    _set_cookie(response, auth_service.SIGNUP_SESSION_COOKIE_NAME, token, settings, max_age=15 * 60, path="/api/auth/signup")
+    _set_cookie(response, auth_service.SIGNUP_REFRESH_COOKIE_NAME, refresh_token, settings, max_age=15 * 60, path="/api/auth/signup")
     return result
 
 
@@ -79,14 +91,21 @@ def complete_staged_signup(
     settings: Settings = Depends(get_settings),
 ):
     token = request.cookies.get(auth_service.SIGNUP_SESSION_COOKIE_NAME)
-    if not token:
+    refresh_token = request.cookies.get(auth_service.SIGNUP_REFRESH_COOKIE_NAME)
+    if not token or not refresh_token:
         raise HTTPException(status_code=401, detail="Signup session expired. Verify your email again.")
     user_id = auth_service.decode_signup_completion_token(token)
     assert_rate_limit(request, SIGNUP_COMPLETE_LIMIT, identity_parts=[str(user_id)])
-    session = auth_service.complete_staged_signup(client, user_id, payload)
+    session = auth_service.complete_staged_signup(client, token, refresh_token, payload)
     _set_session_cookie(response, session, settings)
     response.delete_cookie(
         key=auth_service.SIGNUP_SESSION_COOKIE_NAME,
+        path="/api/auth/signup",
+        secure=_secure_cookie(settings),
+        samesite="lax",
+    )
+    response.delete_cookie(
+        key=auth_service.SIGNUP_REFRESH_COOKIE_NAME,
         path="/api/auth/signup",
         secure=_secure_cookie(settings),
         samesite="lax",
@@ -124,6 +143,22 @@ def login(
 ):
     assert_rate_limit(request, LOGIN_LIMIT, identity_parts=[payload.email])
     session = auth_service.login(client, payload)
+    _set_session_cookie(response, session, settings)
+    return session
+
+
+@router.post("/refresh", response_model=AuthSession)
+def refresh(
+    request: Request,
+    response: Response,
+    client: DbClient = Depends(get_db_client),
+    settings: Settings = Depends(get_settings),
+):
+    session = auth_service.refresh_session(
+        client,
+        request.cookies.get(auth_service.SESSION_COOKIE_NAME),
+        request.cookies.get(auth_service.SESSION_REFRESH_COOKIE_NAME),
+    )
     _set_session_cookie(response, session, settings)
     return session
 
@@ -168,34 +203,29 @@ def logout(
     client: DbClient = Depends(get_db_client),
 ):
     token = request.cookies.get(auth_service.SESSION_COOKIE_NAME) or _bearer_token(request.headers.get("authorization"))
-    auth_service.revoke_session(client, token)
+    auth_service.logout(client, token)
     _clear_session_cookie(response, settings)
     return ApiResponse(message="Signed out.")
 
 
 def _set_session_cookie(response: Response, session: dict, settings: Settings) -> None:
     token = session.pop(auth_service.INTERNAL_SESSION_TOKEN_FIELD, None)
+    refresh_token = session.pop(auth_service.INTERNAL_REFRESH_TOKEN_FIELD, None)
+    max_age = max(60, int(session.pop("_expires_in", 3600)))
     if not token:
         return
-    max_age = max(60, int(settings.jwt_access_token_minutes) * 60)
-    response.set_cookie(
-        key=auth_service.SESSION_COOKIE_NAME,
-        value=token,
-        max_age=max_age,
-        httponly=True,
-        secure=_secure_cookie(settings),
-        samesite="lax",
-        path="/",
-    )
+    _set_cookie(response, auth_service.SESSION_COOKIE_NAME, token, settings, max_age=max_age, path="/")
+    if refresh_token:
+        _set_cookie(response, auth_service.SESSION_REFRESH_COOKIE_NAME, refresh_token, settings, max_age=60 * 60 * 24 * 30, path="/api/auth")
 
 
 def _clear_session_cookie(response: Response, settings: Settings) -> None:
-    response.delete_cookie(
-        key=auth_service.SESSION_COOKIE_NAME,
-        path="/",
-        secure=_secure_cookie(settings),
-        samesite="lax",
-    )
+    for cookie, path in ((auth_service.SESSION_COOKIE_NAME, "/"), (auth_service.SESSION_REFRESH_COOKIE_NAME, "/api/auth"), (auth_service.SIGNUP_SESSION_COOKIE_NAME, "/api/auth/signup"), (auth_service.SIGNUP_REFRESH_COOKIE_NAME, "/api/auth/signup")):
+        response.delete_cookie(key=cookie, path=path, secure=_secure_cookie(settings), samesite="lax")
+
+
+def _set_cookie(response: Response, key: str, value: str, settings: Settings, *, max_age: int, path: str) -> None:
+    response.set_cookie(key=key, value=value, max_age=max_age, httponly=True, secure=_secure_cookie(settings), samesite="lax", path=path)
 
 
 def _secure_cookie(settings: Settings) -> bool:

@@ -33,6 +33,7 @@ backend/email_outbox/
 qa-artifacts/
 frontend/qa-*.png
 *.log
+supabase/.temp/
 
 # OS / editor
 .DS_Store

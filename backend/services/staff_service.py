@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import secrets
 from uuid import UUID
 
 from fastapi import HTTPException
 
 from database import DbClient
 from schemas import StaffInvite, StaffRole, StaffUpdate
-from services import auth_service, mail_service
+from services import auth_service
 from services.business_service import FULL_ACCESS_ROLES, assert_business_access
 
 
@@ -35,25 +34,15 @@ def invite_staff(
     business = assert_business_access(client, business_id, owner_user_id, FULL_ACCESS_ROLES)
     email = payload.email.strip().lower()
     user = client.execute_one(
-        "select id, email, full_name from app_users where email = %(email)s limit 1",
+        "select id, email, full_name, is_active from app_users where email = %(email)s limit 1",
         {"email": email},
     )
 
     if not user:
-        temporary_password = secrets.token_urlsafe(24)
-        user = client.execute_one(
-            """
-            insert into app_users (email, password_hash, full_name)
-            values (%(email)s, %(password_hash)s, %(full_name)s)
-            returning id, email, full_name
-            """,
-            {
-                "email": email,
-                "password_hash": auth_service.hash_password(temporary_password),
-                "full_name": payload.full_name,
-            },
-        )
+        user = auth_service.ensure_auth_user_for_invite(client, email)
         client.table("profiles").upsert({"id": user["id"], "email": email, "full_name": payload.full_name}).execute()
+    elif not user.get("is_active"):
+        auth_service.send_signup_otp(email)
 
     role = payload.role.value if isinstance(payload.role, StaffRole) else str(payload.role)
     client.table("business_staff").upsert(
@@ -63,9 +52,6 @@ def invite_staff(
             "role": role,
         }
     ).execute()
-
-    reset_url = auth_service.create_password_reset_url(client, user["id"])
-    mail_service.send_staff_invite(email, business["name"], role, reset_url)
 
     row = client.execute_one(
         """

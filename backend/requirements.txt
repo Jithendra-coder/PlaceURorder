@@ -1,7 +1,7 @@
 fastapi
 uvicorn
 psycopg[binary]
-PyJWT
+PyJWT[crypto]
 python-dotenv
 pydantic
 pydantic-settings

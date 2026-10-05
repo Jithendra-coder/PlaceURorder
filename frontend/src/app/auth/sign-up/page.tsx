@@ -19,7 +19,7 @@ type Step = "email" | "verify" | "password" | "created";
 export default function SignUpPage() {
   const router = useRouter();
   const [step, setStep] = useState<Step>("email");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("email") || "");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [code, setCode] = useState("");
@@ -38,6 +38,32 @@ export default function SignUpPage() {
     }, 1000);
     return () => clearInterval(timer);
   }, [step]);
+
+  useEffect(() => {
+    const fragment = new URLSearchParams(window.location.hash.slice(1));
+    const accessToken = fragment.get("access_token");
+    const refreshToken = fragment.get("refresh_token");
+    const authType = fragment.get("type");
+    const authError = fragment.get("error_description");
+    if (!accessToken && authError) {
+      setError(authError);
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+      return;
+    }
+    if (!accessToken || !refreshToken || !["signup", "magiclink", "email"].includes(authType || "") || actionInFlight.current) return;
+    actionInFlight.current = true;
+    setBusy(true);
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+    void AuthService.acceptSignupLink(accessToken, refreshToken).then((result) => {
+      setEmail(result.email);
+      setStep("password");
+    }).catch((cause) => {
+      setError(cause instanceof Error ? cause.message : "This verification link is invalid or expired.");
+    }).finally(() => {
+      setBusy(false);
+      actionInFlight.current = false;
+    });
+  }, []);
 
   const requestCode = async (event?: React.FormEvent) => {
     event?.preventDefault();
@@ -130,7 +156,7 @@ export default function SignUpPage() {
             <div className="mt-auth-field__header"><label htmlFor="verified-email" className="mt-auth-field__label">Email</label><button type="button" className="mt-auth-change" onClick={() => setStep("email")}>Change</button></div>
             <AuthInput id="verified-email" value={email} disabled />
           </div>
-          <p className="mt-auth-code-support">We sent a 6-digit code to {email}</p>
+          <p className="mt-auth-code-support">Open the secure link in your email, or enter its 6-digit code if shown.</p>
           <AuthOtpInput value={code} onChange={setCode} onComplete={(value) => void verify(value)} disabled={busy} />
           <div className="mt-auth-otp-timer">
             <p className={expiresIn ? "" : "mt-auth-otp-expired"}>{expiresIn ? `Code expires in ${timerText}` : "Code has expired. Request a new code to continue."}</p>

@@ -1,5 +1,9 @@
 import re
 import warnings
+import asyncio
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote
+from urllib.request import Request, urlopen
 from io import BytesIO
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -31,6 +35,7 @@ async def upload_asset(
     business_id: UUID,
     file: UploadFile,
     folder: str,
+    access_token: str | None,
 ) -> dict:
     if folder not in {"products", "brand"}:
         raise HTTPException(status_code=400, detail="Unsupported upload folder.")
@@ -53,29 +58,42 @@ async def upload_asset(
         raise HTTPException(status_code=400, detail="Uploaded filename extension does not match its image format.")
     safe_name = (SAFE_NAME_RE.sub("-", raw_name).strip("-") or "upload")[-120:]
     filename = f"{uuid4().hex}-{safe_name}"
-    relative_path = Path(str(business_id)) / folder / filename
+    relative_path = f"{business_id}/{folder}/{filename}"
 
     settings = get_settings()
-    target_dir = Path(settings.upload_root) / str(business_id) / folder
-    target_dir.mkdir(parents=True, exist_ok=True)
-    target_file = target_dir / filename
-    _write_new_file(target_file, content)
-
-    public_path = f"/uploads/{relative_path.as_posix()}"
+    if not settings.supabase_url or not settings.supabase_publishable_key or not access_token:
+        raise HTTPException(status_code=503, detail="Supabase Storage is not configured for this session.")
+    await asyncio.to_thread(_upload_to_supabase, settings.supabase_url, settings.supabase_publishable_key, access_token, relative_path, content_type, content)
+    public_url = f"{settings.supabase_url.rstrip('/')}/storage/v1/object/public/business-assets/{quote(relative_path, safe='/')}"
     return {
-        "bucket": "local",
-        "path": public_path,
-        "public_url": f"{settings.public_base_url.rstrip('/')}{public_path}",
+        "bucket": "business-assets",
+        "path": relative_path,
+        "public_url": public_url,
     }
 
 
-def _write_new_file(path: Path, content: bytes) -> None:
+def _upload_to_supabase(base_url: str, publishable_key: str, access_token: str, path: str, content_type: str, content: bytes) -> None:
+    url = f"{base_url.rstrip('/')}/storage/v1/object/business-assets/{quote(path, safe='/')}"
+    request = Request(
+        url,
+        data=content,
+        headers={
+            "apikey": publishable_key,
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": content_type,
+            "x-upsert": "false",
+        },
+        method="POST",
+    )
     try:
-        with path.open("xb") as output:
-            output.write(content)
-    except Exception:
-        path.unlink(missing_ok=True)
-        raise
+        with urlopen(request, timeout=20):
+            pass
+    except HTTPError as exc:
+        status_code = 413 if exc.code == 413 else 403 if exc.code in {401, 403} else 409 if exc.code == 409 else 503
+        message = "This business cannot upload assets." if status_code == 403 else "Supabase Storage is temporarily unavailable."
+        raise HTTPException(status_code=status_code, detail=message) from exc
+    except (TimeoutError, URLError) as exc:
+        raise HTTPException(status_code=503, detail="Supabase Storage is temporarily unavailable.") from exc
 
 
 def _looks_like_allowed_image(content: bytes, content_type: str) -> bool:

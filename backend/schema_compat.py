@@ -149,6 +149,7 @@ ORDER_COMPATIBILITY_SQL = [
       return allocated_number;
     end;
     $$ language plpgsql
+    set search_path = ''
     """,
 ]
 
@@ -710,6 +711,59 @@ INDEX_COMPATIBILITY_SQL = [
     "create index if not exists order_items_order_id_idx on order_items(order_id)",
     "create index if not exists order_items_business_id_idx on order_items(business_id)",
     "create index if not exists order_items_product_id_idx on order_items(product_id)",
+    "create index if not exists audit_logs_user_id_fk_idx on public.audit_logs (user_id);",
+    "create index if not exists auth_sessions_revoked_by_fk_idx on public.auth_sessions (revoked_by);",
+    "create index if not exists auth_sessions_user_id_fk_idx on public.auth_sessions (user_id);",
+    "create index if not exists availability_rules_created_by_fk_idx on public.availability_rules (created_by);",
+    "create index if not exists availability_rules_updated_by_fk_idx on public.availability_rules (updated_by);",
+    "create index if not exists business_locations_created_by_fk_idx on public.business_locations (created_by);",
+    "create index if not exists business_locations_updated_by_fk_idx on public.business_locations (updated_by);",
+    "create index if not exists counter_held_orders_business_id_fk_idx on public.counter_held_orders (business_id);",
+    "create index if not exists counter_held_orders_device_id_fk_idx on public.counter_held_orders (device_id);",
+    "create index if not exists counter_payment_claims_business_id_fk_idx on public.counter_payment_claims (business_id);",
+    "create index if not exists counter_payment_claims_device_id_fk_idx on public.counter_payment_claims (device_id);",
+    "create index if not exists counter_payment_claims_order_id_fk_idx on public.counter_payment_claims (order_id);",
+    "create index if not exists device_pairing_requests_approved_by_fk_idx on public.device_pairing_requests (approved_by);",
+    "create index if not exists device_pairing_requests_device_id_fk_idx on public.device_pairing_requests (device_id);",
+    "create index if not exists device_pairing_requests_rejected_by_fk_idx on public.device_pairing_requests (rejected_by);",
+    "create index if not exists kiosk_promotion_locations_location_id_fk_idx on public.kiosk_promotion_locations (location_id);",
+    "create index if not exists kiosk_promotions_business_id_fk_idx on public.kiosk_promotions (business_id);",
+    "create index if not exists kiosk_promotions_created_by_fk_idx on public.kiosk_promotions (created_by);",
+    "create index if not exists kiosk_promotions_updated_by_fk_idx on public.kiosk_promotions (updated_by);",
+    "create index if not exists kiosk_published_configs_published_by_fk_idx on public.kiosk_published_configs (published_by);",
+    "create index if not exists kiosk_published_versions_published_by_fk_idx on public.kiosk_published_versions (published_by);",
+    "create index if not exists kiosk_qr_codes_business_id_fk_idx on public.kiosk_qr_codes (business_id);",
+    "create index if not exists kiosk_qr_codes_created_by_fk_idx on public.kiosk_qr_codes (created_by);",
+    "create index if not exists kiosk_qr_codes_location_id_fk_idx on public.kiosk_qr_codes (location_id);",
+    "create index if not exists kiosk_qr_codes_updated_by_fk_idx on public.kiosk_qr_codes (updated_by);",
+    "create index if not exists kiosk_restore_lineage_business_id_fk_idx on public.kiosk_restore_lineage (business_id);",
+    "create index if not exists kiosk_restore_lineage_created_by_fk_idx on public.kiosk_restore_lineage (created_by);",
+    "create index if not exists kiosk_restore_lineage_source_version_id_fk_idx on public.kiosk_restore_lineage (source_version_id);",
+    "create index if not exists kiosk_setup_attestations_created_by_fk_idx on public.kiosk_setup_attestations (created_by);",
+    "create index if not exists kiosk_setup_attestations_test_order_id_fk_idx on public.kiosk_setup_attestations (test_order_id);",
+    "create index if not exists kiosk_test_orders_created_by_fk_idx on public.kiosk_test_orders (created_by);",
+    "create index if not exists kiosk_test_sessions_created_by_fk_idx on public.kiosk_test_sessions (created_by);",
+    "create index if not exists kitchen_events_business_id_fk_idx on public.kitchen_events (business_id);",
+    "create index if not exists kitchen_events_changed_by_fk_idx on public.kitchen_events (changed_by);",
+    "create index if not exists kitchen_events_order_id_fk_idx on public.kitchen_events (order_id);",
+    "create index if not exists kitchen_item_states_business_id_fk_idx on public.kitchen_item_states (business_id);",
+    "create index if not exists kitchen_item_states_order_id_fk_idx on public.kitchen_item_states (order_id);",
+    "create index if not exists kitchen_offline_events_business_id_fk_idx on public.kitchen_offline_events (business_id);",
+    "create index if not exists kitchen_offline_events_device_id_fk_idx on public.kitchen_offline_events (device_id);",
+    "create index if not exists kitchen_offline_events_order_id_fk_idx on public.kitchen_offline_events (order_id);",
+    "create index if not exists menu_combos_category_id_fk_idx on public.menu_combos (category_id);",
+    "create index if not exists order_items_product_id_fk_idx on public.order_items (product_id);",
+    "create index if not exists orders_location_id_fk_idx on public.orders (location_id);",
+    "create index if not exists payment_events_business_id_fk_idx on public.payment_events (business_id);",
+    "create index if not exists payment_events_order_id_fk_idx on public.payment_events (order_id);",
+    "create index if not exists payment_events_payment_id_fk_idx on public.payment_events (payment_id);",
+    "create index if not exists payments_collected_by_fk_idx on public.payments (collected_by);",
+    "create index if not exists product_modifier_groups_business_id_fk_idx on public.product_modifier_groups (business_id);",
+    "create index if not exists product_modifier_options_group_id_fk_idx on public.product_modifier_options (group_id);",
+    "create index if not exists test_runtime_availability_overrides_product_id_fk_idx on public.test_runtime_availability_overrides (product_id);",
+    "create index if not exists test_runtime_order_events_business_id_fk_idx on public.test_runtime_order_events (business_id);",
+    "create index if not exists test_runtime_order_events_order_id_fk_idx on public.test_runtime_order_events (order_id);",
+    "create index if not exists test_runtime_orders_business_id_fk_idx on public.test_runtime_orders (business_id);"
 ]
 
 
@@ -739,6 +793,24 @@ def ensure_schema_compatibility(database_url: str) -> None:
                 except Exception as exc:
                     connection.rollback()
                     logger.warning("Schema compatibility statement skipped: %s", exc)
+            connection.execute(
+                """DO $$
+                DECLARE item record;
+                BEGIN
+                  FOR item IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' LOOP
+                    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', item.tablename);
+                  END LOOP;
+                  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+                    REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon;
+                    ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon;
+                  END IF;
+                  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+                    REVOKE ALL ON ALL TABLES IN SCHEMA public FROM authenticated;
+                    ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM authenticated;
+                  END IF;
+                END $$"""
+            )
+            connection.commit()
             assert_analytics_order_schema(connection)
     except SchemaContractError:
         raise

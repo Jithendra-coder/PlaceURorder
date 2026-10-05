@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     api_prefix: str = "/api"
 
     database_url: str = "postgresql://postgres:postgres@localhost:5432/universal_kiosk_app"
+    supabase_url: str | None = None
+    supabase_publishable_key: str | None = None
     jwt_secret: str = "dev-only-change-me"
     jwt_algorithm: str = "HS256"
     jwt_access_token_minutes: int = 60 * 24
@@ -85,8 +87,13 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_production_settings(self) -> "Settings":
         validate_required_environment(self)
+        if bool(self.supabase_url) != bool(self.supabase_publishable_key):
+            raise ValueError("SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY must be set together.")
         if self.environment.lower() not in {"prod", "production"}:
             return self
+
+        if not self.supabase_url or not self.supabase_publishable_key:
+            raise ValueError("SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY are required in production.")
 
         if self.jwt_secret.strip().lower() in PRODUCTION_PLACEHOLDERS or len(self.jwt_secret) < 32:
             raise ValueError("JWT_SECRET must be a strong production secret.")

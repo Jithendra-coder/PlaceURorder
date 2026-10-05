@@ -2,7 +2,7 @@
 
 ## Local Setup
 
-This backend now uses local PostgreSQL plus JWT authentication.
+The backend uses Supabase Postgres for application data, Supabase Auth for accounts and sessions, and Supabase Storage for uploaded images. Keep the database password server-side; the publishable key is safe for client use, but this app only needs it in the backend.
 
 Create your local env file from the safe template:
 
@@ -11,7 +11,9 @@ Copy-Item .env.example .env
 ```
 
 ```env
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/universal_kiosk_app
+DATABASE_URL=postgresql://postgres.[PROJECT_REF]:[DB_PASSWORD]@[POOLER_HOST]:5432/postgres?sslmode=require
+SUPABASE_URL=https://amamatsmrevomzazpfcq.supabase.co
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_XA12dfhL7FWdSRovzkDivg_IALiThhQ
 JWT_SECRET=replace-with-a-long-random-secret-at-least-32-characters
 JWT_ACCESS_TOKEN_MINUTES=1440
 ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
@@ -40,11 +42,11 @@ PEXELS_API_KEY=your-pexels-api-key
 PEXELS_PER_PAGE=12
 ```
 
-Create the database, then run:
+Copy the PostgreSQL connection string from **Supabase Dashboard → Connect** into `DATABASE_URL` and replace its password. Use the direct connection for an IPv6 persistent backend or the session pooler for an IPv4-only host. Keep this file private. Set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` from the same project.
 
-```powershell
-psql "$env:DATABASE_URL" -f backend/postgres_schema.sql
-```
+The project schema is tracked in `supabase/migrations`. Set the Supabase Auth Site URL to the deployed frontend and allow the frontend’s `/auth/sign-up` and `/auth/reset-password` URLs as redirects (also allow `http://localhost:3000` during local development). Signup and password reset links are sent by Supabase Auth; uploaded business images are stored in the public `business-assets` bucket with authenticated, business-scoped upload policies. This project’s initial schema migration has already been applied to its hosted project.
+
+Use a Supabase database for local development as well: Auth sessions and user records are stored alongside application data. Keep `DATABASE_URL`, `SUPABASE_URL`, and `SUPABASE_PUBLISHABLE_KEY` pointed at the same Supabase project.
 
 Install and run:
 
@@ -75,7 +77,6 @@ venv\Scripts\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8000
 - `POST /api/businesses/{business_id}/uploads/product-image`
 - `GET /api/media/pexels/search?q=pizza`
 
-Authenticated admin/kitchen endpoints use the httpOnly `menutap_admin_session` cookie set by `/api/auth/login` and `/api/auth/verify-email`. `Authorization: Bearer <jwt_access_token>` remains a temporary compatibility fallback for non-browser clients.
-Uploaded images are stored locally under `backend/uploads` and served from `/uploads`.
+Authenticated admin/kitchen endpoints use the httpOnly `menutap_admin_session` cookie set by `/api/auth/login` and `/api/auth/verify-email`; Supabase refresh tokens stay in a separate httpOnly cookie. Uploaded images are stored in Supabase Storage.
 
-Signup verification codes, password reset links, welcome emails, and staff invites are sent by SMTP when SMTP variables are configured. In local development, when SMTP is missing or fails, email content is also written to `backend/email_outbox`, signup returns a local `dev_otp`, and password reset returns a local reset-page link. Redis is optional; when `REDIS_URL` is not set, the kiosk menu APIs continue to read directly from PostgreSQL. Pexels image search is optional; add `PEXELS_API_KEY` only when you want owners to pick images from Pexels inside the admin menu.
+Supabase Auth sends signup and password reset emails. Redis remains optional; without `REDIS_URL`, kiosk menu APIs read directly from Supabase Postgres. Pexels image search remains optional.

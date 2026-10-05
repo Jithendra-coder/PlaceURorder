@@ -209,6 +209,11 @@ class SignupEmailComplete(BaseModel):
     full_name: Optional[str] = Field(None, max_length=120)
 
 
+class SignupLinkAccept(BaseModel):
+    access_token: str = Field(..., min_length=20, max_length=4096)
+    refresh_token: str = Field(..., min_length=20, max_length=4096)
+
+
 class SignupEmailVerified(BaseModel):
     email: str
     message: str
@@ -242,7 +247,7 @@ class ForgotPasswordResponse(BaseModel):
 
 
 class ResetPasswordRequest(BaseModel):
-    token: str = Field(..., min_length=20, max_length=160)
+    token: str = Field(..., min_length=20, max_length=4096)
     password: str = Field(..., min_length=8, max_length=128)
 
 

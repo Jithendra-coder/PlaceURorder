@@ -143,7 +143,7 @@ psql -U postgres -d universal_kiosk_app -f backend/postgres_schema.sql
    `ash
    cp .env.example .env
    `
-   Update DATABASE_URL, JWT_SECRET, and payment/email credentials as needed.
+   Set `DATABASE_URL`, `SUPABASE_URL`, and `SUPABASE_PUBLISHABLE_KEY` for the Supabase project, plus `JWT_SECRET` and any payment provider credentials. Copy the database connection string from Supabase Dashboard → Connect; keep its password private.
 
 5. Start the FastAPI development server:
    `ash

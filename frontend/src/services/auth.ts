@@ -26,6 +26,10 @@ export const AuthService = {
     return api.startSignup(email);
   },
 
+  acceptSignupLink(accessToken: string, refreshToken: string) {
+    return api.acceptSignupLink(accessToken, refreshToken);
+  },
+
   verifySignUp(email: string, code: string) {
     return api.verifySignup(email, code);
   },

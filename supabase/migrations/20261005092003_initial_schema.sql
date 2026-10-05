@@ -20,13 +20,13 @@ begin
   new.updated_at = now();
   return new;
 end;
-$$ language plpgsql
-set search_path = '';
+$$ language plpgsql;
 
 
 create table if not exists app_users (
   id uuid primary key default gen_random_uuid(),
   email extensions.citext not null unique,
+  password_hash text not null,
   full_name text,
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
@@ -38,6 +38,31 @@ drop trigger if exists app_users_set_updated_at on app_users;
 create trigger app_users_set_updated_at
 before update on app_users
 for each row execute function set_updated_at();
+
+create table if not exists password_reset_tokens (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references app_users(id) on delete cascade,
+  token_hash text not null unique,
+  expires_at timestamptz not null,
+  used_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists password_reset_tokens_user_id_idx on password_reset_tokens(user_id);
+create index if not exists password_reset_tokens_expires_at_idx on password_reset_tokens(expires_at);
+
+create table if not exists email_verification_codes (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references app_users(id) on delete cascade,
+  code_hash text not null,
+  expires_at timestamptz not null,
+  used_at timestamptz,
+  attempt_count integer not null default 0 check (attempt_count >= 0),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists email_verification_codes_user_id_idx on email_verification_codes(user_id);
+create index if not exists email_verification_codes_expires_at_idx on email_verification_codes(expires_at);
 
 create table if not exists profiles (
   id uuid primary key references app_users(id) on delete cascade,
@@ -614,16 +639,15 @@ returns integer as $$
 declare
   allocated_number integer;
 begin
-  insert into public.order_counters as counters (business_id, counter_date, next_number)
+  insert into order_counters (business_id, counter_date, next_number)
   values (p_business_id, current_date, 2)
   on conflict (business_id, counter_date)
-  do update set next_number = counters.next_number + 1
+  do update set next_number = order_counters.next_number + 1
   returning next_number - 1 into allocated_number;
 
   return allocated_number;
 end;
-$$ language plpgsql
-set search_path = '';
+$$ language plpgsql;
 
 create table if not exists orders (
   id uuid primary key default gen_random_uuid(),
@@ -954,15 +978,14 @@ create table if not exists kiosk_restore_lineage (
 create or replace function reset_daily_product_sales()
 returns void as $$
 begin
-  update public.products
+  update products
   set sold_today = 0,
       is_available = case
         when track_stock and stock_quantity is not null and stock_quantity <= 0 then false
         else true
       end;
 end;
-$$ language plpgsql
-set search_path = '';
+$$ language plpgsql;
 
 create table if not exists counter_held_orders (
   id uuid primary key default gen_random_uuid(), business_id uuid not null references businesses(id) on delete cascade,
@@ -979,6 +1002,7 @@ create table if not exists counter_payment_claims (
   claimed_at timestamptz not null default now(), expires_at timestamptz not null, released_at timestamptz, created_at timestamptz not null default now()
 );
 create unique index if not exists counter_payment_claims_active_uidx on counter_payment_claims(payment_id) where status = 'claimed';
+
 CREATE INDEX IF NOT EXISTS audit_logs_user_id_fk_idx ON public.audit_logs (user_id);
 CREATE INDEX IF NOT EXISTS availability_rules_created_by_fk_idx ON public.availability_rules (created_by);
 CREATE INDEX IF NOT EXISTS availability_rules_updated_by_fk_idx ON public.availability_rules (updated_by);
@@ -1030,3 +1054,113 @@ CREATE INDEX IF NOT EXISTS test_runtime_availability_overrides_product_id_fk_idx
 CREATE INDEX IF NOT EXISTS test_runtime_order_events_business_id_fk_idx ON public.test_runtime_order_events (business_id);
 CREATE INDEX IF NOT EXISTS test_runtime_order_events_order_id_fk_idx ON public.test_runtime_order_events (order_id);
 CREATE INDEX IF NOT EXISTS test_runtime_orders_business_id_fk_idx ON public.test_runtime_orders (business_id);
+
+-- Supabase Auth owns identity and credentials; app_users remains a domain profile mirror.
+ALTER TABLE public.app_users DROP COLUMN IF EXISTS password_hash;
+
+CREATE TABLE IF NOT EXISTS public.auth_sessions (
+  id uuid PRIMARY KEY,
+  user_id uuid NOT NULL REFERENCES public.app_users(id) ON DELETE CASCADE,
+  token_hash text NOT NULL UNIQUE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz NOT NULL,
+  last_active_at timestamptz NOT NULL DEFAULT now(),
+  reauthenticated_at timestamptz NOT NULL DEFAULT now(),
+  user_agent text,
+  ip_address inet,
+  revoked_at timestamptz,
+  revoked_by uuid REFERENCES public.app_users(id) ON DELETE SET NULL
+);
+
+CREATE SCHEMA IF NOT EXISTS private;
+REVOKE ALL ON SCHEMA private FROM PUBLIC, anon, authenticated;
+GRANT USAGE ON SCHEMA private TO authenticated;
+
+CREATE OR REPLACE FUNCTION private.sync_auth_user()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  IF NEW.email IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  INSERT INTO public.app_users (id, email, full_name, is_active, created_at)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    NULLIF(NEW.raw_user_meta_data ->> 'full_name', ''),
+    NEW.email_confirmed_at IS NOT NULL,
+    NEW.created_at
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    email = EXCLUDED.email,
+    full_name = COALESCE(EXCLUDED.full_name, public.app_users.full_name),
+    is_active = EXCLUDED.is_active;
+
+  INSERT INTO public.profiles (id, email, full_name)
+  VALUES (NEW.id, NEW.email, NULLIF(NEW.raw_user_meta_data ->> 'full_name', ''))
+  ON CONFLICT (id) DO UPDATE SET
+    email = EXCLUDED.email,
+    full_name = COALESCE(EXCLUDED.full_name, public.profiles.full_name);
+  RETURN NEW;
+END;
+$$;
+REVOKE ALL ON FUNCTION private.sync_auth_user() FROM PUBLIC, anon, authenticated;
+
+CREATE TRIGGER on_auth_user_changed
+AFTER INSERT OR UPDATE OF email, email_confirmed_at, raw_user_meta_data ON auth.users
+FOR EACH ROW EXECUTE FUNCTION private.sync_auth_user();
+
+DO $$
+DECLARE item record;
+BEGIN
+  FOR item IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' LOOP
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', item.tablename);
+  END LOOP;
+END $$;
+REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated;
+
+CREATE OR REPLACE FUNCTION private.can_manage_business_assets(p_business_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  SELECT (SELECT auth.uid()) IS NOT NULL
+    AND EXISTS (
+      SELECT 1 FROM public.businesses b
+      WHERE b.id = p_business_id
+        AND (
+          b.owner_id = (SELECT auth.uid())
+          OR EXISTS (
+            SELECT 1 FROM public.business_staff s
+            WHERE s.business_id = b.id
+              AND s.user_id = (SELECT auth.uid())
+              AND s.role IN ('owner', 'admin', 'manager')
+          )
+        )
+    );
+$$;
+REVOKE ALL ON FUNCTION private.can_manage_business_assets(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION private.can_manage_business_assets(uuid) TO authenticated;
+
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES ('business-assets', 'business-assets', true, 5242880, ARRAY['image/png', 'image/jpeg', 'image/gif', 'image/webp'])
+ON CONFLICT (id) DO UPDATE SET
+  public = EXCLUDED.public,
+  file_size_limit = EXCLUDED.file_size_limit,
+  allowed_mime_types = EXCLUDED.allowed_mime_types;
+
+CREATE POLICY "Business managers upload assets"
+ON storage.objects FOR INSERT TO authenticated
+WITH CHECK (
+  bucket_id = 'business-assets'
+  AND (storage.foldername(name))[2] IN ('products', 'brand')
+  AND (storage.foldername(name))[1] ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  AND private.can_manage_business_assets(((storage.foldername(name))[1])::uuid)
+);

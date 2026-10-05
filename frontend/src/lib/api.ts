@@ -103,6 +103,7 @@ type KioskExperienceTestOrder = {
 };
 
 const inFlightGetRequests = new Map<string, Promise<unknown>>();
+let refreshInFlight: Promise<boolean> | null = null;
 
 export function apiRequest<T>(
   path: string,
@@ -120,7 +121,8 @@ export function apiRequest<T>(
 
 async function performApiRequest<T>(
   path: string,
-  options: RequestInit & { auth?: boolean; timeoutMs?: number } = {}
+  options: RequestInit & { auth?: boolean; timeoutMs?: number } = {},
+  allowRefresh = true
 ): Promise<T> {
   const { auth: useAuth = true, timeoutMs, ...fetchOptions } = options;
   const headers = new Headers(options.headers);
@@ -177,6 +179,9 @@ async function performApiRequest<T>(
     const detail = errorPayload?.error?.message ?? errorPayload?.detail ?? errorPayload?.message ?? "Request failed.";
     const message = formatApiError(detail);
     if (useAuth !== false && response.status === 401) {
+      if (allowRefresh && path !== "/auth/refresh" && await refreshAuthSession()) {
+        return performApiRequest<T>(path, options, false);
+      }
       auth.clear();
     }
     if (response.status >= 500 && /internal server error|request failed/i.test(message)) {
@@ -191,6 +196,16 @@ async function performApiRequest<T>(
   }
 
   return payload as T;
+}
+
+function refreshAuthSession() {
+  if (!refreshInFlight) {
+    refreshInFlight = fetch(`${API_BASE}/auth/refresh`, { method: "POST", credentials: "include" })
+      .then((response) => response.ok)
+      .catch(() => false)
+      .finally(() => { refreshInFlight = null; });
+  }
+  return refreshInFlight;
 }
 
 function formatApiError(detail: unknown) {
