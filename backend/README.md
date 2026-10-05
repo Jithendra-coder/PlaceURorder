@@ -11,7 +11,7 @@ Copy-Item .env.example .env
 ```
 
 ```env
-DATABASE_URL=postgresql://postgres.[PROJECT_REF]:[DB_PASSWORD]@[POOLER_HOST]:5432/postgres?sslmode=require
+DATABASE_URL=postgresql://postgres.amamatsmrevomzazpfcq:[YOUR-PASSWORD]@aws-0-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require
 SUPABASE_URL=https://amamatsmrevomzazpfcq.supabase.co
 SUPABASE_PUBLISHABLE_KEY=sb_publishable_XA12dfhL7FWdSRovzkDivg_IALiThhQ
 JWT_SECRET=replace-with-a-long-random-secret-at-least-32-characters
@@ -42,7 +42,7 @@ PEXELS_API_KEY=your-pexels-api-key
 PEXELS_PER_PAGE=12
 ```
 
-Copy the PostgreSQL connection string from **Supabase Dashboard → Connect** into `DATABASE_URL` and replace its password. Use the direct connection for an IPv6 persistent backend or the session pooler for an IPv4-only host. Keep this file private. Set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` from the same project.
+The session-pooler URL above targets this Supabase project. Replace `[YOUR-PASSWORD]` in your ignored local `.env` file with the database password from **Supabase Dashboard → Connect**; never commit or share that value. Keep `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` pointed at this same project.
 
 The project schema is tracked in `supabase/migrations`. Set the Supabase Auth Site URL to the deployed frontend and allow the frontend’s `/auth/sign-up` and `/auth/reset-password` URLs as redirects (also allow `http://localhost:3000` during local development). Signup and password reset links are sent by Supabase Auth; uploaded business images are stored in the public `business-assets` bucket with authenticated, business-scoped upload policies. This project’s initial schema migration has already been applied to its hosted project.
 
