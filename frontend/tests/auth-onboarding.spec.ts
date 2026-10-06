@@ -83,6 +83,25 @@ test("completed sign-in restores an allowed dashboard deep link", async ({ page 
   await expect(page).toHaveURL(/\/dashboard\/test\?source=deep-link$/);
 });
 
+test("phone sign-in preserves its return route and routes completed accounts", async ({ page }) => {
+  let submittedPhone = "";
+  await page.route("**/api/auth/login", async (route) => {
+    submittedPhone = String(route.request().postDataJSON().email ?? "");
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ user: { id: "user-1", email: "owner@example.test" } }) });
+  });
+  await mockBusinessBootstrap(page, { onboarding_completed: true, next_route: "/dashboard" });
+
+  await page.goto("/auth/sign-in?next=%2Fdashboard%2Foperations%2Flive-orders%3Fview%3Dqueue");
+  await page.getByRole("button", { name: "Phone" }).click();
+  await expect(page).toHaveURL(/\/auth\/phone\?next=/);
+  await page.getByLabel("Phone Number").fill("+1 555 123 4567");
+  await page.locator("#password").fill("MenuTapTest1");
+  await page.getByRole("button", { name: "Sign In" }).click();
+
+  await expect(page).toHaveURL(/\/dashboard\/operations\/live-orders\?view=queue$/);
+  expect(submittedPhone).toBe("+15551234567");
+});
+
 test("Google callback restores the protected page requested before OAuth", async ({ page }) => {
   await page.addInitScript(() => window.sessionStorage.setItem("menutap.auth.next", "/dashboard/operations/live-orders?view=queue"));
   await page.route("**/api/auth/oauth/google/exchange", (route) => route.fulfill({

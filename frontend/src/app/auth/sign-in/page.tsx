@@ -76,7 +76,7 @@ export default function SignInPage() {
       <AuthDivider />
       <div className="mt-auth-providers">
         <AuthProviderButton icon={<GoogleIcon />} onClick={() => void startGoogleSignIn()} disabled={busy}>Google</AuthProviderButton>
-        <AuthProviderButton icon={<PhoneIcon />} onClick={() => router.push("/auth/phone")} disabled={busy}>Phone</AuthProviderButton>
+        <AuthProviderButton icon={<PhoneIcon />} onClick={() => router.push(`/auth/phone${window.location.search}`)} disabled={busy}>Phone</AuthProviderButton>
       </div>
       <AuthFooter text="Don't have an account?" linkText="Sign up" href="/auth/sign-up" />
     </AuthShell>
