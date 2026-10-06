@@ -83,6 +83,21 @@ test("completed sign-in restores an allowed dashboard deep link", async ({ page 
   await expect(page).toHaveURL(/\/dashboard\/test\?source=deep-link$/);
 });
 
+test("Google callback restores the protected page requested before OAuth", async ({ page }) => {
+  await page.addInitScript(() => window.sessionStorage.setItem("menutap.auth.next", "/dashboard/operations/live-orders?view=queue"));
+  await page.route("**/api/auth/oauth/google/exchange", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ user: { id: "user-1", email: "owner@example.test" } }),
+  }));
+  await mockBusinessBootstrap(page, { onboarding_completed: true, next_route: "/dashboard" });
+
+  await page.goto("/auth/callback?code=oauth-code");
+
+  await expect(page).toHaveURL(/\/dashboard\/operations\/live-orders\?view=queue$/);
+  expect(await page.evaluate(() => window.sessionStorage.getItem("menutap.auth.next"))).toBeNull();
+});
+
 test("incomplete dashboard access follows the backend onboarding route", async ({ page }) => {
   await mockBusinessBootstrap(page, { onboarding_completed: false, next_route: "/setup/business-details" });
   await page.goto("/dashboard");

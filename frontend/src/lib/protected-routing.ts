@@ -9,6 +9,7 @@ const SETUP_ROUTES = new Set([
 ]);
 
 const LOCAL_ORIGIN = "https://placeurorder.local";
+const POST_LOGIN_RETURN_KEY = "menutap.auth.next";
 
 export function safeProtectedReturnPath(value: string | null | undefined) {
   if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("\\")) return null;
@@ -24,6 +25,28 @@ export function safeProtectedReturnPath(value: string | null | undefined) {
 
 export function safeSetupRoute(value: string | null | undefined) {
   return value && SETUP_ROUTES.has(value) ? value : "/setup/business-type";
+}
+
+export function rememberPostLoginReturnPath(value: string | null | undefined) {
+  if (typeof window === "undefined") return;
+  try {
+    const path = safeProtectedReturnPath(value);
+    if (path) window.sessionStorage.setItem(POST_LOGIN_RETURN_KEY, path);
+    else window.sessionStorage.removeItem(POST_LOGIN_RETURN_KEY);
+  } catch {
+    // Restricted browser storage should not prevent sign-in.
+  }
+}
+
+export function takePostLoginReturnPath() {
+  if (typeof window === "undefined") return null;
+  try {
+    const path = window.sessionStorage.getItem(POST_LOGIN_RETURN_KEY);
+    window.sessionStorage.removeItem(POST_LOGIN_RETURN_KEY);
+    return safeProtectedReturnPath(path);
+  } catch {
+    return null;
+  }
 }
 
 export function postLoginDestination(serverNextRoute: string, requestedPath: string | null | undefined) {

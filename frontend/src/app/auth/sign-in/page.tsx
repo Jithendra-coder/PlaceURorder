@@ -16,7 +16,7 @@ import {
   GoogleIcon,
   PhoneIcon,
 } from "@/components/AuthShell";
-import { postLoginDestination } from "@/lib/protected-routing";
+import { postLoginDestination, rememberPostLoginReturnPath, takePostLoginReturnPath } from "@/lib/protected-routing";
 import { AuthService } from "@/services/auth";
 
 export default function SignInPage() {
@@ -35,7 +35,8 @@ export default function SignInPage() {
     try {
       const result = await AuthService.signIn(identifier, password);
       const requestedPath = new URLSearchParams(window.location.search).get("next");
-      router.replace(postLoginDestination(result.nextRoute, requestedPath));
+      const pendingPath = takePostLoginReturnPath();
+      router.replace(postLoginDestination(result.nextRoute, requestedPath ?? pendingPath));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "We could not sign you in with those details.");
       setBusy(false);
@@ -47,6 +48,7 @@ export default function SignInPage() {
     setBusy(true);
     setError("");
     try {
+      rememberPostLoginReturnPath(new URLSearchParams(window.location.search).get("next"));
       const { authorization_url } = await AuthService.startGoogleSignIn();
       window.location.assign(authorization_url);
     } catch (cause) {

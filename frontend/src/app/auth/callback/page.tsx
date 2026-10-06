@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AuthShell, AuthStatus } from "@/components/AuthShell";
-import { postLoginDestination } from "@/lib/protected-routing";
+import { postLoginDestination, takePostLoginReturnPath } from "@/lib/protected-routing";
 import { api } from "@/services/api";
 import { AuthService } from "@/services/auth";
 
@@ -27,7 +27,7 @@ export default function AuthCallbackPage() {
       }
       await AuthService.completeGoogleSignIn(code);
       const status = await api.onboardingStatus();
-      router.replace(postLoginDestination(status.next_route, null));
+      router.replace(postLoginDestination(status.next_route, takePostLoginReturnPath()));
     })().catch((cause: unknown) => {
         setError(cause instanceof Error ? cause.message : "Google sign-in could not be completed.");
       });
