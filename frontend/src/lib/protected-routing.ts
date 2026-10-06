@@ -8,7 +8,7 @@ const SETUP_ROUTES = new Set([
   "/setup/test-kiosk",
 ]);
 
-const LOCAL_ORIGIN = "https://menutap.local";
+const LOCAL_ORIGIN = "https://placeurorder.local";
 
 export function safeProtectedReturnPath(value: string | null | undefined) {
   if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("\\")) return null;

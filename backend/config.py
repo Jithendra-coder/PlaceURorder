@@ -44,8 +44,8 @@ class Settings(BaseSettings):
     smtp_port: int = 587
     smtp_username: str | None = None
     smtp_password: str | None = None
-    smtp_from_email: str = "no-reply@menutap.local"
-    smtp_from_name: str = "MenuTap"
+    smtp_from_email: str = "no-reply@placeurorder.local"
+    smtp_from_name: str = "PlaceURorder"
     smtp_use_tls: bool = True
     dev_expose_reset_links: bool = False
     email_outbox_dir: str = str(Path(__file__).resolve().parent / "email_outbox")

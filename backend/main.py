@@ -87,7 +87,7 @@ async def validation_exception(request: Request, exc: RequestValidationError):
 @app.exception_handler(OperationalError)
 async def database_unavailable(request: Request, exc: OperationalError):
     logger.warning("Database connection unavailable request_id=%s path=%s", request.state.request_id, request.url.path)
-    return _error(503, "Menu Tap is temporarily unavailable. Please try again.", request)
+    return _error(503, "PlaceURorder is temporarily unavailable. Please try again.", request)
 
 
 @app.exception_handler(Exception)

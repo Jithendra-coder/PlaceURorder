@@ -36,7 +36,7 @@ test("standalone Counter and Kitchen routes render their shared apps without the
 test("missing Test Kiosk session stays in a dedicated recovery state", async ({ page }) => {
   await page.route("**/api/kiosk/test/session/context/kiosk", (route) => route.fulfill({ status: 401, json: { detail: "Test kiosk session is required." } }));
   await page.goto("/test/kiosk");
-  await expect(page.getByRole("heading", { name: "MenuTap Test Kiosk" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "PlaceURorder Test Kiosk" })).toBeVisible();
   await expect(page.getByText("Test session unavailable.")).toBeVisible();
   await expect(page).toHaveURL(/\/test\/kiosk$/);
   await expect(page.getByRole("button", { name: "Return to Test Hub" })).toBeVisible();

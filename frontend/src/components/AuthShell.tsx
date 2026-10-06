@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { forwardRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from "react";
 import { AmbientBackground } from "./AmbientBackground";
-import { MenuTapLogo } from "./onboarding/OnboardingTopBar";
+import { PlaceURorderLogo } from "./onboarding/OnboardingTopBar";
 
 export function AuthLayout({ children }: { children: ReactNode }) {
   return (
@@ -18,7 +18,7 @@ export function AuthShell({ title, description, children }: { title: string; des
   return (
     <section className="mt-auth-card">
       <header className="mt-auth-header">
-        <div className="mt-auth-wordmark"><MenuTapLogo /></div>
+        <div className="mt-auth-wordmark"><PlaceURorderLogo /></div>
         <h1 className="mt-auth-heading">{title}</h1>
         <p className="mt-auth-supporting">{description}</p>
       </header>

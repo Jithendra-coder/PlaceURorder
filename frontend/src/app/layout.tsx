@@ -8,8 +8,8 @@ const sourceSans = Source_Sans_3({ subsets: ["latin"], display: "swap", variable
 const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"], display: "swap", variable: "--font-plus-jakarta" });
 
 export const metadata: Metadata = {
-  title: "Menu Tap",
-  description: "Configure and run your MenuTap kiosk.",
+  title: "PlaceURorder",
+  description: "Configure and run your PlaceURorder kiosk.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

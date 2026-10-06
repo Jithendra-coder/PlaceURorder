@@ -11,7 +11,7 @@ export function DeviceApp() {
   const [type, setType] = useState<"counter" | "kitchen" | null>(null);
   const [error, setError] = useState("");
   useEffect(() => { void api.liveDeviceSessionContext().then((context) => { if (context.device.device_type === "counter" || context.device.device_type === "kitchen") setType(context.device.device_type); else router.replace("/device/start"); }).catch((reason) => setError(reason instanceof Error ? reason.message : "Device session unavailable.")); }, [router]);
-  if (error) return <main className="counter-auth"><section><h1>Menu Tap Device</h1><p>{error}</p><button onClick={() => router.replace("/device/start")}>Pair or recover device</button></section></main>;
+  if (error) return <main className="counter-auth"><section><h1>PlaceURorder Device</h1><p>{error}</p><button onClick={() => router.replace("/device/start")}>Pair or recover device</button></section></main>;
   if (!type) return <main className="counter-auth"><p>Securing device session…</p></main>;
   switch (type) {
     case "counter": return <CounterApp />;

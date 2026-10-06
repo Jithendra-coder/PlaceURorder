@@ -618,7 +618,7 @@ def _connect_razorpay(client: DbClient, business: dict, payload: PaymentAccountC
     business_id = UUID(str(business["id"]))
     settings = get_settings()
     # Razorpay does not provide the same general-purpose self-serve Connect OAuth flow as Stripe Connect.
-    # MenuTap records a Route/linked-account id created through Razorpay partner/Route onboarding, then uses
+    # PlaceURorder records a Route/linked-account id created through Razorpay partner/Route onboarding, then uses
     # server-side payment links/webhooks so no Razorpay secret is exposed to the kiosk frontend.
     if payload.provider_account_id:
         env_ready = bool(settings.razorpay_key_id and settings.razorpay_key_secret)
@@ -1193,7 +1193,7 @@ def _stripe_create_account(secret: str, business: dict) -> str:
             "business_type": "company",
             "capabilities[card_payments][requested]": "true",
             "capabilities[transfers][requested]": "true",
-            "business_profile[name]": business.get("name") or "MenuTap merchant",
+            "business_profile[name]": business.get("name") or "PlaceURorder merchant",
         },
     )
     return response["id"]
@@ -1252,7 +1252,7 @@ def _razorpay_payment_link(business: dict, order: dict, payment: dict, method: s
         "currency": business.get("currency_code") or "INR",
         "accept_partial": False,
         "reference_id": payment["id"],
-        "description": f"MenuTap order {order.get('order_number') or order['public_token']}",
+        "description": f"PlaceURorder order {order.get('order_number') or order['public_token']}",
         "callback_url": f"{base}/kiosk/{business.get('slug')}?payment=processing&order={order['id']}",
         "callback_method": "get",
         "notes": {

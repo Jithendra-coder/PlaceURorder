@@ -19,7 +19,7 @@ export default function TestKioskPage() {
     return () => { active = false; };
   }, []);
 
-  if (error) return <main className="staff-recovery"><section><h1>MenuTap Test Kiosk</h1><p>{error}</p><button onClick={() => router.push("/dashboard/test")}>Return to Test Hub</button></section></main>;
+  if (error) return <main className="staff-recovery"><section><h1>PlaceURorder Test Kiosk</h1><p>{error}</p><button onClick={() => router.push("/dashboard/test")}>Return to Test Hub</button></section></main>;
   if (!ready) return <main className="staff-recovery"><p>Securing isolated Test Kiosk…</p></main>;
   return <KioskRuntime routeSlug="test-runtime" operationalMode="test" sessionId="standalone-test" initialView="start" />;
 }

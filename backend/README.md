@@ -28,7 +28,7 @@ SMTP_PORT=587
 SMTP_USERNAME=your-email@gmail.com
 SMTP_PASSWORD=your-app-password
 SMTP_FROM_EMAIL=your-email@gmail.com
-SMTP_FROM_NAME=MenuTap
+SMTP_FROM_NAME=PlaceURorder
 SMTP_USE_TLS=true
 DEV_EXPOSE_RESET_LINKS=false
 EMAIL_OUTBOX_DIR=email_outbox
@@ -79,6 +79,6 @@ venv\Scripts\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8000
 - `POST /api/businesses/{business_id}/uploads/product-image`
 - `GET /api/media/pexels/search?q=pizza`
 
-Authenticated admin/kitchen endpoints use the httpOnly `menutap_admin_session` cookie set by `/api/auth/login` and `/api/auth/verify-email`; Supabase refresh tokens stay in a separate httpOnly cookie. Uploaded images are stored in Supabase Storage.
+Authenticated admin/kitchen endpoints use an HTTP-only session cookie set by `/api/auth/login` and `/api/auth/verify-email`; Supabase refresh tokens stay in a separate HTTP-only cookie. Uploaded images are stored in Supabase Storage.
 
 Supabase Auth sends signup and password reset emails. Redis remains optional; without `REDIS_URL`, kiosk menu APIs read directly from Supabase Postgres. Pexels image search remains optional.

@@ -155,7 +155,7 @@ async function performApiRequest<T>(
       throw new Error(timedOut ? "The server is taking too long to respond. Please try again." : "The request was cancelled.");
     }
     if (err instanceof TypeError) {
-      throw new Error("Could not connect to Menu Tap. Please try again.");
+      throw new Error("Could not connect to PlaceURorder. Please try again.");
     }
     throw err;
   } finally {

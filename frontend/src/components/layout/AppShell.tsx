@@ -8,7 +8,7 @@ import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useBusiness } from "@/components/layout/BusinessProvider";
 import { api as dashboardApi, assetUrl } from "@/lib/api";
 import { api as authApi } from "@/services/api";
-import { MenuTapLogo } from "@/components/onboarding/OnboardingTopBar";
+import { PlaceURorderLogo } from "@/components/onboarding/OnboardingTopBar";
 
 type ModuleId = "insights" | "operations" | "kiosk" | "administration";
 
@@ -138,7 +138,7 @@ function AppShellInner({ children }: { children: ReactNode }) {
     <div className="mt-dashboard-shell" data-collapsed={collapsed} data-drawer={drawer}>
       <button type="button" className="mt-dashboard-backdrop" onClick={() => setDrawer(false)} aria-label="Close navigation" />
       <aside className="mt-dashboard-sidebar" aria-label="Main Navigation">
-        <div className="mt-dashboard-brand"><MenuTapLogo height={collapsed ? 28 : 38} /><button type="button" className="mt-dashboard-sidebar-toggle" onClick={toggle} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}>{collapsed ? <PanelLeftOpen size={18} strokeWidth={1.8} aria-hidden="true" /> : <PanelLeftClose size={18} strokeWidth={1.8} aria-hidden="true" />}</button></div>
+        <div className="mt-dashboard-brand"><PlaceURorderLogo height={collapsed ? 28 : 38} /><button type="button" className="mt-dashboard-sidebar-toggle" onClick={toggle} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}>{collapsed ? <PanelLeftOpen size={18} strokeWidth={1.8} aria-hidden="true" /> : <PanelLeftClose size={18} strokeWidth={1.8} aria-hidden="true" />}</button></div>
         {!collapsed && <div className="mt-dashboard-location-wrap"><button type="button" className="mt-dashboard-location" aria-expanded={locationOpen} onClick={() => setLocationOpen((value) => !value)}><Icon name="pin" /><span>{selectedLocationId ? locations.find((location) => location.id === selectedLocationId)?.name || "Select location" : "Select location"}<small>{locationsLoading ? "Loading locations…" : locationsError ? "Locations unavailable" : locations.length ? "Choose a location" : "No locations created"}</small></span></button>{locationOpen && <div className="mt-dashboard-popover mt-dashboard-location-menu" role="listbox" aria-label="Business locations">{locations.length ? <>{<button type="button" role="option" aria-selected={!selectedLocationId} onClick={() => { setSelectedLocationId(null); setLocationOpen(false); }}>All locations</button>}{locations.map((location) => <button type="button" role="option" aria-selected={selectedLocationId === location.id} key={location.id} onClick={() => { setSelectedLocationId(location.id); setLocationOpen(false); }}>{location.name}</button>)}</> : <p>{locationsError ? "Locations are temporarily unavailable." : "No locations created"}</p>}</div>}</div>}
         {collapsed ? <>
           <nav className="mt-dashboard-rail" aria-label="Main navigation" ref={flyoutRef}>

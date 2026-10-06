@@ -1,4 +1,4 @@
-# MenuTap frontend boundaries
+# PlaceURorder frontend boundaries
 
 - `src/app/globals.css` is the only application stylesheet.
 - Keep preview, test, live, and device kiosks on `KioskRuntime`.

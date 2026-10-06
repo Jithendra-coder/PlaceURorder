@@ -61,7 +61,7 @@ async function createOwnerSession(request: APIRequestContext) {
   const otp = String(started.dev_otp || "");
   expect(otp).toMatch(/^\d{6}$/);
   await jsonRequest(request, "POST", "/api/auth/signup/verify", { email, code: otp });
-  await jsonRequest(request, "POST", "/api/auth/signup/complete", { password: "MenuTapTest1", full_name: "Playwright Device Test" });
+  await jsonRequest(request, "POST", "/api/auth/signup/complete", { password: "PlaceURorderTest1", full_name: "Playwright Device Test" });
 }
 
 async function refreshButton(page: Page) {

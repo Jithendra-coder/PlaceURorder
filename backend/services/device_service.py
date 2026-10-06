@@ -933,7 +933,7 @@ def _clean_launch_path(device_type: str) -> str:
 
 def _default_device_name(device_type: str) -> str:
     labels = {"kiosk": "Kiosk terminal", "counter": "Counter terminal", "kitchen": "Kitchen display"}
-    return labels.get(device_type, "MenuTap device")
+    return labels.get(device_type, "PlaceURorder device")
 
 
 def _normalize_pairing_code(code: str) -> str:

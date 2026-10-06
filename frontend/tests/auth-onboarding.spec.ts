@@ -8,7 +8,7 @@ async function createSession(page: import("@playwright/test").Page) {
   const otp = (await start.json()).dev_otp;
   expect(otp).toMatch(/^\d{6}$/);
   expect((await page.request.post("/api/auth/signup/verify", { data: { email, code: otp } })).status()).toBe(200);
-  expect((await page.request.post("/api/auth/signup/complete", { data: { password: "MenuTapTest1", full_name: "Playwright Test" } })).status()).toBe(200);
+  expect((await page.request.post("/api/auth/signup/complete", { data: { password: "PlaceURorderTest1", full_name: "Playwright Test" } })).status()).toBe(200);
 }
 
 async function mockBusinessBootstrap(page: import("@playwright/test").Page, status: { onboarding_completed: boolean; next_route: string }, business: Record<string, unknown> | null = null) {
@@ -77,7 +77,7 @@ test("completed sign-in restores an allowed dashboard deep link", async ({ page 
 
   await page.goto("/auth/sign-in?next=%2Fdashboard%2Ftest%3Fsource%3Ddeep-link");
   await page.getByLabel("Email or Phone").fill("owner@example.test");
-  await page.locator("#password").fill("MenuTapTest1");
+  await page.locator("#password").fill("PlaceURorderTest1");
   await page.getByRole("button", { name: "Sign In" }).click();
 
   await expect(page).toHaveURL(/\/dashboard\/test\?source=deep-link$/);

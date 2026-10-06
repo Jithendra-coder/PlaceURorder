@@ -1,4 +1,4 @@
-﻿# Universal Kiosk App (PlaceURorder)
+# PlaceURorder
 
 > A modern, responsive self-service kiosk, counter point-of-sale (POS), kitchen display system (KDS), and merchant administration platform built with **Next.js 16 (React 19)** and **FastAPI (PostgreSQL)**.
 
@@ -6,7 +6,7 @@
 
 ## Overview
 
-Universal Kiosk App provides an end-to-end digital ordering and store operations solution designed for restaurants, cafes, food trucks, retail, and service businesses. It unifies customer ordering, kitchen operations, counter cashiering, and business intelligence into one cohesive, multi-tenant system.
+PlaceURorder is a restaurant ordering and operations platform for self-service kiosks, counter POS, kitchen displays, and merchant administration.
 
 ### Key Capabilities
 
@@ -111,6 +111,8 @@ docker compose up --build
 ```
 
 Open `http://localhost:3000`; the API is at `http://localhost:8000`. The first startup creates the database schema and local volumes for uploads and email previews. The services are bound to localhost. Stop with `Ctrl+C`; `docker compose down` stops the services while keeping demo data.
+
+To enable sign-in and authenticated admin flows, put `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` in a repository-root `.env` file before starting Compose. Without them, the app starts but authentication endpoints return `503`.
 
 > **Local demo only:** the Compose credentials are documented development defaults. Change them and review the security settings before any deployment with real data.
 

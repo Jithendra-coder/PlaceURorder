@@ -69,58 +69,58 @@ def _write_dev_outbox(to_email: str, subject: str, text: str, html: str | None =
 
 def send_password_reset(to_email: str, reset_url: str) -> bool:
     text = (
-        "Use this secure link to reset your MenuTap password. "
+        "Use this secure link to reset your PlaceURorder password. "
         "The link expires in 30 minutes.\n\n"
         f"{reset_url}\n\n"
         "If you did not request this, you can ignore this email."
     )
     html = f"""
     <div style="font-family:Arial,sans-serif;line-height:1.5;color:#2D3436">
-      <h2>Reset your MenuTap password</h2>
+      <h2>Reset your PlaceURorder password</h2>
       <p>Use this secure link to reset your kiosk admin password. The link expires in 30 minutes.</p>
       <p><a href="{reset_url}" style="display:inline-block;background:#1A4D2E;color:white;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700">Reset password</a></p>
       <p style="color:#64746B;font-size:13px">If you did not request this, you can ignore this email.</p>
     </div>
     """
-    return send_email(to_email, "Reset your MenuTap password", text, html)
+    return send_email(to_email, "Reset your PlaceURorder password", text, html)
 
 
 def send_email_verification(to_email: str, code: str) -> bool:
     text = (
-        "Verify your MenuTap account with this 6-digit code:\n\n"
+        "Verify your PlaceURorder account with this 6-digit code:\n\n"
         f"{code}\n\n"
         "The code expires in 10 minutes. If you did not create this account, you can ignore this email."
     )
     html = f"""
     <div style="font-family:Arial,sans-serif;line-height:1.5;color:#2D3436">
-      <h2>Verify your MenuTap account</h2>
+      <h2>Verify your PlaceURorder account</h2>
       <p>Use this 6-digit code to finish creating your kiosk owner account.</p>
       <p style="display:inline-block;background:#E6F6EF;color:#064E3B;padding:14px 20px;border-radius:12px;font-size:28px;font-weight:800;letter-spacing:6px">{code}</p>
       <p style="color:#64746B;font-size:13px">This code expires in 10 minutes. If you did not create this account, you can ignore this email.</p>
     </div>
     """
-    return send_email(to_email, "Verify your MenuTap account", text, html)
+    return send_email(to_email, "Verify your PlaceURorder account", text, html)
 
 
 def send_welcome_email(to_email: str) -> bool:
     text = (
-        "Welcome to MenuTap.\n\n"
+        "Welcome to PlaceURorder.\n\n"
         "Your owner account is ready. Sign in to set up your business branding, menu items, "
         "kiosk screen, kitchen display, and analytics dashboard."
     )
     html = """
     <div style="font-family:Arial,sans-serif;line-height:1.5;color:#2D3436">
-      <h2>Welcome to MenuTap</h2>
+      <h2>Welcome to PlaceURorder</h2>
       <p>Your owner account is ready.</p>
       <p>Sign in to set up your business branding, menu items, kiosk screen, kitchen display, and analytics dashboard.</p>
     </div>
     """
-    return send_email(to_email, "Welcome to MenuTap", text, html)
+    return send_email(to_email, "Welcome to PlaceURorder", text, html)
 
 
 def send_staff_invite(to_email: str, business_name: str, role: str, reset_url: str) -> bool:
     text = (
-        f"You have been invited to {business_name} as {role} staff on MenuTap.\n\n"
+        f"You have been invited to {business_name} as {role} staff on PlaceURorder.\n\n"
         "Create your password using this secure link:\n"
         f"{reset_url}\n\n"
         "Kitchen-only users can sign in and open the kitchen display for assigned stores."
@@ -128,7 +128,7 @@ def send_staff_invite(to_email: str, business_name: str, role: str, reset_url: s
     html = f"""
     <div style="font-family:Arial,sans-serif;line-height:1.5;color:#2D3436">
       <h2>{business_name} invited you</h2>
-      <p>You were added as <strong>{role}</strong> staff on MenuTap.</p>
+      <p>You were added as <strong>{role}</strong> staff on PlaceURorder.</p>
       <p><a href="{reset_url}" style="display:inline-block;background:#1A4D2E;color:white;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700">Create password</a></p>
       <p style="color:#64746B;font-size:13px">Kitchen-only users can sign in and open the kitchen display for assigned stores.</p>
     </div>

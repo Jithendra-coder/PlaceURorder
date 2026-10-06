@@ -29,7 +29,7 @@ def search_photos(query: str, per_page: int | None = None) -> dict:
         f"https://api.pexels.com/v1/search?{params}",
         headers={
             "Authorization": api_key,
-            "User-Agent": "MenuTap/1.0",
+            "User-Agent": "PlaceURorder/1.0",
         },
     )
 

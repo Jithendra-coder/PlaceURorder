@@ -2,13 +2,13 @@
 
 const steps = ["Business Type", "Business Details", "Menu Items", "Kiosk Layout", "Welcome Screen", "Test Kiosk"];
 
-export function PlaceUrOrderLogo({ className = "", height = 46 }: { className?: string; height?: number }) {
+export function PlaceURorderLogo({ className = "", height = 46 }: { className?: string; height?: number }) {
   return (
-    <div className={`mt-onboarding-logo ${className}`.trim()} role="img" aria-label="Place UR Order">
+    <div className={`mt-onboarding-logo ${className}`.trim()} role="img" aria-label="PlaceURorder logo">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src="/place-ur-order-logo.png"
-        alt="Place UR Order"
+        alt="PlaceURorder"
         style={{
           height: `${height}px`,
           width: "auto",
@@ -21,7 +21,6 @@ export function PlaceUrOrderLogo({ className = "", height = 46 }: { className?: 
   );
 }
 
-export const MenuTapLogo = PlaceUrOrderLogo;
 
 export function OnboardingTopBar({
   currentStep,
@@ -51,7 +50,7 @@ export function OnboardingTopBar({
           })}
         </div>
         <span className="mt-sr-only">Step {currentStep} of 6: {steps[currentStep - 1]}</span>
-        <div className="mt-onboarding-topbar__logo"><PlaceUrOrderLogo /></div>
+        <div className="mt-onboarding-topbar__logo"><PlaceURorderLogo /></div>
         <button
           type="button"
           className="mt-onboarding-topbar__continue"
