@@ -147,14 +147,14 @@ export default function SignUpPage() {
   const timerText = `${Math.floor(expiresIn / 60)}:${String(expiresIn % 60).padStart(2, "0")}`;
 
   return (
-    <AuthShell title="Create your account" description="Start by verifying your email">
+    <AuthShell title="Create your account" description="We’ll email you a six-digit code to verify your address and choose a password.">
       <AuthStatus>{error}</AuthStatus>
       <AuthStatus tone="success">{step === "created" ? "Account created successfully." : ""}</AuthStatus>
 
       {step === "email" && (
         <form onSubmit={requestCode} className="mt-auth-form">
           <AuthField id="email" label="Email"><AuthInput id="email" name="email" type="email" placeholder="Enter your email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} disabled={busy} required /></AuthField>
-          <div className="mt-auth-action"><AuthPrimaryButton type="submit" disabled={!email.trim()} busy={busy}>Verify Email</AuthPrimaryButton></div>
+          <div className="mt-auth-action"><AuthPrimaryButton type="submit" disabled={!email.trim()} busy={busy}>Send verification code</AuthPrimaryButton></div>
         </form>
       )}
 
@@ -164,7 +164,7 @@ export default function SignUpPage() {
             <div className="mt-auth-field__header"><label htmlFor="verified-email" className="mt-auth-field__label">Email</label><button type="button" className="mt-auth-change" onClick={() => setStep("email")}>Change</button></div>
             <AuthInput id="verified-email" value={email} disabled />
           </div>
-          <p className="mt-auth-code-support">Open the secure link in your email, or enter its 6-digit code if shown.</p>
+          <p className="mt-auth-code-support">Enter the six-digit code from your email. After verification, you’ll choose your password.</p>
           <AuthOtpInput value={code} onChange={setCode} onComplete={(value) => void verify(value)} disabled={busy} />
           <div className="mt-auth-otp-timer">
             <p className={expiresIn ? "" : "mt-auth-otp-expired"}>{expiresIn ? `Code expires in ${timerText}` : "Code has expired. Request a new code to continue."}</p>

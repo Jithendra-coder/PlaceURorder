@@ -124,7 +124,7 @@ def _signup_response(email: str) -> dict:
     return {
         "requires_verification": True,
         "email": _normalize_email(email),
-        "message": "Check your email for a secure verification link.",
+        "message": "Check your email for a six-digit verification code.",
         "dev_otp": None,
     }
 
