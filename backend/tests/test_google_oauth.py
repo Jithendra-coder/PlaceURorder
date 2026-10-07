@@ -26,7 +26,7 @@ class AuthSessionClient:
 
 def test_google_pkce_flow_sets_server_session_cookie(monkeypatch, issue_supabase_access_token):
     user_id = uuid4()
-    token = issue_supabase_access_token(user_id, provider="google")
+    token = issue_supabase_access_token(user_id, provider="email", providers=["email", "google"])
     auth_requests = []
     database = AuthSessionClient()
     settings = Settings(

@@ -91,7 +91,11 @@ def exchange_google_oauth_code(client: DbClient, code: str, code_verifier: str) 
     claims = verify_access_token(token)
     user = session.get("user") or {}
     app_metadata = claims.get("app_metadata") or {}
-    if app_metadata.get("provider") != "google" or str(user.get("id")) != str(claims.get("sub")):
+    has_google_identity = (
+        app_metadata.get("provider") == "google"
+        or "google" in (app_metadata.get("providers") or [])
+    )
+    if not has_google_identity or str(user.get("id")) != str(claims.get("sub")):
         raise HTTPException(status_code=401, detail="The Google sign-in session is invalid.")
     return _session(client, session)
 

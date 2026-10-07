@@ -11,7 +11,14 @@ from services import auth_service
 def issue_supabase_access_token(monkeypatch):
     issued: dict[str, dict] = {}
 
-    def issue(user_id, email="owner@example.test", session_id=None, expires_at=None, provider=None):
+    def issue(
+        user_id,
+        email="owner@example.test",
+        session_id=None,
+        expires_at=None,
+        provider=None,
+        providers=None,
+    ):
         now = datetime.now(timezone.utc)
         token = f"supabase-test.{uuid4().hex}"
         issued[token] = {
@@ -20,8 +27,8 @@ def issue_supabase_access_token(monkeypatch):
             "session_id": str(session_id or uuid4()),
             "exp": int((expires_at or now + timedelta(minutes=15)).timestamp()),
         }
-        if provider:
-            issued[token]["app_metadata"] = {"provider": provider}
+        if provider or providers:
+            issued[token]["app_metadata"] = {"provider": provider, "providers": providers or [provider]}
         return token
 
     def verify(token):
