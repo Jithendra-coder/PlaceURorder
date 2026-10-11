@@ -46,8 +46,8 @@ export default function RootNotFound() {
           The page you are looking for does not exist, has been removed, or is temporarily unavailable.
         </p>
         <div style={{ marginTop: "8px" }}>
-          <Link href="/dashboard" className="mt-button mt-button--primary">
-            Return to Dashboard
+          <Link href="/" className="mt-button mt-button--primary">
+            Return to PlaceURorder
           </Link>
         </div>
       </div>

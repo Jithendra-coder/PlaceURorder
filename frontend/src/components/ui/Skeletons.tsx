@@ -100,7 +100,7 @@ export function CardGridSkeleton({ count = 6, columns = 3 }: { count?: number; c
  */
 export function WorkspaceSkeleton() {
   return (
-    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "#f8fafc" }} aria-label="Loading workspace" role="status">
+    <div className="mt-workspace-skeleton" style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "#f8fafc" }} aria-label="Loading workspace" role="status">
       {/* Top Header */}
       <header
         style={{

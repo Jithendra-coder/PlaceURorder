@@ -189,7 +189,6 @@ export default function SignUpPage() {
 
       {step === "email" && (
         <div className="mt-auth-route-links">
-          <Link href="/auth/sign-up/phone">Use phone instead</Link>
           <Link href="/auth/sign-in">Back to sign in</Link>
         </div>
       )}

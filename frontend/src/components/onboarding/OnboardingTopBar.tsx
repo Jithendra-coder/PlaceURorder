@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 const steps = ["Business Type", "Business Details", "Menu Items", "Kiosk Layout", "Welcome Screen", "Test Kiosk"];
 
 export function PlaceURorderLogo({ className = "", height = 46 }: { className?: string; height?: number }) {
@@ -50,7 +52,7 @@ export function OnboardingTopBar({
           })}
         </div>
         <span className="mt-sr-only">Step {currentStep} of 6: {steps[currentStep - 1]}</span>
-        <div className="mt-onboarding-topbar__logo"><PlaceURorderLogo /></div>
+        <Link href="/dashboard" className="mt-onboarding-topbar__logo" aria-label="PlaceURorder dashboard"><PlaceURorderLogo /></Link>
         <button
           type="button"
           className="mt-onboarding-topbar__continue"

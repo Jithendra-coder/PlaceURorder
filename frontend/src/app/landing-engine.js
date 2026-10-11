@@ -49,6 +49,9 @@ export function initLandingEngine() {
   const sheetPriceDisplay = document.getElementById('sheetPriceDisplay');
   const sheetConfirmBtnText = document.getElementById('sheetConfirmBtnText');
   const sheetConfirmBtn = document.getElementById('sheetAddConfirmBtn');
+  const sheetCloseBtn = document.querySelector('.sheet-close-btn');
+  const kioskBackButtons = document.querySelectorAll('.kiosk-back-arrow-btn');
+  const kioskAddMoreBtn = document.querySelector('.kiosk-add-more-btn');
 
   const payMethodTile1 = document.getElementById('payMethodTile1');
 
@@ -93,6 +96,12 @@ export function initLandingEngine() {
     const totalDist = showcaseWrapper.offsetHeight - windowH;
     const scrolled = -rect.top;
     targetProgress = Math.max(0, Math.min(1, scrolled / totalDist));
+  }
+  function scrollToProgress(progress) {
+    if (!showcaseWrapper) return;
+    const top = showcaseWrapper.getBoundingClientRect().top + window.scrollY;
+    const distance = Math.max(0, showcaseWrapper.offsetHeight - window.innerHeight);
+    window.scrollTo({ top: top + distance * progress, behavior: 'smooth' });
   }
   window.addEventListener('scroll', updateScrollProgress, { passive: true });
   window.addEventListener('resize', updateScrollProgress);
@@ -580,6 +589,15 @@ export function initLandingEngine() {
     animFrameId = requestAnimationFrame(renderFrame);
   }
   animFrameId = requestAnimationFrame(renderFrame);
+
+  if (sheetCloseBtn) sheetCloseBtn.addEventListener('click', () => scrollToProgress(0.35));
+  if (sheetConfirmBtn) sheetConfirmBtn.addEventListener('click', () => scrollToProgress(0.52));
+  if (kioskBackButtons[0]) kioskBackButtons[0].addEventListener('click', () => scrollToProgress(0.56));
+  if (kioskBackButtons[1]) kioskBackButtons[1].addEventListener('click', () => scrollToProgress(0.62));
+  if (kioskAddMoreBtn) kioskAddMoreBtn.addEventListener('click', () => scrollToProgress(0.56));
+  if (dockActionButton) dockActionButton.addEventListener('click', () => {
+    scrollToProgress(targetProgress < 0.60 ? 0.62 : targetProgress < 0.72 ? 0.75 : 0.88);
+  });
 
   // Category rail tab click interactivity
   document.querySelectorAll('.kiosk-category-tab').forEach(tab => {

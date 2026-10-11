@@ -18,7 +18,7 @@ export function AuthShell({ title, description, children }: { title: string; des
   return (
     <section className="mt-auth-card">
       <header className="mt-auth-header">
-        <div className="mt-auth-wordmark"><PlaceURorderLogo /></div>
+        <div className="mt-auth-wordmark"><Link href="/" aria-label="PlaceURorder home"><PlaceURorderLogo /></Link></div>
         <h1 className="mt-auth-heading">{title}</h1>
         <p className="mt-auth-supporting">{description}</p>
       </header>
