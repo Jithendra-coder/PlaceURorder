@@ -104,6 +104,14 @@ async function data<T>(path: string, options?: RequestOptions): Promise<T> {
 type SessionUser = { id: string; email: string; full_name?: string | null };
 
 export const api = {
+  askAssistant: (businessId: string, question: string, signal?: AbortSignal) =>
+    request<{
+      answer: string;
+      mode: "extractive" | "gemini";
+      generated_model: string | null;
+      retrieved_at: string;
+      sources: { kind: "policy" | "live"; title: string; excerpt: string; version?: string; as_of?: string }[];
+    }>("/assistant/chat", { method: "POST", body: JSON.stringify({ business_id: businessId, question }), signal }),
   login: (email: string, password: string) =>
     request<{ user: SessionUser }>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   startGoogleOAuth: () =>

@@ -102,19 +102,36 @@ universal-kiosk-app/
 - **Python** 3.11+
 - **PostgreSQL** 14+
 
-### One-command local demo
+### Local development with Podman
 
-With Docker Engine and Docker Compose v2 installed, run from the repository root:
+Install Podman and a Compose provider (`podman compose` is a wrapper around an installed `podman-compose` or `docker-compose` provider), then run from the repository root:
 
 ```bash
-docker compose up --build
+podman compose up --build
 ```
 
-Open `http://localhost:3000`; the API is at `http://localhost:8000`. The first startup creates the database schema and local volumes for uploads and email previews. The services are bound to localhost. Stop with `Ctrl+C`; `docker compose down` stops the services while keeping demo data.
+Open `http://localhost:3000`; the API is at `http://localhost:8000`. The first startup creates the local database schema and volumes for database data, uploads, and email previews. The API and frontend ports are bound to localhost. A separate webhook worker delivers queued integration events. Stop with `Ctrl+C` or `podman compose down`; both keep demo data. Do not add `-v` unless you intentionally want to delete the local database and uploaded files.
 
-To enable sign-in and authenticated admin flows, put `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` in a repository-root `.env` file before starting Compose. Without them, the app starts but authentication endpoints return `503`.
+The Compose stack uses local Postgres and Supabase Auth. To enable sign-in and authenticated admin flows, put `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` in a repository-root `.env` file before starting Compose. Without them, the app starts but authentication endpoints return `503`.
 
 > **Local demo only:** the Compose credentials are documented development defaults. Change them and review the security settings before any deployment with real data.
+
+Useful commands:
+
+```bash
+podman compose ps
+podman compose logs -f api webhook-worker
+podman compose down
+```
+
+`podman compose` delegates Compose parsing to an external provider; see the [Podman Compose documentation](https://docs.podman.io/en/latest/markdown/podman-compose.1.html) if no provider is installed or a command is unsupported.
+
+### Product and legal documents
+
+- [PlaceURorder product help policy](backend/knowledge/placeurorder-help-policy.md) — source text for dashboard Ask AI retrieval and grounded answers.
+- [Terms and Conditions review draft](docs/legal/TERMS_AND_CONDITIONS.md) and [Privacy Notice review draft](docs/legal/PRIVACY_POLICY.md) — not effective or ready for customer acceptance until the marked legal and operational details are completed and reviewed.
+
+Ask AI uses extractive sources when Gemini is not configured. To enable optional Gemini-generated answers locally, set `GEMINI_API_KEY` in the ignored root `.env`; the default model is `models/gemini-3.1-flash-lite`. The key is passed only to the backend. Questions and authorized source excerpts are sent to Google when generation is enabled, so review the privacy draft and Google account data-use terms before using real merchant data.
 
 ---
 

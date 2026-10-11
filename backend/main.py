@@ -11,7 +11,7 @@ from psycopg import OperationalError
 
 from config import get_settings
 from database import db_context
-from routers import administration, admin, alerts, auth, availability, businesses, combos, devices, kiosk, maintenance, media, orders, payments, presets, preview_kiosk, products, setup, test_runtime, uploads, promotions, qr_codes, versions
+from routers import administration, admin, alerts, assistant, auth, availability, businesses, combos, devices, kiosk, maintenance, media, orders, payments, presets, preview_kiosk, products, setup, test_runtime, uploads, promotions, qr_codes, versions
 from schema_compat import ensure_schema_compatibility
 
 
@@ -39,6 +39,7 @@ app.add_middleware(
 
 app.include_router(businesses.onboarding_router, prefix=settings.api_prefix)
 app.include_router(auth.router, prefix=settings.api_prefix)
+app.include_router(assistant.router, prefix=settings.api_prefix)
 app.include_router(businesses.router, prefix=settings.api_prefix)
 app.include_router(presets.router, prefix=settings.api_prefix)
 app.include_router(setup.router, prefix=settings.api_prefix)

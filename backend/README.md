@@ -2,7 +2,9 @@
 
 ## Local Setup
 
-The backend uses Supabase Postgres for application data, Supabase Auth for accounts and sessions, and Supabase Storage for uploaded images. Keep the database password server-side; the publishable key is safe for client use, but this app only needs it in the backend.
+For local development, the root Podman Compose stack runs local Postgres, uses Supabase Auth for accounts and sessions, and stores local uploads in a volume. A directly launched backend can instead use a Supabase Postgres connection and Supabase Storage. Keep database passwords server-side; never put a service-role or secret key in frontend environment variables.
+
+From the repository root, start the supported local stack with `podman compose up --build`. It includes the API, frontend, local database, and webhook delivery worker. Compose uses local-only development credentials; it is not a production deployment recipe. The local schema bootstrap is `backend/postgres_schema.sql` plus the API's compatibility startup step. Hosted database schema history remains tracked in `supabase/migrations`.
 
 Create your local env file from the safe template:
 
@@ -40,15 +42,23 @@ REDIS_MENU_TTL_SECONDS=120
 # Optional Pexels picker for admin product and offer images
 PEXELS_API_KEY=your-pexels-api-key
 PEXELS_PER_PAGE=12
+
+# Optional server-side Ask AI generation; never use a NEXT_PUBLIC_ variable.
+GEMINI_API_KEY=
+GEMINI_MODEL=models/gemini-3.1-flash-lite
 ```
 
-The session-pooler URL above targets this Supabase project. Replace `[YOUR-PASSWORD]` in your ignored local `.env` file with the database password from **Supabase Dashboard → Connect**; never commit or share that value. Keep `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` pointed at this same project.
+Ask AI remains extractive when `GEMINI_API_KEY` is unset. Questions and authorized source excerpts are sent to Google only when generation is enabled; review `docs/legal/PRIVACY_POLICY.md` and Google's current account data-use terms before using real merchant data.
+
+For Vercel, add `GEMINI_API_KEY` as a Secret on the `universal-kiosk-api` project only (not `universal-kiosk-app` or any `NEXT_PUBLIC_*` variable), then redeploy the API. `GEMINI_MODEL` is optional configuration; the code defaults to Google's cost-efficient `models/gemini-3.1-flash-lite`.
+
+The session-pooler URL above is for a directly launched backend targeting Supabase Postgres. Replace `[YOUR-PASSWORD]` in your ignored local `.env` file with the database password from **Supabase Dashboard → Connect**; never commit or share that value. Keep `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` pointed at this same project. The root Compose workflow uses its own local Postgres database instead.
 
 For the Vercel serverless API, use the **Transaction pooler** connection string from Supabase Dashboard → Connect (port `6543`) as the production `DATABASE_URL`. The backend disables Psycopg prepared statements for compatibility with transaction pooling. Add the rotated connection string directly to the Vercel `universal-kiosk-api` project's Production environment; never commit it or paste it into chat.
 
 The project schema is tracked in `supabase/migrations`. Set the Supabase Auth Site URL to the deployed frontend and allow the frontend’s `/auth/sign-up` and `/auth/reset-password` URLs as redirects (also allow `http://localhost:3000` during local development). Signup and password reset links are sent by Supabase Auth; uploaded business images are stored in the public `business-assets` bucket with authenticated, business-scoped upload policies. This project’s initial schema migration has already been applied to its hosted project.
 
-Use a Supabase database for local development as well: Auth sessions and user records are stored alongside application data. Keep `DATABASE_URL`, `SUPABASE_URL`, and `SUPABASE_PUBLISHABLE_KEY` pointed at the same Supabase project.
+In the root Compose workflow, application records live in its local Postgres volume while Supabase Auth handles sign-in. In a direct Supabase-backed setup, keep `DATABASE_URL`, `SUPABASE_URL`, and `SUPABASE_PUBLISHABLE_KEY` aligned with the same Supabase project.
 
 Install and run:
 
