@@ -39,7 +39,7 @@ export function AskAiPanel({ businessId }: { businessId: string | null }) {
     const dialog = dialogRef.current;
     if (!dialog) return;
     if (open && !dialog.open) {
-      dialog.showModal();
+      dialog.show();
       textareaRef.current?.focus();
     } else if (!open && dialog.open) {
       dialog.close();
@@ -97,17 +97,18 @@ export function AskAiPanel({ businessId }: { businessId: string | null }) {
 
   return (
     <>
-      <button ref={triggerRef} type="button" className="mt-ai-trigger" onClick={show} disabled={!businessId} aria-label="Ask AI" aria-haspopup="dialog" aria-expanded={open}>
+      <button ref={triggerRef} type="button" className="mt-ai-trigger" onClick={show} disabled={!businessId} aria-label="Ask AI" aria-haspopup="dialog" aria-controls="mt-ai-dialog" aria-expanded={open}>
         <Bot size={18} aria-hidden="true" />
         <span>Ask AI</span>
       </button>
       <dialog
         ref={dialogRef}
+        id="mt-ai-dialog"
         className="mt-ai-dialog"
         aria-labelledby="mt-ai-title"
         onCancel={(event) => { event.preventDefault(); close(); }}
+        onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); close(); } }}
         onClose={() => triggerRef.current?.focus()}
-        onClick={(event) => { if (event.target === event.currentTarget) close(); }}
       >
         <header className="mt-ai-header">
           <div className="mt-ai-heading">

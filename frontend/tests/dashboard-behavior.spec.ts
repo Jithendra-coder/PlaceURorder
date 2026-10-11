@@ -89,6 +89,49 @@ test("Manage Menu keeps a menu-local error and retry when a required API fails",
   await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
 });
 
+test("Ask AI starts closed and opens as a compact floating panel on desktop and mobile", async ({ page }) => {
+  await mockDashboard(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/dashboard");
+
+  const trigger = page.getByRole("button", { name: "Ask AI" });
+  const panel = page.locator("#mt-ai-dialog");
+  await expect(trigger).toBeEnabled();
+  await expect(panel).toBeHidden();
+
+  const triggerBox = await trigger.boundingBox();
+  expect(triggerBox).not.toBeNull();
+  expect(Math.abs(1280 - (triggerBox!.x + triggerBox!.width) - 24)).toBeLessThanOrEqual(1);
+  expect(Math.abs(800 - (triggerBox!.y + triggerBox!.height) - 24)).toBeLessThanOrEqual(1);
+
+  await trigger.click();
+  await expect(panel).toBeVisible();
+  let panelBox = await panel.boundingBox();
+  expect(panelBox?.width).toBeLessThanOrEqual(380);
+  expect(panelBox?.height).toBeLessThanOrEqual(520);
+  const focusStyles = await panel.locator("textarea").evaluate((element) => ({
+    inputOutline: getComputedStyle(element).outlineStyle,
+    inputShadow: getComputedStyle(element).boxShadow,
+    fieldShadow: getComputedStyle(element.closest("form")!).boxShadow,
+    fieldBorder: getComputedStyle(element.closest("form")!).borderTopColor,
+  }));
+  expect(focusStyles.inputOutline).toBe("none");
+  expect(focusStyles.inputShadow).toBe("none");
+  expect(focusStyles.fieldShadow).toBe("none");
+  expect(focusStyles.fieldBorder).toBe("rgb(132, 202, 255)");
+  await panel.getByRole("button", { name: "Close Ask AI" }).click();
+  await expect(panel).toBeHidden();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await trigger.click();
+  await expect(panel).toBeVisible();
+  panelBox = await panel.boundingBox();
+  expect(panelBox?.x).toBeGreaterThanOrEqual(0);
+  expect(panelBox!.x + panelBox!.width).toBeLessThanOrEqual(390);
+  await page.keyboard.press("Escape");
+  await expect(panel).toBeHidden();
+});
+
 test("Insights fails locally while Sales & Orders and Menu Performance render with dashboard data", async ({ page }) => {
   await mockDashboard(page, [], { failDashboard: true });
   await page.goto("/dashboard/insights/sales-reports");
