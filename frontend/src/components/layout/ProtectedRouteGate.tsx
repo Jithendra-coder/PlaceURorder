@@ -9,7 +9,6 @@ import { AutoRecoveringState } from "@/components/ui/AutoRecoveringState";
 import { SetupShellSkeleton, WorkspaceSkeleton } from "@/components/ui/Skeletons";
 
 type ProtectedArea = "dashboard" | "setup";
-const EDITABLE_SETUP_ROUTES = new Set(["/setup/business-details", "/setup/menu-items", "/setup/kiosk-layout"]);
 
 export function ProtectedRouteGate({ area, children }: { area: ProtectedArea; children: ReactNode }) {
   const pathname = usePathname();
@@ -20,7 +19,7 @@ export function ProtectedRouteGate({ area, children }: { area: ProtectedArea; ch
   const redirectTarget = useMemo(() => {
     if (unresolved || loadError || !onboardingStatus) return null;
     if (area === "dashboard" && !onboardingStatus.onboarding_completed) return safeSetupRoute(onboardingStatus.next_route);
-    if (area === "setup" && onboardingStatus.onboarding_completed && !EDITABLE_SETUP_ROUTES.has(pathname)) {
+    if (area === "setup" && onboardingStatus.onboarding_completed) {
       return pathname === "/setup/test-kiosk" ? "/dashboard/kiosk-experience/publish?test=1" : "/dashboard";
     }
     return null;
