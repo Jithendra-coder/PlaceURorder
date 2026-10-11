@@ -33,9 +33,9 @@ const commands = [
 ] as const;
 
 const setupCards = [
-  { key: "menu", title: "Add Your First Product", description: "Add a name, price, category and image to begin building your menu.", action: "Add Product", href: "/setup/menu-items", asset: "/home-assets/burger.png", tone: "orange" },
-  { key: "kiosk", title: "Customise Your Kiosk", description: "Choose a layout and customise how your kiosk looks and feels.", action: "Customise Kiosk", href: "/setup/kiosk-layout", asset: "/home-assets/kiosk.png", tone: "purple" },
-  { key: "business", title: "Edit Business Details", description: "Update your business name, logo, address and contact details.", action: "Edit Details", href: "/setup/business-details", asset: "/home-assets/storefront.png", tone: "blue" },
+  { key: "menu", title: "Add Your First Product", description: "Add a name, price, category and image to begin building your menu.", action: "Add Product", href: "/dashboard/kiosk-experience/menu?mode=items", asset: "/home-assets/burger.png", tone: "orange" },
+  { key: "kiosk", title: "Customise Your Kiosk", description: "Choose a layout and customise how your kiosk looks and feels.", action: "Customise Kiosk", href: "/dashboard/kiosk-experience/screens", asset: "/home-assets/kiosk.png", tone: "purple" },
+  { key: "business", title: "Edit Business Details", description: "Update your business name, logo, address and contact details.", action: "Edit Details", href: "/dashboard/administration/business-settings", asset: "/home-assets/storefront.png", tone: "blue" },
   { key: "payments", title: "Connect Payments", description: "Configure a payment method so your kiosk can accept orders.", action: "Connect Payment", href: "/dashboard/administration/payments", asset: "/home-assets/payment-terminal.png", tone: "green" },
 ] as const;
 
