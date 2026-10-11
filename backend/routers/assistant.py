@@ -1,6 +1,8 @@
+from typing import Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from database import DbClient, get_db_client
@@ -21,7 +23,41 @@ class AskRequest(BaseModel):
     question: str = Field(min_length=3, max_length=1000)
 
 
-@router.post("/chat")
+class AssistantField(BaseModel):
+    label: str
+    value: str
+
+
+class AssistantResult(BaseModel):
+    title: str
+    value: str | None = None
+    fields: list[AssistantField] = Field(default_factory=list)
+
+
+class AssistantSource(BaseModel):
+    kind: Literal["policy", "live", "notice"]
+    title: str
+    href: str | None = None
+    excerpt: str | None = None
+    version: str | None = None
+    as_of: str | None = None
+
+
+class AssistantResponse(BaseModel):
+    intent: str
+    text: str
+    total: int | None
+    results: list[AssistantResult]
+    sources: list[AssistantSource]
+    as_of: str
+    has_more: bool
+    answer_kind: Literal["data", "narrative"]
+    requires_confirmation: bool
+    action: dict[str, Any] | None
+    args: dict[str, Any] | None
+
+
+@router.post("/chat", response_model=AssistantResponse)
 def ask(
     payload: AskRequest,
     request: Request,

@@ -106,11 +106,17 @@ type SessionUser = { id: string; email: string; full_name?: string | null };
 export const api = {
   askAssistant: (businessId: string, question: string, signal?: AbortSignal) =>
     request<{
-      answer: string;
-      mode: "extractive" | "gemini";
-      generated_model: string | null;
-      retrieved_at: string;
-      sources: { kind: "policy" | "live"; title: string; excerpt: string; version?: string; as_of?: string }[];
+      intent: string;
+      text: string;
+      total: number | null;
+      results: { title: string; value?: string | null; fields: { label: string; value: string }[] }[];
+      sources: { kind: "policy" | "live" | "notice"; title: string; href?: string | null; excerpt?: string | null; version?: string | null; as_of?: string | null }[];
+      as_of: string;
+      has_more: boolean;
+      answer_kind: "data" | "narrative";
+      requires_confirmation: boolean;
+      action: Record<string, unknown> | null;
+      args: Record<string, unknown> | null;
     }>("/assistant/chat", { method: "POST", body: JSON.stringify({ business_id: businessId, question }), signal }),
   login: (email: string, password: string) =>
     request<{ user: SessionUser }>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),

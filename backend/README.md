@@ -45,12 +45,12 @@ PEXELS_PER_PAGE=12
 
 # Optional server-side Ask AI generation; never use a NEXT_PUBLIC_ variable.
 GEMINI_API_KEY=
-GEMINI_MODEL=models/gemini-3.1-flash-lite
+GEMINI_MODEL=gemini-3.1-flash-lite
 ```
 
-Ask AI remains extractive when `GEMINI_API_KEY` is unset. Questions and authorized source excerpts are sent to Google only when generation is enabled; review `docs/legal/PRIVACY_POLICY.md` and Google's current account data-use terms before using real merchant data.
+Recognized live business questions are handled inside MenuTap and never sent to Gemini. Product-help answers remain extractive when `GEMINI_API_KEY` is unset. When configured, only product-help questions and matching guide excerpts are sent to Google; review `docs/legal/PRIVACY_POLICY.md` and Google's current account data-use terms before using Gemini with real merchant data.
 
-For Vercel, add `GEMINI_API_KEY` as a Secret on the `universal-kiosk-api` project only (not `universal-kiosk-app` or any `NEXT_PUBLIC_*` variable), then redeploy the API. `GEMINI_MODEL` is optional configuration; the code defaults to Google's cost-efficient `models/gemini-3.1-flash-lite`.
+For Vercel, add `GEMINI_API_KEY` as a Secret on the `universal-kiosk-api` project only (not `universal-kiosk-app` or any `NEXT_PUBLIC_*` variable), then redeploy the API. `GEMINI_MODEL` is optional configuration; the code defaults to Google's `gemini-3.1-flash-lite` model.
 
 The session-pooler URL above is for a directly launched backend targeting Supabase Postgres. Replace `[YOUR-PASSWORD]` in your ignored local `.env` file with the database password from **Supabase Dashboard → Connect**; never commit or share that value. Keep `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` pointed at this same project. The root Compose workflow uses its own local Postgres database instead.
 

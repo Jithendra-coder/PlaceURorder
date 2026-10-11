@@ -131,7 +131,7 @@ podman compose down
 - [PlaceURorder product help policy](backend/knowledge/placeurorder-help-policy.md) — source text for dashboard Ask AI retrieval and grounded answers.
 - [Terms and Conditions review draft](docs/legal/TERMS_AND_CONDITIONS.md) and [Privacy Notice review draft](docs/legal/PRIVACY_POLICY.md) — not effective or ready for customer acceptance until the marked legal and operational details are completed and reviewed.
 
-Ask AI uses extractive sources when Gemini is not configured. To enable optional Gemini-generated answers locally, set `GEMINI_API_KEY` in the ignored root `.env`; the default model is `models/gemini-3.1-flash-lite`. The key is passed only to the backend. Questions and authorized source excerpts are sent to Google when generation is enabled, so review the privacy draft and Google account data-use terms before using real merchant data.
+Ask AI handles recognized live business questions inside MenuTap and uses extractive help-guide passages when Gemini is not configured. To enable optional Gemini drafting for product-help questions locally, set `GEMINI_API_KEY` in the ignored root `.env`; the default model is `gemini-3.1-flash-lite`. The key is passed only to the backend. Only the product-help question and matching guide excerpts are sent to Google; live business lookup results are not. Review the privacy draft and Google account data-use terms before enabling Gemini with real merchant data.
 
 ---
 

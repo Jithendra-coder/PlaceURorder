@@ -13,7 +13,7 @@ PlaceURorder is a multi-tenant restaurant platform with a Next.js dashboard, kio
 - Backend: 259 declared API operations across auth, business setup, menu, orders, payments, devices, kitchen, analytics, integrations, and administration.
 - Access control: authenticated routes use `require_user_id`; business-scoped services use role checks such as `assert_business_access`.
 - Data: Supabase Auth and SQL migrations, with Postgres access through the backend. Public kiosk endpoints are intentionally separate from authenticated dashboard APIs.
-- AI: the dashboard assistant retrieves product-guide passages and allowlisted, role-checked live data. Optional Gemini generation runs only when a server-side key is configured; the no-key/error path remains extractive.
+- AI: the dashboard assistant answers recognized business-data questions with role-checked deterministic reads. Optional Gemini drafting is limited to product-help questions and receives only the question plus matched guide passages; live business results never leave MenuTap.
 - Containers: `compose.yaml` and frontend/backend Dockerfiles exist. The Podman-compatible stack now includes Postgres, API, frontend, and webhook worker on localhost.
 
 ## Findings that shape the plan
@@ -36,21 +36,22 @@ PlaceURorder is a multi-tenant restaurant platform with a Next.js dashboard, kio
 
 Keep two different sources: the **PlaceURorder Product Help Policy** is the source of truth for product answers; the **Terms and Conditions** and **Privacy Notice** are separate legal drafts. The legal drafts are explicitly not effective and must not be published or used for acceptance until operator/entity details and legal review are complete.
 
-Ask AI is dashboard-only. It retrieves cited product-guide passages and can read limited live business setup, catalog, rolling 24-hour order counts, and paid-sales aggregates after tenant and role checks. If a server-side Gemini key is configured, it sends only the question and those retrieved excerpts to Gemini for a concise answer; otherwise it returns extractive evidence. Gemini has no tools or direct database/API access. It cannot change settings, publish, manage staff, alter payments, refund orders, or query arbitrary SQL/URLs. A standards-compatible external MCP server remains deferred.
+Ask AI is dashboard-only. It handles recognized business-data questions deterministically using limited live business setup, catalog, rolling 24-hour order counts, and paid-sales aggregates after tenant and role checks. These live results stay in MenuTap and bypass Gemini. For product-help questions, it retrieves cited guide passages and may use a server-side Gemini key to draft a concise answer from only the question and matching help excerpts; otherwise it returns those excerpts. Gemini has no tools or direct database/API access. It cannot change settings, publish, manage staff, alter payments, refund orders, or query arbitrary SQL/URLs. A standards-compatible external MCP server remains deferred.
 
 ## Ask AI design
 
 ```mermaid
 flowchart LR
   U[Dashboard Ask AI] -->|authenticated message + selected business| A[FastAPI assistant endpoint]
-  A --> P[Product help policy retrieval]
-  A --> T[Read-only method allowlist]
+  A --> I{Recognized business-data intent?}
+  I -->|yes| T[Read-only method allowlist]
   T --> S[Parameterized tenant-scoped SQL + role checks]
-  P --> R[Retrieved evidence + citations]
-  S --> R
-  R --> G{Gemini key configured?}
-  G -->|yes| M[Gemini draft · store false · no tools]
-  G -->|no or failure| F[Extractive fallback]
+  S --> D[Structured live result + source]
+  I -->|no| P[Product help policy retrieval]
+  P --> G{Gemini key configured?}
+  G -->|yes| M[Gemini draft · question + help excerpts only]
+  G -->|no or failure| F[Extractive help passages]
+  D --> A
   M --> A
   F --> A
   A --> U
@@ -59,8 +60,8 @@ flowchart LR
 1. `POST /api/assistant/chat` requires the existing authenticated session, a valid business membership, a 1,000-character question limit, and the shared rate limiter.
 2. The internal method allowlist currently contains scoped menu, order-count, sales-aggregate, and business-setup reads. SQL is parameterized and always bound to the authorized business. Order reads omit customer fields and notes.
 3. The product guide is ranked lexically and returned as short, versioned excerpts. Live sources include their retrieval timestamp. If no source matches, the response says so instead of fabricating an answer.
-4. The panel discloses that Gemini may receive the question and matching authorized business facts. The model key stays in the backend, interactions use `store: false`, and the panel still shows source citations. The application does not persist chat; requests are cancelled when the business changes or the panel closes.
-5. Gemini receives no tools or database/API access; every live read remains enforced by the existing server-side allowlist, tenant boundary, and role checks. Write actions remain out of scope.
+4. The panel discloses that Gemini may receive a product-help question and matching guide text. It never sends live business query results to Gemini. The model key stays in the backend, interactions use `store: false`, and the panel shows structured results and source links. The application does not persist chat; requests are cancelled when the business changes or the panel closes.
+5. Gemini receives no tools or database/API access; every live read remains deterministic and enforced by the existing server-side allowlist, tenant boundary, and role checks. Write actions remain out of scope.
 
 ## Product policy document
 
@@ -129,11 +130,11 @@ The repository already has container files, so the work is to make the supported
 ## Remaining checks and known limits
 
 - I did not read every route/service implementation; I mapped the whole route surface and traced shared auth/business authorization, app shell, schema setup, Docker services, and webhook worker paths in depth.
-- Backend suite: 233 passed, 3 live-Postgres tests skipped; frontend lint, typecheck, and stylesheet checks passed. Compose parsing passed, but the stack has not been built or started.
+- Backend suite: 237 passed, 3 live-Postgres tests skipped when the expected Supabase test settings are supplied; targeted assistant/API contract tests pass. Frontend lint, typecheck, style/typography checks, and production build pass. Compose parsing passed, but the stack has not been built or started.
 - No real Gemini request was sent because no key was supplied to this task. The provider request is covered with a mocked response and network-failure fallback tests.
 - Podman 6.0.2 is installed and the machine is running; `podman compose config` parses the current stack through its installed external provider.
 - The local/hosted schema boot paths still differ, backend Python dependencies remain unpinned, and dependency audits/clean-container restart and backup checks remain open.
 - The legal files are drafts only; no public acceptance links were added. Obtain legal review and complete the marked identity, address, pricing, retention, subprocessor, grievance, and venue details.
 - Ask AI does not implement the standard MCP wire protocol; its internal retrieval and read methods are intentionally narrow. A real Gemini request requires testing with an owner-provided server-side key and review of Google account data-use terms.
 
-**Current status:** Podman Compose includes the webhook worker, review-only legal drafts exist, and the dashboard has tenant-scoped retrieval with optional Gemini 3.1 Flash-Lite generation. No key is committed; generation stays extractive until a backend environment key is supplied. Complete provider, live-DB, container, and legal checks before production use.
+**Current status:** Podman Compose includes the webhook worker, review-only legal drafts exist, and the dashboard has tenant-scoped deterministic business lookups plus optional Gemini 3.1 Flash-Lite drafting for product-help questions only. Live results never go to Gemini. No key is committed; help answers stay extractive until a backend environment key is supplied. Complete provider, live-DB, container, and legal checks before production use.

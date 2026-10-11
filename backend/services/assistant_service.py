@@ -8,6 +8,7 @@ import unicodedata
 from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 from uuid import UUID
 
@@ -19,9 +20,9 @@ from services import business_service
 
 
 POLICY_PATH = Path(__file__).resolve().parents[1] / "knowledge" / "placeurorder-help-policy.md"
-DEFAULT_GEMINI_MODEL = "models/gemini-3.1-flash-lite"
+DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite"
 logger = logging.getLogger(__name__)
-STOP_WORDS = {"a", "all", "an", "and", "are", "available", "currently", "do", "does", "for", "how", "i", "in", "is", "it", "last", "list", "me", "my", "of", "on", "please", "show", "the", "to", "unavailable", "what", "when", "where", "which", "with", "you", "your"}
+STOP_WORDS = {"a", "all", "an", "and", "are", "available", "currently", "current", "do", "does", "for", "how", "i", "in", "is", "it", "last", "list", "me", "my", "of", "on", "please", "show", "the", "to", "unavailable", "what", "when", "where", "which", "with", "you", "your"}
 MENU_TERMS = {"catalog", "category", "categories", "item", "items", "menu", "price", "prices", "product", "products"}
 ORDER_TERMS = {"order", "orders"}
 SALES_TERMS = {"revenue", "sale", "sales", "sold"}
@@ -32,57 +33,100 @@ TOOL_TERMS = MENU_TERMS | ORDER_TERMS | SALES_TERMS | SETUP_TERMS | {"business",
 
 def answer(client: DbClient, business_id: UUID, user_id: UUID, question: str) -> dict:
     tokens = _tokens(question)
-    sources = [
+    policy_sources = [
         {"kind": "policy", "title": section["title"], "excerpt": section["excerpt"], "version": _policy_version()}
         for section in _retrieve_policy(tokens)
     ]
+    intent = _classify_intent(tokens, bool(policy_sources), question)
 
+    if intent in {"sales_summary", "orders_summary", "menu_catalog", "business_setup"}:
+        if intent == "sales_summary":
+            title, href = "Sales in the last 24 hours", "/dashboard/insights/sales-reports"
+            operation = lambda: _sales_source(client, business_id, user_id)
+            period_text = "Ask AI currently summarizes a rolling last-24-hours window. Use Sales & Orders to choose a different reporting period."
+        elif intent == "orders_summary":
+            title, href = "Orders in the last 24 hours", "/dashboard/operations/order-history"
+            operation = lambda: _orders_source(client, business_id, user_id)
+            period_text = "Ask AI currently summarizes a rolling last-24-hours window. Use Order History to choose a different date range."
+        elif intent == "menu_catalog":
+            title, href = "Current menu", "/dashboard/kiosk-experience/menu"
+            operation = lambda: _menu_source(client, business_id, user_id, tokens)
+            period_text = ""
+        else:
+            title, href = "Business setup", "/dashboard/administration/business-settings"
+            operation = lambda: _business_source(client, business_id, user_id)
+            period_text = ""
+
+        result = (
+            _notice(title, period_text, href)
+            if period_text and _uses_unsupported_period(tokens)
+            else _authorized_tool(operation, title)
+        )
+        source = result["source"]
+        return _response(
+            intent,
+            result["text"],
+            [source],
+            total=result["total"],
+            results=result["results"],
+            has_more=result["has_more"],
+            answer_kind="data" if source["kind"] == "live" else "narrative",
+        )
+
+    if policy_sources:
+        api_key = os.getenv("GEMINI_API_KEY", "").strip()
+        model = (os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL).strip() or DEFAULT_GEMINI_MODEL).removeprefix("models/")
+        generated = _generate_answer(question, policy_sources, api_key, model) if api_key else None
+        return _response(
+            "product_help",
+            generated or "Here are the closest passages from the PlaceURorder help guide.",
+            policy_sources,
+        )
+
+    return _response(
+        "unsupported",
+        "I couldn't find a matching help passage or read-only business data. Try asking about your menu, orders, sales, business setup, or kiosk publishing.",
+        [],
+    )
+
+
+def _classify_intent(tokens: set[str], has_policy_match: bool, question: str) -> str:
+    normalized_question = question.casefold().strip()
+    if has_policy_match and normalized_question.startswith(("how do i ", "how to ", "how can i ", "where do i ", "can i ")):
+        return "product_help"
     if tokens & SALES_TERMS or {"average", "order"} <= tokens:
-        if _uses_unsupported_period(tokens):
-            sources.append(_live_source("Sales data scope", "Ask AI currently reports a rolling last-24-hours summary only. Use Sales & Orders to choose a different business-local reporting period."))
-        else:
-            sources.append(_authorized_tool(lambda: _sales_source(client, business_id, user_id), "Sales summary"))
-    elif tokens & ORDER_TERMS:
-        if _uses_unsupported_period(tokens):
-            sources.append(_live_source("Order data scope", "Ask AI currently reports order counts for a rolling last-24-hours window only. Use Order History to choose a different date range."))
-        else:
-            sources.append(_authorized_tool(lambda: _orders_source(client, business_id, user_id), "Order summary"))
+        return "sales_summary"
+    if tokens & ORDER_TERMS:
+        return "orders_summary"
     if tokens & MENU_TERMS:
-        sources.append(_authorized_tool(lambda: _menu_source(client, business_id, user_id, tokens), "Menu catalog"))
+        return "menu_catalog"
     if tokens & SETUP_TERMS or (tokens & {"business", "store"} and tokens & {"profile", "status", "type"}):
-        sources.append(_business_source(client, business_id, user_id))
+        return "business_setup"
+    return "product_help" if has_policy_match else "unsupported"
 
-    api_key = os.getenv("GEMINI_API_KEY", "").strip()
-    model = os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL).strip() or DEFAULT_GEMINI_MODEL
-    generated_answer = _generate_answer(question, sources, api_key, model) if api_key and sources else None
 
-    if generated_answer:
-        message = generated_answer
-        mode = "gemini"
-        generated_model = model
-    elif not sources:
-        message = "I couldn't find a matching passage or an available live-data method. Try a question about onboarding, testing or publishing, the menu, orders, or sales."
-        mode = "extractive"
-        generated_model = None
-    elif api_key:
-        message = "Gemini is temporarily unavailable, so this is a source-only result. I checked the matching read-only business data and included the retrieved sources below."
-        mode = "extractive"
-        generated_model = None
-    elif any(source["kind"] == "live" for source in sources):
-        message = "I checked the matching live, read-only business data and included the current result below."
-        mode = "extractive"
-        generated_model = None
-    else:
-        message = "These are the closest passages in the PlaceURorder help guide. This is source retrieval, not a generated or legally authoritative answer."
-        mode = "extractive"
-        generated_model = None
-
+def _response(
+    intent: str,
+    text: str,
+    sources: list[dict],
+    *,
+    total: int | None = None,
+    results: list[dict] | None = None,
+    has_more: bool = False,
+    answer_kind: str = "narrative",
+) -> dict:
     return {
-        "answer": message,
+        "intent": intent,
+        "text": text,
+        "total": total,
+        "results": results or [],
         "sources": sources,
-        "mode": mode,
-        "generated_model": generated_model,
-        "retrieved_at": datetime.now(timezone.utc).isoformat(),
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "has_more": has_more,
+        "answer_kind": answer_kind,
+        "requires_confirmation": False,
+        "action": None,
+        "args": None,
     }
 
 
@@ -121,6 +165,9 @@ def _generate_answer(question: str, sources: list[dict], api_key: str, model: st
             if part.get("type") == "text" and isinstance(part.get("text"), str)
         ).strip()
         return text[:4000] or None
+    except HTTPError as exc:
+        logger.warning("Gemini answer generation failed (HTTP %s)", exc.code)
+        return None
     except Exception as exc:
         logger.warning("Gemini answer generation failed (%s)", type(exc).__name__)
         return None
@@ -207,8 +254,18 @@ def _authorized_tool(operation, title: str) -> dict:
         return operation()
     except HTTPException as exc:
         if exc.status_code == 403:
-            return _live_source(title, "Your role does not permit access to this information. Ask a business owner or administrator to review your role.")
+            return _notice(title, "Your role does not permit access to this information. Ask a business owner or administrator to review your access.")
         raise
+
+
+def _notice(title: str, text: str, href: str | None = None) -> dict:
+    return {
+        "text": text,
+        "total": None,
+        "results": [],
+        "has_more": False,
+        "source": {"kind": "notice", "title": title, "href": href, "excerpt": text},
+    }
 
 
 def _menu_source(client: DbClient, business_id: UUID, user_id: UUID, query_tokens: set[str]) -> dict:
@@ -233,14 +290,29 @@ def _menu_source(client: DbClient, business_id: UUID, user_id: UUID, query_token
         where p.business_id = %(business_id)s::uuid {search_clause}""",
         params,
     ) or {"count": 0}
-    lines = [
-        f"{row.get('category') or 'Uncategorized'} — {row['name']}: {business.get('currency_code') or 'currency not set'} {row['price']}; {row['menu_status']}; {'available' if row['is_available'] else 'unavailable'}"
+    item_count = int(total["count"])
+    currency = business.get("currency_code") or ""
+    results = [
+        {
+            "title": row["name"],
+            "value": f"{currency} {row['price']:.2f}".strip(),
+            "fields": [
+                {"label": "Category", "value": row.get("category") or "Uncategorized"},
+                {"label": "Availability", "value": "Available" if row["is_available"] else "Unavailable"},
+                {"label": "Menu status", "value": str(row["menu_status"]).replace("_", " ").title()},
+            ],
+        }
         for row in rows
     ]
-    scope = f"Matching catalog items for: {', '.join(search_terms)}. " if search_terms else "Current catalog. "
-    suffix = f"Showing {len(rows)} of {total['count']} matching items. " if int(total["count"]) > len(rows) else f"{total['count']} matching items. "
-    detail = "\n".join(lines) if lines else "No matching menu items were found."
-    return _live_source("Current editable menu configuration", scope + suffix + detail + " Prices and visibility may differ from a published or location-specific kiosk menu.")
+    scope = f"Matching menu items for {', '.join(search_terms)}" if search_terms else "Current menu"
+    text = f"{scope}: showing {len(rows)} of {item_count} items. Prices and availability may differ from a published or location-specific kiosk menu."
+    return {
+        "text": text,
+        "total": item_count,
+        "results": results,
+        "has_more": item_count > len(rows),
+        "source": _live_source("Current editable menu configuration", "/dashboard/kiosk-experience/menu"),
+    }
 
 
 def _orders_source(client: DbClient, business_id: UUID, user_id: UUID) -> dict:
@@ -254,7 +326,16 @@ def _orders_source(client: DbClient, business_id: UUID, user_id: UUID) -> dict:
     )
     count = sum(int(row["count"]) for row in rows)
     detail = ", ".join(f"{row['status']}: {row['count']}" for row in rows) or "no orders"
-    return _live_source("Orders in the last 24 hours", f"{count} orders; status counts: {detail}. Customer names, contact details, and order notes are not retrieved.")
+    return {
+        "text": f"{count} orders in the last 24 hours. Status counts: {detail}.",
+        "total": count,
+        "results": [
+            {"title": str(row["status"]).replace("_", " ").title(), "value": str(int(row["count"]))}
+            for row in rows
+        ],
+        "has_more": False,
+        "source": _live_source("Orders in the last 24 hours", "/dashboard/operations/order-history"),
+    }
 
 
 def _sales_source(client: DbClient, business_id: UUID, user_id: UUID) -> dict:
@@ -276,14 +357,27 @@ def _sales_source(client: DbClient, business_id: UUID, user_id: UUID) -> dict:
         where o.business_id = %(business_id)s::uuid
           and o.placed_at >= now() - interval '24 hours'
           and o.status = 'completed' and o.payment_status in ('paid', 'authorized')
-        group by oi.product_name order by sum(oi.quantity) desc, oi.product_name limit 5""",
+        group by oi.product_name order by sum(oi.quantity) desc, oi.product_name limit 6""",
         {"business_id": str(business_id)},
     )
-    top_items_text = " Top items by quantity: " + "; ".join(f"{item['product_name']} ({item['quantity']})" for item in top_items) + "." if top_items else " No item breakdown is available."
-    return _live_source(
-        "Paid completed orders in the last 24 hours",
-        f"{row['paid_completed_orders']} paid completed orders; total {business.get('currency_code') or 'currency not set'} {float(row['paid_completed_total']):.2f}; average order total {float(row['average_paid_completed_total']):.2f}.{top_items_text}",
-    )
+    currency = business.get("currency_code") or ""
+    paid_count = int(row["paid_completed_orders"])
+    results = [
+        {"title": "Paid completed orders", "value": str(paid_count)},
+        {"title": "Revenue", "value": f"{currency} {row['paid_completed_total']:.2f}".strip()},
+        {"title": "Average order", "value": f"{currency} {row['average_paid_completed_total']:.2f}".strip()},
+        *[
+            {"title": item["product_name"], "value": f"{int(item['quantity'])} sold"}
+            for item in top_items[:5]
+        ],
+    ]
+    return {
+        "text": f"{paid_count} paid completed orders totaling {currency} {row['paid_completed_total']:.2f} in the last 24 hours.".strip(),
+        "total": paid_count,
+        "results": results,
+        "has_more": len(top_items) > 5,
+        "source": _live_source("Paid completed orders in the last 24 hours", "/dashboard/insights/sales-reports"),
+    }
 
 
 def _business_source(client: DbClient, business_id: UUID, user_id: UUID) -> dict:
@@ -295,8 +389,22 @@ def _business_source(client: DbClient, business_id: UUID, user_id: UUID) -> dict
     if not row:
         raise HTTPException(status_code=404, detail="Business not found.")
     progress = "completed" if row.get("onboarding_completed") else f"in progress at step {row.get('onboarding_step') or 0}"
-    return _live_source("Business setup status", f"{row['name']} ({row['type']}): onboarding {progress}.")
+    return {
+        "text": f"{row['name']} ({row['type']}): onboarding {progress}.",
+        "total": 1,
+        "results": [
+            {
+                "title": row["name"],
+                "fields": [
+                    {"label": "Business type", "value": str(row["type"]).replace("_", " ").title()},
+                    {"label": "Onboarding", "value": progress.capitalize()},
+                ],
+            }
+        ],
+        "has_more": False,
+        "source": _live_source("Business setup status", "/dashboard/administration/business-settings"),
+    }
 
 
-def _live_source(title: str, excerpt: str) -> dict:
-    return {"kind": "live", "title": title, "excerpt": excerpt, "as_of": datetime.now(timezone.utc).isoformat()}
+def _live_source(title: str, href: str) -> dict:
+    return {"kind": "live", "title": title, "href": href, "as_of": datetime.now(timezone.utc).isoformat()}
