@@ -106,6 +106,7 @@ test("Ask AI starts closed and opens as a compact floating panel on desktop and 
 
   await trigger.click();
   await expect(panel).toBeVisible();
+  await expect(panel.locator(".mt-ai-composer-meta, .mt-ai-privacy")).toHaveCount(0);
   let panelBox = await panel.boundingBox();
   expect(panelBox?.width).toBeLessThanOrEqual(380);
   expect(panelBox?.height).toBeLessThanOrEqual(520);
@@ -119,6 +120,15 @@ test("Ask AI starts closed and opens as a compact floating panel on desktop and 
   expect(focusStyles.inputShadow).toBe("none");
   expect(focusStyles.fieldShadow).toBe("none");
   expect(focusStyles.fieldBorder).toBe("rgb(132, 202, 255)");
+  const textarea = panel.locator("textarea");
+  await textarea.fill("How many orders were placed in the last 24 hours, and which items sold best across all available locations?");
+  await expect.poll(() => textarea.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThan(42);
+  await page.locator(".mt-dashboard-main").click({ position: { x: 10, y: 100 } });
+  await expect(panel).toBeHidden();
+  await expect(trigger).not.toBeFocused();
+
+  await trigger.click();
+  await expect(panel).toBeVisible();
   await panel.getByRole("button", { name: "Close Ask AI" }).click();
   await expect(panel).toBeHidden();
 
@@ -130,6 +140,44 @@ test("Ask AI starts closed and opens as a compact floating panel on desktop and 
   expect(panelBox!.x + panelBox!.width).toBeLessThanOrEqual(390);
   await page.keyboard.press("Escape");
   await expect(panel).toBeHidden();
+});
+
+test("dashboard popovers close on outside pointer interaction", async ({ page }) => {
+  await mockDashboard(page, [{ id: "location-1", name: "Main location" }]);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/dashboard");
+
+  await page.locator(".mt-dashboard-location").click();
+  await expect(page.getByRole("listbox", { name: "Business locations" })).toBeVisible();
+  await page.locator(".mt-dashboard-main").click({ position: { x: 10, y: 100 } });
+  await expect(page.getByRole("listbox", { name: "Business locations" })).toHaveCount(0);
+
+  await page.locator(".mt-dashboard-topbar-location").click();
+  await expect(page.getByRole("listbox", { name: "Business locations" })).toBeVisible();
+  await page.locator(".mt-dashboard-main").click({ position: { x: 10, y: 100 } });
+  await expect(page.getByRole("listbox", { name: "Business locations" })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Notifications" }).click();
+  await expect(page.getByRole("dialog", { name: "Notifications" })).toBeVisible();
+  await page.locator(".mt-dashboard-main").click({ position: { x: 10, y: 100 } });
+  await expect(page.getByRole("dialog", { name: "Notifications" })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Account" }).click();
+  await expect(page.getByRole("menu")).toBeVisible();
+  await page.locator(".mt-dashboard-main").click({ position: { x: 10, y: 100 } });
+  await expect(page.getByRole("menu")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Collapse sidebar" }).click();
+  await page.getByRole("button", { name: "Open Insights" }).click();
+  await expect(page.getByRole("navigation", { name: "Insights navigation" })).toBeVisible();
+  await page.locator(".mt-dashboard-main").click({ position: { x: 10, y: 100 } });
+  await expect(page.getByRole("navigation", { name: "Insights navigation" })).toHaveCount(0);
+
+  await page.goto("/dashboard/kiosk-experience/menu?mode=items");
+  await page.locator('summary[aria-label="Actions for Burgers"]').click();
+  await expect(page.locator("details.mt-menu-more[open]")).toHaveCount(1);
+  await page.locator(".mt-dashboard-main").click({ position: { x: 10, y: 100 } });
+  await expect(page.locator("details.mt-menu-more[open]")).toHaveCount(0);
 });
 
 test("Insights fails locally while Sales & Orders and Menu Performance render with dashboard data", async ({ page }) => {

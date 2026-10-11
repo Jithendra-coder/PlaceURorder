@@ -66,7 +66,8 @@ function AppShellInner({ children }: { children: ReactNode }) {
   const previousCollapsedRef = useRef<boolean | null>(null);
   const [drawer, setDrawer] = useState(false);
   const [flyout, setFlyout] = useState<ModuleId | null>(null);
-  const [locationOpen, setLocationOpen] = useState(false);
+  const [sidebarLocationOpen, setSidebarLocationOpen] = useState(false);
+  const [topbarLocationOpen, setTopbarLocationOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [alerts, setAlerts] = useState<Array<{ id: string; title?: string | null; message?: string | null; status?: string | null }>>([]);
@@ -74,6 +75,11 @@ function AppShellInner({ children }: { children: ReactNode }) {
   const [alertsError, setAlertsError] = useState("");
   const accountButtonRef = useRef<HTMLButtonElement>(null);
   const flyoutRef = useRef<HTMLDivElement>(null);
+  const sidebarLocationRef = useRef<HTMLDivElement>(null);
+  const topbarLocationRef = useRef<HTMLDivElement>(null);
+  const notificationsRef = useRef<HTMLDivElement>(null);
+  const accountMenuRef = useRef<HTMLDivElement>(null);
+  const accountDismissedOutsideRef = useRef(false);
   const pathModule = pathname.startsWith("/dashboard/insights") ? "insights" : pathname.startsWith("/dashboard/operations") ? "operations" : pathname.startsWith("/dashboard/kiosk-experience") ? "kiosk" : pathname.startsWith("/dashboard/administration") ? "administration" : null;
   const selection: "home" | ModuleId = pathModule || "home";
   const selectedModule = modules.find((module) => module.id === selection);
@@ -97,7 +103,7 @@ function AppShellInner({ children }: { children: ReactNode }) {
   useEffect(() => {
     const previous = document.body.style.overflow;
     if (drawer) document.body.style.overflow = "hidden";
-    const close = (event: KeyboardEvent) => { if (event.key === "Escape") { setDrawer(false); setFlyout(null); setLocationOpen(false); setAccountOpen(false); setNotificationsOpen(false); } };
+    const close = (event: KeyboardEvent) => { if (event.key === "Escape") { setDrawer(false); setFlyout(null); setSidebarLocationOpen(false); setTopbarLocationOpen(false); setAccountOpen(false); setNotificationsOpen(false); } };
     window.addEventListener("keydown", close);
     return () => {
       document.body.style.overflow = previous;
@@ -106,14 +112,29 @@ function AppShellInner({ children }: { children: ReactNode }) {
   }, [drawer]);
 
   useEffect(() => {
-    const close = (event: MouseEvent) => { if (flyoutRef.current && !flyoutRef.current.contains(event.target as Node)) setFlyout(null); };
-    window.addEventListener("mousedown", close);
-    return () => window.removeEventListener("mousedown", close);
-  }, []);
+    const closeOutside = (event: globalThis.PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (flyout && !flyoutRef.current?.contains(target)) setFlyout(null);
+      if (sidebarLocationOpen && !sidebarLocationRef.current?.contains(target)) setSidebarLocationOpen(false);
+      if (topbarLocationOpen && !topbarLocationRef.current?.contains(target)) setTopbarLocationOpen(false);
+      if (accountOpen && !accountMenuRef.current?.contains(target)) {
+        accountDismissedOutsideRef.current = true;
+        setAccountOpen(false);
+      }
+      if (notificationsOpen && !notificationsRef.current?.contains(target)) setNotificationsOpen(false);
+      document.querySelectorAll<HTMLDetailsElement>("details.mt-menu-more[open], details.mt-availability-rule-menu[open], details.mt-promotion-card__menu[open]").forEach((menu) => {
+        if (!menu.contains(target)) menu.open = false;
+      });
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    return () => document.removeEventListener("pointerdown", closeOutside);
+  }, [accountOpen, flyout, notificationsOpen, sidebarLocationOpen, topbarLocationOpen]);
 
   const accountWasOpen = useRef(false);
   useEffect(() => {
-    if (accountWasOpen.current && !accountOpen) accountButtonRef.current?.focus();
+    if (accountWasOpen.current && !accountOpen && !accountDismissedOutsideRef.current) accountButtonRef.current?.focus();
+    accountDismissedOutsideRef.current = false;
     accountWasOpen.current = accountOpen;
   }, [accountOpen]);
 
@@ -140,7 +161,7 @@ function AppShellInner({ children }: { children: ReactNode }) {
       <button type="button" className="mt-dashboard-backdrop" onClick={() => setDrawer(false)} aria-label="Close navigation" />
       <aside className="mt-dashboard-sidebar" aria-label="Main Navigation">
         <div className="mt-dashboard-brand"><Link href="/dashboard" aria-label="PlaceURorder dashboard" style={{ display: "block", minWidth: 0 }}><PlaceURorderLogo height={collapsed ? 28 : 38} /></Link><button type="button" className="mt-dashboard-sidebar-toggle" onClick={toggle} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}>{collapsed ? <PanelLeftOpen size={18} strokeWidth={1.8} aria-hidden="true" /> : <PanelLeftClose size={18} strokeWidth={1.8} aria-hidden="true" />}</button></div>
-        {!collapsed && <div className="mt-dashboard-location-wrap"><button type="button" className="mt-dashboard-location" aria-expanded={locationOpen} onClick={() => setLocationOpen((value) => !value)}><Icon name="pin" /><span>{selectedLocationId ? locations.find((location) => location.id === selectedLocationId)?.name || "Select location" : "Select location"}<small>{locationsLoading ? "Loading locations…" : locationsError ? "Locations unavailable" : locations.length ? "Choose a location" : "No locations created"}</small></span></button>{locationOpen && <div className="mt-dashboard-popover mt-dashboard-location-menu" role="listbox" aria-label="Business locations">{locations.length ? <>{<button type="button" role="option" aria-selected={!selectedLocationId} onClick={() => { setSelectedLocationId(null); setLocationOpen(false); }}>All locations</button>}{locations.map((location) => <button type="button" role="option" aria-selected={selectedLocationId === location.id} key={location.id} onClick={() => { setSelectedLocationId(location.id); setLocationOpen(false); }}>{location.name}</button>)}</> : <p>{locationsError ? "Locations are temporarily unavailable." : "No locations created"}</p>}</div>}</div>}
+        {!collapsed && <div className="mt-dashboard-location-wrap" ref={sidebarLocationRef}><button type="button" className="mt-dashboard-location" aria-expanded={sidebarLocationOpen} onClick={() => setSidebarLocationOpen((value) => !value)}><Icon name="pin" /><span>{selectedLocationId ? locations.find((location) => location.id === selectedLocationId)?.name || "Select location" : "Select location"}<small>{locationsLoading ? "Loading locations…" : locationsError ? "Locations unavailable" : locations.length ? "Choose a location" : "No locations created"}</small></span></button>{sidebarLocationOpen && <div className="mt-dashboard-popover mt-dashboard-location-menu" role="listbox" aria-label="Business locations">{locations.length ? <><button type="button" role="option" aria-selected={!selectedLocationId} onClick={() => { setSelectedLocationId(null); setSidebarLocationOpen(false); }}>All locations</button>{locations.map((location) => <button type="button" role="option" aria-selected={selectedLocationId === location.id} key={location.id} onClick={() => { setSelectedLocationId(location.id); setSidebarLocationOpen(false); }}>{location.name}</button>)}</> : <p>{locationsError ? "Locations are temporarily unavailable." : "No locations created"}</p>}</div>}</div>}
         {collapsed ? <>
           <nav className="mt-dashboard-rail" aria-label="Main navigation" ref={flyoutRef}>
             <Link href="/dashboard" className="mt-dashboard-rail-button" aria-label="Home" aria-current={pathname === "/dashboard" ? "page" : undefined} data-tooltip="Home"><Icon name="home" /></Link>
@@ -159,9 +180,9 @@ function AppShellInner({ children }: { children: ReactNode }) {
       <header className="mt-dashboard-topbar">
         <span className="mt-dashboard-context-label" title={breadcrumb} aria-label={breadcrumb}>{breadcrumb}</span>
         <span className="mt-dashboard-topbar__spacer" />
-        <div className="mt-dashboard-control-wrap"><button type="button" className="mt-dashboard-topbar-location" data-empty={!selectedLocation} aria-label={selectedLocation ? `Change location: ${selectedLocation.name}` : "Select location"} aria-expanded={locationOpen} title={selectedLocation?.name || "No location selected"} onClick={() => setLocationOpen((value) => !value)}><Icon name="pin" />{selectedLocation && <span>{selectedLocation.name}</span>}<Icon name="chevron" /></button>{locationOpen && <div className="mt-dashboard-popover mt-dashboard-topbar-location-menu" role="listbox" aria-label="Business locations">{locations.length ? <>{<button type="button" role="option" aria-selected={!selectedLocationId} onClick={() => { setSelectedLocationId(null); setLocationOpen(false); }}>All locations</button>}{locations.map((location) => <button type="button" role="option" aria-selected={selectedLocationId === location.id} key={location.id} onClick={() => { setSelectedLocationId(location.id); setLocationOpen(false); }}>{location.name}</button>)}</> : <p>No locations created</p>}</div>}</div>
-        <div className="mt-dashboard-control-wrap"><button type="button" className="mt-dashboard-icon-button" aria-label={unreadCount ? `Notifications, ${unreadCount} unresolved` : "Notifications"} aria-expanded={notificationsOpen} onClick={() => { setNotificationsOpen((value) => !value); setAccountOpen(false); }}><Icon name="bell" />{unreadCount > 0 && <span className="mt-dashboard-notification-dot" aria-label={`${unreadCount} unresolved notifications`} />}</button>{notificationsOpen && <div className="mt-dashboard-popover mt-dashboard-notification-menu" role="dialog" aria-label="Notifications"><strong>Notifications</strong>{alertsError ? <p>{alertsError}</p> : alerts.length ? alerts.map((alert) => <Link href="/dashboard/operations/alerts" key={alert.id}><strong>{alert.title || "Alert"}</strong><span>{alert.message || "Open Operations Alerts for details."}</span></Link>) : <p>No active notifications.</p>}<Link className="mt-card-link" href="/dashboard/operations/alerts">Open Alerts</Link></div>}</div>
-        <div className="mt-dashboard-control-wrap"><button ref={accountButtonRef} type="button" className="mt-dashboard-account" aria-label="Account" aria-expanded={accountOpen} onClick={() => { setAccountOpen((value) => !value); setNotificationsOpen(false); }}><span className="mt-dashboard-account-avatar" aria-hidden="true">{logoUrl ? <Image src={logoUrl} alt="" width={38} height={38} unoptimized /> : accountInitials || "A"}</span><span className="mt-dashboard-account-copy"><strong>{business?.name || "Account"}</strong><small>Owner</small></span><Icon name="chevron" /></button>{accountOpen && <div className="mt-dashboard-popover mt-dashboard-account-menu" role="menu"><Link href="/dashboard/administration/business-settings" role="menuitem">Profile & business settings</Link><Link href="/dashboard/administration/team?tab=Sessions" role="menuitem">Security & active sessions</Link><button type="button" role="menuitem" onClick={() => void authApi.logout().finally(() => router.replace("/auth/sign-in"))}>Sign out</button></div>}</div>
+        <div className="mt-dashboard-control-wrap" ref={topbarLocationRef}><button type="button" className="mt-dashboard-topbar-location" data-empty={!selectedLocation} aria-label={selectedLocation ? `Change location: ${selectedLocation.name}` : "Select location"} aria-expanded={topbarLocationOpen} title={selectedLocation?.name || "No location selected"} onClick={() => setTopbarLocationOpen((value) => !value)}><Icon name="pin" />{selectedLocation && <span>{selectedLocation.name}</span>}<Icon name="chevron" /></button>{topbarLocationOpen && <div className="mt-dashboard-popover mt-dashboard-topbar-location-menu" role="listbox" aria-label="Business locations">{locations.length ? <><button type="button" role="option" aria-selected={!selectedLocationId} onClick={() => { setSelectedLocationId(null); setTopbarLocationOpen(false); }}>All locations</button>{locations.map((location) => <button type="button" role="option" aria-selected={selectedLocationId === location.id} key={location.id} onClick={() => { setSelectedLocationId(location.id); setTopbarLocationOpen(false); }}>{location.name}</button>)}</> : <p>No locations created</p>}</div>}</div>
+        <div className="mt-dashboard-control-wrap" ref={notificationsRef}><button type="button" className="mt-dashboard-icon-button" aria-label={unreadCount ? `Notifications, ${unreadCount} unresolved` : "Notifications"} aria-expanded={notificationsOpen} onClick={() => { setNotificationsOpen((value) => !value); setAccountOpen(false); }}><Icon name="bell" />{unreadCount > 0 && <span className="mt-dashboard-notification-dot" aria-label={`${unreadCount} unresolved notifications`} />}</button>{notificationsOpen && <div className="mt-dashboard-popover mt-dashboard-notification-menu" role="dialog" aria-label="Notifications"><strong>Notifications</strong>{alertsError ? <p>{alertsError}</p> : alerts.length ? alerts.map((alert) => <Link href="/dashboard/operations/alerts" key={alert.id}><strong>{alert.title || "Alert"}</strong><span>{alert.message || "Open Operations Alerts for details."}</span></Link>) : <p>No active notifications.</p>}<Link className="mt-card-link" href="/dashboard/operations/alerts">Open Alerts</Link></div>}</div>
+        <div className="mt-dashboard-control-wrap" ref={accountMenuRef}><button ref={accountButtonRef} type="button" className="mt-dashboard-account" aria-label="Account" aria-expanded={accountOpen} onClick={() => { setAccountOpen((value) => !value); setNotificationsOpen(false); }}><span className="mt-dashboard-account-avatar" aria-hidden="true">{logoUrl ? <Image src={logoUrl} alt="" width={38} height={38} unoptimized /> : accountInitials || "A"}</span><span className="mt-dashboard-account-copy"><strong>{business?.name || "Account"}</strong><small>Owner</small></span><Icon name="chevron" /></button>{accountOpen && <div className="mt-dashboard-popover mt-dashboard-account-menu" role="menu"><Link href="/dashboard/administration/business-settings" role="menuitem">Profile & business settings</Link><Link href="/dashboard/administration/team?tab=Sessions" role="menuitem">Security & active sessions</Link><button type="button" role="menuitem" onClick={() => void authApi.logout().finally(() => router.replace("/auth/sign-in"))}>Sign out</button></div>}</div>
       </header>
       <main className="mt-dashboard-main">{children}</main>
       <AskAiPanel businessId={business?.id ?? null} />

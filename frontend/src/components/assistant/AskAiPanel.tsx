@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
-import { ArrowUpRight, Bot, LoaderCircle, Send, ShieldCheck, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { ArrowUpRight, Bot, LoaderCircle, Send, X } from "lucide-react";
 import { api } from "@/services/api";
 
 const suggestions = [
@@ -22,12 +22,23 @@ export function AskAiPanel({ businessId }: { businessId: string | null }) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const dismissedOutsideRef = useRef(false);
   const requestController = useRef<AbortController | null>(null);
   const requestId = useRef(0);
   const question = draftQuestion.businessId === businessId ? draftQuestion.text : "";
   const loading = activeRequest?.businessId === businessId;
   const visibleAsked = asked?.businessId === businessId ? asked : null;
   const visibleError = error?.businessId === businessId ? error.message : "";
+
+  const close = useCallback(() => {
+    requestController.current?.abort();
+    requestController.current = null;
+    setActiveRequest(null);
+    setAsked(null);
+    setError(null);
+    setDraftQuestion({ businessId: null, text: "" });
+    setOpen(false);
+  }, []);
 
   useEffect(() => {
     requestController.current?.abort();
@@ -45,6 +56,26 @@ export function AskAiPanel({ businessId }: { businessId: string | null }) {
       dialog.close();
     }
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOutside = (event: globalThis.PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && !dialogRef.current?.contains(target) && !triggerRef.current?.contains(target)) {
+        dismissedOutsideRef.current = true;
+        close();
+      }
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    return () => document.removeEventListener("pointerdown", closeOutside);
+  }, [close, open]);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, [question]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -71,16 +102,6 @@ export function AskAiPanel({ businessId }: { businessId: string | null }) {
     }
   }
 
-  function close() {
-    requestController.current?.abort();
-    requestController.current = null;
-    setActiveRequest(null);
-    setAsked(null);
-    setError(null);
-    setDraftQuestion({ businessId: null, text: "" });
-    setOpen(false);
-  }
-
   function show() {
     setAsked(null);
     setError(null);
@@ -97,7 +118,7 @@ export function AskAiPanel({ businessId }: { businessId: string | null }) {
 
   return (
     <>
-      <button ref={triggerRef} type="button" className="mt-ai-trigger" onClick={show} disabled={!businessId} aria-label="Ask AI" aria-haspopup="dialog" aria-controls="mt-ai-dialog" aria-expanded={open}>
+      <button ref={triggerRef} type="button" className="mt-ai-trigger" onClick={() => open ? close() : show()} disabled={!businessId} aria-label="Ask AI" aria-haspopup="dialog" aria-controls="mt-ai-dialog" aria-expanded={open}>
         <Bot size={18} aria-hidden="true" />
         <span>Ask AI</span>
       </button>
@@ -108,7 +129,10 @@ export function AskAiPanel({ businessId }: { businessId: string | null }) {
         aria-labelledby="mt-ai-title"
         onCancel={(event) => { event.preventDefault(); close(); }}
         onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); close(); } }}
-        onClose={() => triggerRef.current?.focus()}
+        onClose={() => {
+          if (dismissedOutsideRef.current) dismissedOutsideRef.current = false;
+          else triggerRef.current?.focus();
+        }}
       >
         <header className="mt-ai-header">
           <div className="mt-ai-heading">
@@ -161,11 +185,6 @@ export function AskAiPanel({ businessId }: { businessId: string | null }) {
             <textarea ref={textareaRef} id="mt-ai-question" value={question} onChange={(event) => setDraftQuestion({ businessId, text: event.target.value })} onKeyDown={handleKeyDown} placeholder="Ask about your menu, orders, sales…" maxLength={1000} rows={1} disabled={loading || !businessId} />
             <button type="submit" aria-label="Send question" disabled={loading || question.trim().length < 3 || !businessId}>{loading ? <LoaderCircle size={18} className="mt-ai-spinner" /> : <Send size={18} />}</button>
           </form>
-          <div className="mt-ai-composer-meta">
-            <span><ShieldCheck size={13} aria-hidden="true" /> Read-only · role-checked · source-linked</span>
-            <span>Enter to send · Shift+Enter for a new line</span>
-          </div>
-          <p className="mt-ai-privacy">If Gemini is enabled, your question and matching help text may be sent to Google; live business lookups stay in MenuTap.</p>
         </div>
       </dialog>
     </>

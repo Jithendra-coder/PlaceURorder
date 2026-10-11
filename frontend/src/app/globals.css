@@ -5055,10 +5055,6 @@ html { scrollbar-color: #c6d0dd transparent; scrollbar-width: thin; }
 .mt-ai-form button { width: 40px; height: 40px; display: grid; place-items: center; border: 0; border-radius: 10px; color: #fff; background: #175cd3; cursor: pointer; }
 .mt-ai-form button:hover:not(:disabled) { background: #1849a9; }
 .mt-ai-form button:disabled { cursor: not-allowed; opacity: .45; }
-.mt-ai-composer-meta { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 2px 12px; margin-top: 8px; color: #667085; font: 400 10px/15px var(--font-content); }
-.mt-ai-composer-meta > span { display: inline-flex; align-items: center; gap: 4px; }
-.mt-ai-composer-meta svg { color: #027a48; }
-.mt-ai-privacy { margin: 5px 0 0; color: #98a2b3; font: 400 10px/14px var(--font-content); }
 .mt-ai-spinner { animation: mt-ai-spin 1s linear infinite; }
 @keyframes mt-ai-spin { to { transform: rotate(360deg); } }
 .mt-ai-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; clip-path: inset(50%); }
@@ -5069,7 +5065,6 @@ html { scrollbar-color: #c6d0dd transparent; scrollbar-width: thin; }
   .mt-ai-header { min-height: 64px; padding-inline: 14px; }
   .mt-ai-body { padding: 18px 14px; }
   .mt-ai-composer { padding-inline: 12px; }
-  .mt-ai-composer-meta { font-size: 9px; }
 }
 
 @media (max-height: 600px) {
