@@ -1,7 +1,7 @@
 # PlaceURorder Product Help Policy
 
-Version: 1.1.0
-Reviewed: 2026-10-11
+Version: 1.2.0
+Reviewed: 2026-10-12
 Owner: Product owner (review required before customer launch)
 
 This guide is the source of truth for the dashboard Ask AI lookup. Keep it aligned with shipped product behavior. It is product help, not a contract, privacy notice, legal opinion, payment-provider promise, or service-level commitment.
@@ -34,13 +34,17 @@ The Ask AI sales lookup is available only to roles permitted to view business ad
 
 The application contains integrations for Stripe, Razorpay, Paytm, and pay-at-counter flows. Each requires the appropriate merchant configuration and provider availability. Ask AI cannot confirm a provider account, settle a payment, or promise a refund.
 
+## Menu Growth Coach
+
+The read-only Menu Growth Coach compares business-wide orders marked completed and paid in the rolling 28 days with the preceding 28 days (UTC). Paid totals include tax and exclude orders marked refunded, as well as test, preview, and sandbox sources. Authorized-but-not-captured orders are not counted. Item comparisons use paid order-item quantities. A decline recommendation requires at least five prior-period units and a fall of at least two units and 20%; an overall trend requires at least five prior-period paid orders. These comparisons show patterns, not causes; they do not include food cost, margin, inventory history, customer preferences, or location-specific operating hours. A lower item count does not prove why demand changed. Review availability, price, and menu placement before changing a promotion, and do not recommend discounts without margin data. If Gemini is configured, the coach may send the question, aggregate metrics, and retrieved guidance excerpts to Google to select a concise, balanced set of grounded next steps. Product IDs are not sent to Gemini. Customer names, phone numbers, notes, payment credentials, and row-level order details are not included. Without Gemini or when generation fails, the coach returns deterministic recommendations from the same authorized aggregates.
+
 ## Roles and access
 
 Business owners and administrators have full business access. The API defines additional manager, kitchen, cashier, salon-staff, kiosk, and viewer roles with different capabilities. Ask AI checks membership for the selected business and applies the same read-role boundaries as the corresponding dashboard data: catalog access for menu details, order-view access for order counts, and admin access for sales figures. A denial is expected when a role lacks the required access; ask a business administrator to review the role rather than sharing credentials.
 
 ## Ask AI behavior and limits
 
-Ask AI handles recognized business-data questions deterministically with a small, explicit read-only method allowlist for current business setup, menu, order-count, and sales summaries. Live results stay in MenuTap and are never sent to Gemini. For product-help questions, Ask AI retrieves cited passages from this guide. When `GEMINI_API_KEY` is unset or Google is unavailable, it returns the matching passages; when configured, only the question and retrieved guide excerpts are sent to Google Gemini to draft a concise answer. The model has no tools, SQL, or app API access. Each live method uses the signed-in user, selected business, role authorization, parameterized tenant-scoped SQL, and returns a source timestamp. The application does not store chat history.
+Ask AI uses an explicit read-only method allowlist for current business setup, menu, order-count, sales summaries, and Menu Growth Coach comparisons. Live lookups run in MenuTap with the signed-in user, selected business, role authorization, and parameterized tenant-scoped SQL. Product-help generation sends the question and retrieved guide excerpts to Google Gemini only when configured. Menu Growth Coach generation may additionally send the question and limited business-wide aggregate sales/item metrics plus retrieved guide excerpts. It does not send customer names, phone numbers, notes, payment credentials, or row-level order details. The model has no tools, SQL, or app API access. When Gemini is unset or unavailable, product help remains extractive and growth recommendations use deterministic rules. Responses include source timestamps. The application does not store chat history.
 
 Ask AI does not search legal drafts. It must not invent product behavior, prices, provider status, legal rights, hardware compatibility, or uptime. If a source is missing, stale, incomplete, or outside the allowlist, it should say so and point to the relevant dashboard area or support contact. Do not enter customer personal data, payment card data, secrets, or authentication tokens into the question field.
 

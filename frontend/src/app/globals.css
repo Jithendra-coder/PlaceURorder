@@ -5016,6 +5016,7 @@ html { scrollbar-color: #c6d0dd transparent; scrollbar-width: thin; }
 .mt-ai-welcome-icon { width: 44px; height: 44px; margin-bottom: 4px; }
 .mt-ai-welcome h3 { margin: 0; color: #101828; font: 650 16px/22px var(--font-display); }
 .mt-ai-welcome > p { margin: 0 0 8px; color: #667085; font: 400 13px/19px var(--font-content); }
+.mt-ai-welcome > .mt-ai-data-note { margin: 3px 0 0; color: #667085; font: 400 11px/16px var(--font-content); }
 .mt-ai-suggestions { width: 100%; display: flex; flex-wrap: wrap; gap: 8px; }
 .mt-ai-suggestions button { min-height: 36px; border: 1px solid #e4e7ec; border-radius: 999px; padding: 7px 11px; color: #344054; background: #fff; text-align: left; font: 500 12px/18px var(--font-content); cursor: pointer; }
 .mt-ai-suggestions button:hover { border-color: #84caff; color: #175cd3; background: #f8fbff; }
@@ -5096,4 +5097,53 @@ html { scrollbar-color: #c6d0dd transparent; scrollbar-width: thin; }
   .mt-workspace-skeleton main > div:first-child > div:first-child { min-width: 0; }
   .mt-workspace-skeleton main > div:first-child > .mt-skeleton-block { display: none !important; }
   .mt-workspace-skeleton main > div:nth-child(2) { grid-template-columns: minmax(0, 1fr) !important; }
+}
+
+.mt-home-mode-switch { display: inline-flex; gap: 4px; margin-bottom: 22px; padding: 4px; border: 1px solid #e4e7ec; border-radius: 12px; background: #f8fafc; }
+.mt-home-mode-switch button { min-height: 38px; padding: 0 16px; border: 0; border-radius: 9px; background: transparent; color: #475467; font: 600 14px/20px var(--font-content); cursor: pointer; }
+.mt-home-mode-switch button[aria-pressed="true"] { background: #fff; color: #175cd3; box-shadow: 0 1px 3px #1018281a; }
+.mt-home-mode-switch button:focus-visible { outline: 3px solid #84adff; outline-offset: 2px; }
+.mt-home-productive { display: grid; gap: 22px; }
+.mt-home-productivity-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.mt-home-page .mt-home-productivity-stat { display: flex; min-height: 0; flex-direction: column; gap: 7px; padding: 19px 22px; }
+.mt-home-productivity-stat > span { color: #667085; font: 600 13px/20px var(--font-content); }
+.mt-home-productivity-stat > strong { color: #101828; font: 700 26px/32px var(--font-display); }
+.mt-home-productivity-stat > small { color: #667085; font: 400 12px/18px var(--font-content); }
+.mt-home-productive-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; gap: 20px; }
+.mt-home-page .mt-home-productive-grid > .mt-home-card { min-height: 0; padding: 22px; }
+.mt-home-page .mt-home-productive-trend > .mt-button { margin-top: 4px; }
+.mt-home-productive-copy, .mt-home-productive-disclosure { color: #667085; font: 400 13px/20px var(--font-content); }
+.mt-home-productive-disclosure { margin: 18px 0 12px; padding: 11px 13px; border: 1px solid #d1e9ff; border-radius: 10px; background: #f5faff; color: #344054; font-size: 12px; }
+.mt-home-productive-error { color: #b42318; font: 500 13px/20px var(--font-content); }
+.mt-home-productive-source { display: block; margin-top: 12px; color: #667085; font: 400 11px/17px var(--font-content); }
+.mt-home-period-comparison { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 13px; margin: 10px 0 20px; padding: 16px; border: 1px solid #eaecf0; border-radius: 12px; background: #fcfcfd; }
+.mt-home-period-comparison > div { display: grid; gap: 5px; }
+.mt-home-period-comparison > div > span, .mt-home-period-comparison small { color: #667085; font: 400 12px/18px var(--font-content); }
+.mt-home-period-comparison strong { color: #101828; font: 700 19px/26px var(--font-display); overflow-wrap: anywhere; }
+.mt-home-period-comparison > span { color: #98a2b3; font-size: 12px; font-weight: 600; }
+.mt-home-page .mt-home-productive-alerts .mt-home-alert-list { margin-top: 8px; }
+.mt-home-productive-recommendations { grid-column: 1 / -1; }
+.mt-home-recommendation-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.mt-home-recommendation { min-width: 0; padding: 16px; border: 1px solid #eaecf0; border-radius: 12px; background: #fff; }
+.mt-home-recommendation h3 { margin: 10px 0 5px; color: #101828; font: 650 15px/21px var(--font-display); }
+.mt-home-recommendation > strong { display: block; margin-bottom: 10px; color: #344054; font: 600 13px/19px var(--font-content); }
+.mt-home-recommendation dl { display: grid; gap: 10px; margin: 0 0 12px; }
+.mt-home-recommendation dl > div { display: grid; gap: 3px; }
+.mt-home-recommendation dt { color: #667085; font: 600 11px/16px var(--font-content); }
+.mt-home-recommendation dd { margin: 0; color: #344054; font: 400 12px/18px var(--font-content); }
+.mt-home-recommendation > a { color: #175cd3; font: 600 12px/18px var(--font-content); text-decoration: none; }
+.mt-home-recommendation > a:hover { text-decoration: underline; }
+
+@media (max-width: 1024px) {
+  .mt-home-productivity-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mt-home-productive-grid { grid-template-columns: minmax(0, 1fr); }
+  .mt-home-productive-recommendations { grid-column: auto; }
+}
+
+@media (max-width: 639px) {
+  .mt-home-mode-switch { width: 100%; margin-bottom: 16px; }
+  .mt-home-mode-switch button { flex: 1; }
+  .mt-home-productivity-stats, .mt-home-recommendation-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .mt-home-period-comparison { grid-template-columns: minmax(0, 1fr); }
+  .mt-home-period-comparison > span { display: none; }
 }

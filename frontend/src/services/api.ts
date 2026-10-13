@@ -104,12 +104,12 @@ async function data<T>(path: string, options?: RequestOptions): Promise<T> {
 type SessionUser = { id: string; email: string; full_name?: string | null };
 
 export const api = {
-  askAssistant: (businessId: string, question: string, signal?: AbortSignal) =>
+  askAssistant: (businessId: string, question: string, options: { signal?: AbortSignal; locationId?: string | null } = {}) =>
     request<{
       intent: string;
       text: string;
       total: number | null;
-      results: { title: string; value?: string | null; fields: { label: string; value: string }[] }[];
+      results: { title: string; value?: string | null; fields: { label: string; value: string }[]; classification?: "attention" | "opportunity" | "momentum" | null; href?: string | null }[];
       sources: { kind: "policy" | "live" | "notice"; title: string; href?: string | null; excerpt?: string | null; version?: string | null; as_of?: string | null }[];
       as_of: string;
       has_more: boolean;
@@ -117,7 +117,8 @@ export const api = {
       requires_confirmation: boolean;
       action: Record<string, unknown> | null;
       args: Record<string, unknown> | null;
-    }>("/assistant/chat", { method: "POST", body: JSON.stringify({ business_id: businessId, question }), signal }),
+      growth_summary?: { period_days: number; current_paid_total: number; previous_paid_total: number; current_orders: number; previous_orders: number; paid_total_change_percent: number | null; currency: string; scope: "business" | "location" | "assigned_locations"; scope_name: string } | null;
+    }>("/assistant/chat", { method: "POST", body: JSON.stringify({ business_id: businessId, question, location_id: options.locationId || null }), signal: options.signal }),
   login: (email: string, password: string) =>
     request<{ user: SessionUser }>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   startGoogleOAuth: () =>

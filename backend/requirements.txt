@@ -8,3 +8,6 @@ pydantic-settings
 python-multipart
 qrcode[pil]
 redis
+langgraph>=1.2,<2
+langchain-core>=1.6,<2
+langchain-google-genai>=4.4,<5

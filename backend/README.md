@@ -48,7 +48,7 @@ GEMINI_API_KEY=
 GEMINI_MODEL=gemini-3.1-flash-lite
 ```
 
-Recognized live business questions are handled inside MenuTap and never sent to Gemini. Product-help answers remain extractive when `GEMINI_API_KEY` is unset. When configured, only product-help questions and matching guide excerpts are sent to Google; review `docs/legal/PRIVACY_POLICY.md` and Google's current account data-use terms before using Gemini with real merchant data.
+Live business lookups run inside MenuTap with role checks and tenant-scoped SQL. Product-help answers remain extractive when `GEMINI_API_KEY` is unset. The Menu Growth Coach uses a LangGraph retrieval workflow over authorized, business-wide completed-order aggregates and the product help guide; with Gemini configured, the question, limited aggregates, and retrieved excerpts may be sent to Google for structured recommendation selection. Customer details and row-level orders are excluded, and the model has no SQL or app tools. Without Gemini, deterministic recommendations are returned. Review `docs/legal/PRIVACY_POLICY.md` and Google's current account data-use terms before using Gemini with real merchant data.
 
 For Vercel, add `GEMINI_API_KEY` as a Secret on the `universal-kiosk-api` project only (not `universal-kiosk-app` or any `NEXT_PUBLIC_*` variable), then redeploy the API. `GEMINI_MODEL` is optional configuration; the code defaults to Google's `gemini-3.1-flash-lite` model.
 
