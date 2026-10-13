@@ -27,17 +27,23 @@ MENU_TERMS = {"catalog", "category", "categories", "item", "items", "menu", "pri
 ORDER_TERMS = {"order", "orders"}
 SALES_TERMS = {"revenue", "sale", "sales", "sold"}
 SETUP_TERMS = {"onboard", "onboarding", "setup"}
+GROWTH_TERMS = {"boost", "coach", "decline", "declining", "falling", "grow", "growth", "improve", "improvement", "opportunity", "opportunities", "perform", "performance", "recommend", "recommendation", "recommendations", "top", "trend", "trends"}
 OTHER_PERIOD_TERMS = {"day", "days", "hour", "hours", "month", "monthly", "today", "week", "weekly", "yesterday"}
 TOOL_TERMS = MENU_TERMS | ORDER_TERMS | SALES_TERMS | SETUP_TERMS | {"business", "profile", "store", "type"}
 
 
-def answer(client: DbClient, business_id: UUID, user_id: UUID, question: str) -> dict:
+def answer(client: DbClient, business_id: UUID, user_id: UUID, question: str, location_id: UUID | None = None) -> dict:
     tokens = _tokens(question)
     policy_sources = [
         {"kind": "policy", "title": section["title"], "excerpt": section["excerpt"], "version": _policy_version()}
         for section in _retrieve_policy(tokens)
     ]
     intent = _classify_intent(tokens, bool(policy_sources), question)
+
+    if intent == "growth_coach":
+        from services.growth_coach_service import answer_growth_coach
+
+        return answer_growth_coach(client, business_id, user_id, question, location_id)
 
     if intent in {"sales_summary", "orders_summary", "menu_catalog", "business_setup"}:
         if intent == "sales_summary":
@@ -85,13 +91,15 @@ def answer(client: DbClient, business_id: UUID, user_id: UUID, question: str) ->
 
     return _response(
         "unsupported",
-        "I couldn't find a matching help passage or read-only business data. Try asking about your menu, orders, sales, business setup, or kiosk publishing.",
+        "I couldn't find a matching help passage or read-only business data. Try asking about your menu, orders, sales, menu growth, business setup, or kiosk publishing.",
         [],
     )
 
 
 def _classify_intent(tokens: set[str], has_policy_match: bool, question: str) -> str:
     normalized_question = question.casefold().strip()
+    if tokens & GROWTH_TERMS:
+        return "growth_coach"
     if has_policy_match and normalized_question.startswith(("how do i ", "how to ", "how can i ", "where do i ", "can i ")):
         return "product_help"
     if tokens & SALES_TERMS or {"average", "order"} <= tokens:
@@ -114,8 +122,9 @@ def _response(
     results: list[dict] | None = None,
     has_more: bool = False,
     answer_kind: str = "narrative",
+    growth_summary: dict | None = None,
 ) -> dict:
-    return {
+    response = {
         "intent": intent,
         "text": text,
         "total": total,
@@ -128,6 +137,9 @@ def _response(
         "action": None,
         "args": None,
     }
+    if growth_summary is not None:
+        response["growth_summary"] = growth_summary
+    return response
 
 
 def _generate_answer(question: str, sources: list[dict], api_key: str, model: str) -> str | None:

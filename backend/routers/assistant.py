@@ -21,6 +21,7 @@ class AskRequest(BaseModel):
 
     business_id: UUID
     question: str = Field(min_length=3, max_length=1000)
+    location_id: UUID | None = None
 
 
 class AssistantField(BaseModel):
@@ -32,6 +33,20 @@ class AssistantResult(BaseModel):
     title: str
     value: str | None = None
     fields: list[AssistantField] = Field(default_factory=list)
+    classification: Literal["attention", "opportunity", "momentum"] | None = None
+    href: str | None = None
+
+
+class GrowthSummary(BaseModel):
+    period_days: int
+    current_paid_total: float
+    previous_paid_total: float
+    current_orders: int
+    previous_orders: int
+    paid_total_change_percent: float | None
+    currency: str
+    scope: Literal["business", "location", "assigned_locations"]
+    scope_name: str
 
 
 class AssistantSource(BaseModel):
@@ -55,6 +70,7 @@ class AssistantResponse(BaseModel):
     requires_confirmation: bool
     action: dict[str, Any] | None
     args: dict[str, Any] | None
+    growth_summary: GrowthSummary | None = None
 
 
 @router.post("/chat", response_model=AssistantResponse)
@@ -66,4 +82,4 @@ def ask(
 ):
     assert_rate_limit(request, ASK_LIMIT, identity_parts=[str(user_id), str(payload.business_id)])
     business_service.assert_business_access(client, payload.business_id, user_id, set(StaffRole))
-    return assistant_service.answer(client, payload.business_id, user_id, payload.question)
+    return assistant_service.answer(client, payload.business_id, user_id, payload.question, payload.location_id)

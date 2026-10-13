@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LineChart } from "@/components/charts/ChartPrimitives";
 import { useBusiness } from "@/components/layout/BusinessProvider";
@@ -11,6 +11,7 @@ import { Button, DataState, DetailsDrawer, SearchInput, Select, Skeleton, Status
 import { AutoRecoveringState } from "@/components/ui/AutoRecoveringState";
 import { DashboardHomeSkeleton } from "@/components/ui/Skeletons";
 import { api, assetUrl } from "@/lib/api";
+import { api as assistantApi } from "@/services/api";
 import { formatCurrency, formatDateTime, formatDuration, formatOrderStatus } from "@/lib/formatters";
 import type { AlertRecord, DashboardStats, DeviceRecord, HomeActivation, KioskSetupOverview, Order, Product } from "@/lib/types";
 import { resolveHomeMode, type HomeMode } from "@/components/dashboard/home-state";
@@ -25,6 +26,8 @@ type HomeData = {
   alerts: { alerts: AlertRecord[]; summary: { unresolved_count: number; critical_count: number; warning_count: number } } | null;
   devices: DeviceRecord[] | null;
 };
+
+type GrowthResponse = Awaited<ReturnType<typeof assistantApi.askAssistant>>;
 
 const commands = [
   ["View today’s sales", "/dashboard/insights/sales-reports"], ["Check devices", "/dashboard/operations/devices"],
@@ -50,7 +53,7 @@ const homeAssetSizes: Record<string, { width: number; height: number }> = {
 };
 
 export function HomePage() {
-  const { business, loading: businessLoading, error: businessError, locationsLoading, selectedLocationId } = useBusiness();
+  const { business, loading: businessLoading, error: businessError, locations, locationsLoading, selectedLocationId } = useBusiness();
   const [data, setData] = useState<HomeData | null>(null);
   const [error, setError] = useState("");
   const [loadedKey, setLoadedKey] = useState("");
@@ -105,7 +108,7 @@ export function HomePage() {
   }
 
   if (!business || !data || !mode) return <PageContainer width="standard"><DataState kind="permission-denied" title="No business selected" description="Complete business setup before opening the owner dashboard." action={<Link className="mt-card-link" href="/setup/business-details">Open setup</Link>} /></PageContainer>;
-  return <PageContainer width="maximum" className="mt-home-page"><HomeLayout mode={mode} businessName={business.name}>{mode === "setup" ? <SetupHome business={business} setup={data.setup} products={data.products} /> : <BusinessHome business={business} data={data} mode={mode} locationId={selectedLocationId} />}</HomeLayout></PageContainer>;
+  return <PageContainer width="maximum" className="mt-home-page"><HomeLayout mode={mode} businessName={business.name}>{mode === "setup" ? <SetupHome business={business} setup={data.setup} products={data.products} /> : <BusinessHome business={business} data={data} mode={mode} locationId={selectedLocationId} locations={locations} />}</HomeLayout></PageContainer>;
 }
 
 function HomeHero({ mode, businessName, children }: { mode: HomeMode; businessName: string; children: React.ReactNode }) {
@@ -127,18 +130,99 @@ function SetupHome({ business, setup, products }: { business: NonNullable<Return
   return <section className="mt-home-content"><div className="mt-home-setup-progress"><div><strong>{completeCount} of 4 essentials complete</strong><span>{next ? `Next: ${next.title}` : "Everything is ready for your first order."}</span></div><div className="mt-progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={4} aria-valuenow={completeCount}><span style={{ width: `${completeCount * 25}%` }} /></div></div><div className="mt-home-grid mt-home-setup-grid">{setupCards.map((card) => <Link className={`mt-home-card mt-home-setup-action mt-home-setup-action--${card.tone}${completed[card.key] ? " is-complete" : ""}${next?.key === card.key ? " is-next" : ""}`} href={card.href} key={card.key}><div><span className="mt-home-card-icon" aria-hidden="true">{completed[card.key] ? "✓" : "→"}</span>{completed[card.key] && <StatusBadge status="success">Completed</StatusBadge>}<h2>{card.title}</h2><p>{card.description}</p><span className="mt-button mt-button--primary">{completed[card.key] ? "Review" : card.action}</span></div><span className="mt-home-setup-art"><HomeAsset src={card.asset} /></span></Link>)}</div></section>;
 }
 
-function BusinessHome({ business, data, mode, locationId }: { business: NonNullable<ReturnType<typeof useBusiness>["business"]>; data: HomeData; mode: HomeMode; locationId: string | null }) {
+function BusinessHome({ business, data, mode, locationId, locations }: { business: NonNullable<ReturnType<typeof useBusiness>["business"]>; data: HomeData; mode: HomeMode; locationId: string | null; locations: ReturnType<typeof useBusiness>["locations"] }) {
   const [salesPeriod, setSalesPeriod] = useState("today");
   const [selectedStats, setStats] = useState(data.stats);
   const [updating, setUpdating] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [kitchenFilter, setKitchenFilter] = useState("active");
+  const [view, setView] = useState<"overview" | "productive">("overview");
+  const [coachLocationId, setCoachLocationId] = useState(locationId);
+  const [coach, setCoach] = useState<{ businessId: string; response: GrowthResponse | null; loading: boolean; error: string } | null>(null);
+  const coachRequest = useRef<AbortController | null>(null);
   const stats = salesPeriod === "today" ? data.stats : selectedStats;
   const changeSalesPeriod = async (period: string) => { setSalesPeriod(period); setUpdating(true); try { setStats(await api.dashboard(business.id, { ...rangeFor(period), locationId })); } finally { setUpdating(false); } };
   const alerts = data.alerts?.alerts.filter((alert) => alert.status !== "resolved") || [];
   const statuses = mode === "active" ? contextualStatuses(data, alerts).slice(0, 3) : [];
-  return <section className={`mt-home-content${mode === "active" ? " mt-home-active" : ""}`}>{statuses.length > 0 && <div className="mt-home-contextual-status">{statuses.map((item) => <Link className="mt-home-status-link" key={item.label} href={item.href}><StatusBadge status={item.status}>{item.label}</StatusBadge></Link>)}</div>}<div className="mt-home-grid"><SalesCard business={business} stats={stats} period={salesPeriod} onPeriod={changeSalesPeriod} loading={updating} /><MenuCard business={business} stats={stats} products={data.products} /><KitchenCard orders={data.activeOrders} filter={kitchenFilter} setFilter={setKitchenFilter} onOrder={setSelectedOrder} /><DevicesCard devices={data.devices} /><AlertsCard alerts={alerts} total={data.alerts?.summary.unresolved_count || 0} /><OrdersCard business={business} orders={data.orders} completedOrders={data.activation.completed_order_count} onOrder={setSelectedOrder} /></div>{mode === "first_order" && <FirstOrderJourney setup={data.setup} products={data.products} />}{selectedOrder && <OrderDrawer business={business} order={selectedOrder} close={() => setSelectedOrder(null)} />}</section>;
+  useEffect(() => () => coachRequest.current?.abort(), [business.id]);
+  const visibleCoach = coach?.businessId === business.id ? coach : null;
+  const changeCoachLocation = (nextLocationId: string | null) => {
+    coachRequest.current?.abort();
+    setCoach(null);
+    setCoachLocationId(nextLocationId);
+  };
+  const loadRecommendations = async () => {
+    coachRequest.current?.abort();
+    const controller = new AbortController();
+    coachRequest.current = controller;
+    setCoach({ businessId: business.id, response: null, loading: true, error: "" });
+    try {
+      const response = await assistantApi.askAssistant(business.id, "How can I grow my menu sales?", { signal: controller.signal, locationId: coachLocationId });
+      if (!controller.signal.aborted) setCoach({ businessId: business.id, response, loading: false, error: "" });
+    } catch {
+      if (!controller.signal.aborted) setCoach({ businessId: business.id, response: null, loading: false, error: "Recommendations couldn't load. Please try again." });
+    } finally {
+      if (coachRequest.current === controller) coachRequest.current = null;
+    }
+  };
+  return <section className={`mt-home-content${mode === "active" ? " mt-home-active" : ""}`}>
+    <div className="mt-home-mode-switch" role="group" aria-label="Home dashboard mode">
+      <button type="button" aria-pressed={view === "overview"} onClick={() => setView("overview")}>Overview</button>
+      <button type="button" aria-pressed={view === "productive"} onClick={() => setView("productive")}>Productive</button>
+    </div>
+    {view === "overview" ? <>
+      {statuses.length > 0 && <div className="mt-home-contextual-status">{statuses.map((item) => <Link className="mt-home-status-link" key={item.label} href={item.href}><StatusBadge status={item.status}>{item.label}</StatusBadge></Link>)}</div>}
+      <div className="mt-home-grid"><SalesCard business={business} stats={stats} period={salesPeriod} onPeriod={changeSalesPeriod} loading={updating} /><MenuCard business={business} stats={stats} products={data.products} /><KitchenCard orders={data.activeOrders} filter={kitchenFilter} setFilter={setKitchenFilter} onOrder={setSelectedOrder} /><DevicesCard devices={data.devices} /><AlertsCard alerts={alerts} total={data.alerts?.summary.unresolved_count || 0} /><OrdersCard business={business} orders={data.orders} completedOrders={data.activation.completed_order_count} onOrder={setSelectedOrder} /></div>
+      {mode === "first_order" && <FirstOrderJourney setup={data.setup} products={data.products} />}
+    </> : <ProductiveHome business={business} locations={locations} locationId={coachLocationId} onLocationChange={changeCoachLocation} alerts={data.alerts?.alerts ?? null} coach={visibleCoach} onGenerate={loadRecommendations} />}
+    {selectedOrder && <OrderDrawer business={business} order={selectedOrder} close={() => setSelectedOrder(null)} />}
+  </section>;
 }
+
+function ProductiveHome({ business, locations, locationId, onLocationChange, alerts, coach, onGenerate }: {
+  business: NonNullable<ReturnType<typeof useBusiness>["business"]>;
+  locations: ReturnType<typeof useBusiness>["locations"];
+  locationId: string | null;
+  onLocationChange: (locationId: string | null) => void;
+  alerts: AlertRecord[] | null;
+  coach: { response: GrowthResponse | null; loading: boolean; error: string } | null;
+  onGenerate: () => void;
+}) {
+  const openAlerts = alerts?.filter((alert) => alert.status !== "resolved").sort((left, right) => severityRank(left.severity) - severityRank(right.severity)) || [];
+  const criticalCount = openAlerts.filter((alert) => alert.severity === "critical").length;
+  const warningCount = openAlerts.filter((alert) => alert.severity === "warning").length;
+  const summary = coach?.response?.growth_summary;
+  const recommendations = coach?.response?.results || [];
+  const liveSource = coach?.response?.sources.find((source) => source.kind === "live");
+  const scopeName = summary?.scope_name || (locationId ? locations.find((location) => location.id === locationId)?.name || "Selected location" : "All accessible locations");
+  return <div className="mt-home-productive">
+    <div className="mt-home-productivity-stats">
+      <Card className="mt-home-productivity-stat"><span>Paid completed-order total · {scopeName} · last {summary?.period_days || 28} days</span><strong>{summary ? formatCurrency(summary.current_paid_total, summary.currency || business.currency_code || "INR") : "—"}</strong><small>{summary ? summary.paid_total_change_percent === null ? "No prior-period baseline" : `${summary.paid_total_change_percent > 0 ? "+" : ""}${summary.paid_total_change_percent}% vs previous period` : "Generate a report to compare periods"}</small></Card>
+      <Card className="mt-home-productivity-stat"><span>Critical alerts</span><strong>{alerts === null ? "—" : criticalCount}</strong><small>{alerts === null ? "Alert data unavailable" : `${warningCount} item${warningCount === 1 ? "" : "s"} to review`}</small></Card>
+      <Card className="mt-home-productivity-stat"><span>Growth recommendations</span><strong>{coach?.loading ? "…" : coach?.response?.growth_summary ? recommendations.length : "—"}</strong><small>{coach?.response?.growth_summary ? "Grounded in recent paid orders" : "Generated when you ask"}</small></Card>
+    </div>
+    <div className="mt-home-productive-grid">
+      <Card className="mt-home-productive-trend">
+        <SectionHeader title="Sales momentum" description="Tax-inclusive paid completed orders; test/preview and fully refunded orders are excluded. Partial refunds are not tracked here." actions={locations.length > 0 ? <Select label="Compare location" value={locationId || "all"} onChange={(event) => onLocationChange(event.target.value === "all" ? null : event.target.value)}><option value="all">All locations</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</Select> : undefined} />
+        {summary ? <div className="mt-home-period-comparison"><div><span>Last {summary.period_days} days</span><strong>{formatCurrency(summary.current_paid_total, summary.currency || business.currency_code || "INR")}</strong><small>{summary.current_orders} paid orders</small></div><span aria-hidden="true">vs</span><div><span>Previous {summary.period_days} days</span><strong>{formatCurrency(summary.previous_paid_total, summary.currency || business.currency_code || "INR")}</strong><small>{summary.previous_orders} paid orders</small></div></div> : <p className="mt-home-productive-copy">Compare paid completed-order totals for the selected location or all locations available to your role, then review menu actions grounded in the results.</p>}
+        {coach?.error && <p className="mt-home-productive-error" role="alert">{coach.error}</p>}
+        <p className="mt-home-productive-disclosure">If Gemini is enabled, the question, relevant help text, and aggregate sales metrics may be sent to Google. Customer and order details are not included.</p>
+        <Button variant="primary" disabled={coach?.loading} onClick={onGenerate}>{coach?.loading ? "Reviewing sales…" : coach?.response ? "Refresh recommendations" : "Generate recommendations"}</Button>
+        {summary && liveSource && <small className="mt-home-productive-source">Source: {liveSource.title} · {new Date(coach?.response?.as_of || "").toLocaleDateString()}</small>}
+      </Card>
+      <Card className="mt-home-productive-alerts">
+        <SectionHeader title="Priority alerts" description={alerts === null ? "Alert information is unavailable." : openAlerts.length ? `${openAlerts.length} unresolved item${openAlerts.length === 1 ? "" : "s"}, ordered by severity.` : "No unresolved alerts."} actions={<Link className="mt-card-link" href="/dashboard/operations/alerts">Open alert centre →</Link>} />
+        {alerts === null ? <p className="mt-home-productive-copy">Refresh Home to try loading alert data again.</p> : openAlerts.length ? <ul className="mt-home-alert-list">{openAlerts.slice(0, 5).map((alert) => <li key={alert.id}><Link href="/dashboard/operations/alerts"><StatusBadge status={alert.severity === "critical" ? "danger" : alert.severity === "warning" ? "warning" : "info"}>{alert.severity === "critical" ? "Critical" : alert.severity === "warning" ? "Review" : "Info"}</StatusBadge><span><b>{alert.title || "Attention needed"}</b><small>{alert.message || "Open the alert centre for details."}</small></span><i aria-hidden="true">›</i></Link></li>)}</ul> : <EmptyContent title="Nothing needs attention" description="There are no unresolved business alerts right now." href="/dashboard/operations/alerts" action="View alert centre" kind="checklist" badge="All clear" />}
+      </Card>
+      <Card className="mt-home-productive-recommendations">
+        <SectionHeader title="Recommended decisions" description="Each suggestion is tied to your recent sales data; review before making changes." actions={<Link className="mt-card-link" href="/dashboard/insights/menu-performance">Menu performance →</Link>} />
+        {coach?.loading ? <Skeleton lines={4} label="Preparing sales recommendations" /> : coach?.response ? recommendations.length ? <div className="mt-home-recommendation-grid">{recommendations.map((recommendation, index) => <article className="mt-home-recommendation" key={`${recommendation.title}-${index}`}><StatusBadge status={recommendation.classification === "attention" ? "warning" : recommendation.classification === "momentum" ? "success" : "info"}>{recommendation.classification === "attention" ? "Review" : recommendation.classification === "momentum" ? "Momentum" : "Opportunity"}</StatusBadge><h3>{recommendation.title}</h3>{recommendation.value && <strong>{recommendation.value}</strong>}<dl>{recommendation.fields.map((field) => <div key={field.label}><dt>{field.label}</dt><dd>{field.value}</dd></div>)}</dl><Link href={recommendation.href || liveSource?.href || "/dashboard/insights/sales-reports"}>{recommendation.href ? "Review this menu item →" : "Review sales data →"}</Link></article>)}</div> : <DataState kind="info" title={coach.response.sources.some((source) => source.kind === "notice") ? "Sales access required" : "Not enough sales history yet"} description={coach.response.text} /> : <p className="mt-home-productive-copy">Generate recommendations to see which items are gaining or declining and what to review next.</p>}
+      </Card>
+    </div>
+  </div>;
+}
+
+function severityRank(severity: AlertRecord["severity"]) { return severity === "critical" ? 0 : severity === "warning" ? 1 : 2; }
 
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) { return <article className={`mt-home-card ${className}`}>{children}</article>; }
 

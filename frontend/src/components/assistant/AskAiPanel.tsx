@@ -6,6 +6,7 @@ import { ArrowUpRight, Bot, LoaderCircle, Send, X } from "lucide-react";
 import { api } from "@/services/api";
 
 const suggestions = [
+  "How can I grow my menu sales?",
   "Show my current menu",
   "How many orders were placed in the last 24 hours?",
   "How do I test and publish my kiosk?",
@@ -89,7 +90,7 @@ export function AskAiPanel({ businessId }: { businessId: string | null }) {
     requestController.current = controller;
     setActiveRequest({ id: activeId, businessId });
     try {
-      const result = await api.askAssistant(businessId, prompt, controller.signal);
+      const result = await api.askAssistant(businessId, prompt, { signal: controller.signal });
       if (requestController.current === controller) setAsked({ businessId, question: prompt, result });
     } catch {
       if (!controller.signal.aborted) {
@@ -137,7 +138,7 @@ export function AskAiPanel({ businessId }: { businessId: string | null }) {
         <header className="mt-ai-header">
           <div className="mt-ai-heading">
             <span className="mt-ai-mark"><Bot size={20} aria-hidden="true" /></span>
-            <span><h2 id="mt-ai-title">Ask AI</h2><p>Ask about your menu, orders, sales, and setup</p></span>
+            <span><h2 id="mt-ai-title">Ask AI</h2><p>Ask about your menu, growth, orders, sales, and setup</p></span>
           </div>
           <button type="button" className="mt-ai-close" onClick={close} aria-label="Close Ask AI"><X size={19} /></button>
         </header>
@@ -174,8 +175,9 @@ export function AskAiPanel({ businessId }: { businessId: string | null }) {
             </section> : <div className="mt-ai-welcome">
               <span className="mt-ai-welcome-icon"><Bot size={23} aria-hidden="true" /></span>
               <h3>What can I help you find?</h3>
-              <p>Get clear answers from your live, access-checked business data.</p>
+              <p>Get source-backed help and menu insights from your business data.</p>
               <div className="mt-ai-suggestions">{suggestions.map((suggestion) => <button type="button" key={suggestion} onClick={() => setDraftQuestion({ businessId, text: suggestion })}>{suggestion}</button>)}</div>
+              <p className="mt-ai-data-note">When Gemini is enabled, your question, relevant help text, and aggregated sales/item metrics may be sent to Google. Customer details are excluded.</p>
             </div>}
           </div>
         </div>
