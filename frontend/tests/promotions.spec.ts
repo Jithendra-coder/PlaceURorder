@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { filterPromotions, promotionStatus } from "../src/components/dashboard/KioskExperiencePage";
+import { filterPromotions, promotionStatus } from "../src/features/dashboard/kiosk-experience/KioskExperiencePage";
 import type { PromotionRecord } from "../src/lib/api";
 
 const rows = [

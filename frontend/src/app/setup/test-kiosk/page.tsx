@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { KioskRuntime } from "@/app/kiosk/[id]/page";
+import { KioskRuntime } from "@/features/kiosk/KioskApp";
 import { useBusiness } from "@/components/layout/BusinessProvider";
 import { VirtualKioskFrame } from "@/components/onboarding/VirtualKioskFrame";
 import { SetupShell } from "@/components/layout/SetupShell";

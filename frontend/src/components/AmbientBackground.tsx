@@ -17,11 +17,11 @@ type Particle = {
 };
 
 const palette = [
-  { r: 0, g: 0, b: 0 },
-  { r: 104, g: 114, b: 128 },
-  { r: 161, g: 161, b: 170 },
-  { r: 75, g: 85, b: 99 },
-  { r: 24, g: 24, b: 27 },
+  { r: 21, g: 94, b: 239 },
+  { r: 71, g: 85, b: 105 },
+  { r: 102, g: 112, b: 133 },
+  { r: 152, g: 162, b: 179 },
+  { r: 29, g: 41, b: 57 },
 ];
 
 function seededRandom(a: number, b: number, c: number, d: number) {
@@ -56,10 +56,10 @@ export function AmbientBackground() {
     const makeParticles = () => {
       const random = seededRandom(1337, 42, 999, 12345);
       const density = width < 640
-        ? { tiny: 16, medium: 8, large: 4, glow: 4 }
+        ? { tiny: 10, medium: 5, large: 2, glow: 2 }
         : width < 1024
-          ? { tiny: 24, medium: 12, large: 6, glow: 6 }
-          : { tiny: 32, medium: 16, large: 8, glow: 8 };
+          ? { tiny: 16, medium: 8, large: 3, glow: 2 }
+          : { tiny: 22, medium: 11, large: 5, glow: 3 };
       const motionScale = reducedMotion ? 0.45 : 1;
 
       const create = (kind: ParticleKind): Particle => {
@@ -79,20 +79,20 @@ export function AmbientBackground() {
         let speed = 0;
         if (kind === "tiny") {
           radius = 0.8 + random();
-          opacity = 0.18 + random() * 0.24;
+          opacity = 0.08 + random() * 0.12;
           speed = 0.015 + random() * 0.02;
         } else if (kind === "medium") {
-          radius = 2 + random() * 1.5;
-          opacity = 0.32 + random() * 0.3;
+          radius = 1.5 + random();
+          opacity = 0.12 + random() * 0.16;
           speed = 0.01 + random() * 0.016;
         } else if (kind === "large") {
-          radius = 4 + random() * 2;
-          opacity = 0.55 + random() * 0.27;
+          radius = 2.5 + random() * 1.5;
+          opacity = 0.18 + random() * 0.14;
           speed = 0.006 + random() * 0.012;
         } else {
-          radius = 3 + random() * 2;
-          glow = 8 + random() * 6;
-          opacity = 0.3 + random() * 0.3;
+          radius = 2 + random();
+          glow = 6 + random() * 4;
+          opacity = 0.08 + random() * 0.12;
           speed = 0.004 + random() * 0.01;
         }
         return {
@@ -128,7 +128,7 @@ export function AmbientBackground() {
             const second = connectable[right];
             const distance = Math.hypot(first.x - second.x, first.y - second.y);
             if (distance >= 145) continue;
-            const alpha = (1 - distance / 145) * 0.045;
+            const alpha = (1 - distance / 145) * 0.025;
             context.beginPath();
             context.moveTo(first.x, first.y);
             context.lineTo(second.x, second.y);
@@ -169,8 +169,9 @@ export function AmbientBackground() {
     };
 
     const animate = (time: number) => {
-      if (visible && !reducedMotion) draw(time);
-      if (!reducedMotion) frame = requestAnimationFrame(animate);
+      if (!visible || reducedMotion) return;
+      draw(time);
+      frame = requestAnimationFrame(animate);
     };
 
     const resize = () => {
@@ -184,14 +185,18 @@ export function AmbientBackground() {
       if (reducedMotion) draw(0);
     };
 
-    const onVisibilityChange = () => { visible = document.visibilityState === "visible"; };
+    const onVisibilityChange = () => {
+      visible = document.visibilityState === "visible";
+      cancelAnimationFrame(frame);
+      if (visible && !reducedMotion) frame = requestAnimationFrame(animate);
+    };
     const motionQuery = matchMedia("(prefers-reduced-motion: reduce)");
     const onMotionChange = (event: MediaQueryListEvent) => {
       reducedMotion = event.matches;
       cancelAnimationFrame(frame);
       makeParticles();
       if (reducedMotion) draw(0);
-      else frame = requestAnimationFrame(animate);
+      else if (visible) frame = requestAnimationFrame(animate);
     };
 
     resize();
@@ -199,7 +204,7 @@ export function AmbientBackground() {
     resizeObserver.observe(document.body);
     document.addEventListener("visibilitychange", onVisibilityChange);
     motionQuery.addEventListener("change", onMotionChange);
-    if (!reducedMotion) frame = requestAnimationFrame(animate);
+    if (!reducedMotion && visible) frame = requestAnimationFrame(animate);
 
     return () => {
       cancelAnimationFrame(frame);

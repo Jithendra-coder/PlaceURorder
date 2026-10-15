@@ -21,6 +21,7 @@ async function mockDashboard(page: Page, locations: Array<{ id: string; name: st
     if (path === "/onboarding/status") return route.fulfill({ json: { has_business: true, business_id: business.id, onboarding_step: 6, onboarding_completed: true, next_route: "/dashboard" } });
     if (path === "/businesses/me") return route.fulfill({ json: { business } });
     if (path.endsWith(`/businesses/${business.id}/dashboard`)) { calls.dashboard += 1; return options.failDashboard ? route.fulfill({ status: 500, json: { detail: "Internal server error" } }) : route.fulfill({ json: dashboard }); }
+    if (path === `/businesses/${business.id}/insights`) return options.failDashboard ? route.fulfill({ status: 500, json: { detail: "Internal server error" } }) : route.fulfill({ json: { stats: dashboard, previous: dashboard, recent_orders: [] } });
     if (path.endsWith(`/businesses/${business.id}/products`) || path === `/businesses/${business.id}/products`) return options.failProducts ? route.fulfill({ status: 500, json: { detail: "Internal server error" } }) : route.fulfill({ json: { products: [product] } });
     if (path === `/businesses/${business.id}/categories`) return options.failCategories ? route.fulfill({ status: 500, json: { detail: "Internal server error" } }) : route.fulfill({ json: { categories: [category] } });
     if (path === `/businesses/${business.id}/combos`) return route.fulfill({ json: { combos: [] } });
@@ -38,6 +39,7 @@ async function mockDashboard(page: Page, locations: Array<{ id: string; name: st
       }
       return route.fulfill({ json: { promotions: currentPromotions } });
     }
+    if (path === `/businesses/${business.id}/qr-codes`) return route.fulfill({ json: { qr_codes: [] } });
     if (path === `/businesses/${business.id}/setup/draft-menu`) return route.fulfill({ json: { business: { ...business, welcome_screen: { ...business.welcome_screen, enabled: false } }, categories: [category], products: [product] } });
     if (path === `/businesses/${business.id}/availability`) return route.fulfill({ json: { rules: [], locations, resolved: [{ product_id: product.id, available: true, next_change_at: null, source: "default", reason: null }] } });
     if (path === `/products/${product.id}/availability` && method === "PATCH") return failArchive ? route.fulfill({ status: 500, json: { detail: "Could not save" } }) : route.fulfill({ json: { data: { product } } });
@@ -74,6 +76,22 @@ test("Manage Menu archive dialog is wired to one target and closes safely", asyn
   await expect(page.getByRole("heading", { name: "Archive item?" })).toHaveCount(0);
 });
 
+test("Branding & Theme uses the shared logo upload without a logo shape control", async ({ page }) => {
+  await mockDashboard(page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/dashboard/kiosk-experience/branding");
+
+  await expect(page.getByRole("heading", { name: "Branding & Theme" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Brand colors" })).toBeVisible();
+  await expect(page.getByText("Logo Shape", { exact: true })).toHaveCount(0);
+  await page.screenshot({ path: "../qa-artifacts/ui-audit/after/logo-refresh/branding-theme.png", fullPage: true });
+  await expect(page.getByLabel("Choose logo")).toHaveAttribute("accept", "image/png,image/jpeg,image/gif,image/webp");
+  await expect(page.getByText("PNG, JPG, GIF or WebP · 5 MB max")).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false);
+  await page.screenshot({ path: "../qa-artifacts/ui-audit/after/logo-refresh/branding-theme-mobile.png", fullPage: true });
+});
+
 test("Manage Menu stays available when dashboard analytics fails", async ({ page }) => {
   const calls = await mockDashboard(page, [], { failDashboard: true });
   await page.goto("/dashboard/kiosk-experience/menu?mode=items");
@@ -84,9 +102,9 @@ test("Manage Menu stays available when dashboard analytics fails", async ({ page
 test("Manage Menu keeps a menu-local error and retry when a required API fails", async ({ page }) => {
   await mockDashboard(page, [], { failCategories: true });
   await page.goto("/dashboard/kiosk-experience/menu?mode=items");
-  await expect(page.locator(".mt-state-card")).toContainText("Could not load Manage Menu.");
-  await expect(page.locator(".mt-state-card")).toContainText("The server could not complete this request.");
-  await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
+  const errorState = page.getByRole("alert").filter({ hasText: "Could not load Manage Menu." });
+  await expect(errorState).toContainText("The server could not complete this request.");
+  await expect(errorState.getByRole("button", { name: "Try again now" })).toBeVisible();
 });
 
 test("Ask AI starts closed and opens as a compact floating panel on desktop and mobile", async ({ page }) => {
@@ -242,6 +260,12 @@ test("Promotions route has one visible heading and no generic details page", asy
   await page.goto("/dashboard/kiosk-experience/promotions");
   await expect(page.getByRole("heading", { name: "Promotions", exact: true })).toHaveCount(1);
   await expect(page.getByText("Promotion details", { exact: true })).toHaveCount(0);
+});
+
+test("QR Codes page uses the shared page heading", async ({ page }) => {
+  await mockDashboard(page);
+  await page.goto("/dashboard/kiosk-experience/qr-codes");
+  await expect(page.getByRole("heading", { name: "QR Codes", level: 1 })).toBeVisible();
 });
 
 test("Promotions renders working groups and guarded create types", async ({ page }) => {

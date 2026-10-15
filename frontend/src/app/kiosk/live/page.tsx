@@ -1,6 +1,6 @@
 "use client";
 
-import { KioskRuntime } from "@/app/kiosk/[id]/page";
+import { KioskRuntime } from "@/features/kiosk/KioskApp";
 
 export default function LiveKioskSessionPage() {
   return <KioskRuntime deviceSession />;

@@ -44,7 +44,7 @@ export function OnboardingTopBar({
             if (step < currentStep) {
               return (
                 <svg key={step} className="mt-onboarding-progress__tick" viewBox="0 0 14 14" fill="none">
-                  <path d="M1 7l4 4 8-9" stroke="#000000" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M1 7l4 4 8-9" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               );
             }

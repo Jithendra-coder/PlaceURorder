@@ -7,7 +7,7 @@ import { useBusiness } from "@/components/layout/BusinessProvider";
 import { ConfirmationDialog, DetailsDrawer, Skeleton } from "@/components/ui/DashboardUI";
 import { api, type KioskVersionRecord, type KioskVersionSnapshot } from "@/lib/api";
 import type { Category, Product } from "@/lib/types";
-import { TestKioskDialog } from "@/components/dashboard/TestPublishPage";
+import { TestKioskDialog } from "@/features/dashboard/kiosk-experience/TestPublishPage";
 import type { Business } from "@/services/api";
 
 const dateTime = (value: string) => new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });

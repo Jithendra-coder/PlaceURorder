@@ -9,11 +9,15 @@ async function mockDashboard(page: Page) {
     if (path === "/onboarding/status") return route.fulfill({ json: { has_business: true, business_id: business.id, onboarding_step: 6, onboarding_completed: true, next_route: "/dashboard" } });
     if (path === "/businesses/me") return route.fulfill({ json: { business } });
     if (path.endsWith("/dashboard")) return route.fulfill({ json: stats });
+    if (path.endsWith(`/businesses/${business.id}/insights`)) return route.fulfill({ json: { stats, previous: stats, recent_orders: [] } });
     if (path.endsWith("/orders") || path.endsWith("/orders/active")) return route.fulfill({ json: { orders: [] } });
     if (path.endsWith("/products")) return route.fulfill({ json: { products: [] } });
     if (path.endsWith("/categories")) return route.fulfill({ json: { categories: [] } });
+    if (path.endsWith("/combos")) return route.fulfill({ json: { combos: [] } });
     if (path.endsWith("/devices")) return route.fulfill({ json: { devices: [] } });
     if (path.endsWith("/payments")) return route.fulfill({ json: { payments: [], summary: { total_collected: 0, paid_count: 0, failed_count: 0 } } });
+    if (path.endsWith("/payment-accounts")) return route.fulfill({ json: { accounts: [] } });
+    if (path.endsWith("/payment-location-assignments")) return route.fulfill({ json: { assignments: [] } });
     if (path.endsWith("/administration/locations")) return route.fulfill({ json: { locations: [] } });
     return route.fulfill({ json: {} });
   });
