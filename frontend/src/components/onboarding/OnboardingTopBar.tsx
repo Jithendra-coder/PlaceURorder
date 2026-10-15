@@ -4,21 +4,25 @@ import Link from "next/link";
 
 const steps = ["Business Type", "Business Details", "Menu Items", "Kiosk Layout", "Welcome Screen", "Test Kiosk"];
 
-export function PlaceURorderLogo({ className = "", height = 46 }: { className?: string; height?: number }) {
+export function PlaceURorderLogo({ className = "", height = 46, wordmarkOnly = false }: { className?: string; height?: number; wordmarkOnly?: boolean }) {
   return (
     <div className={`mt-onboarding-logo ${className}`.trim()} role="img" aria-label="PlaceURorder logo">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src="/place-ur-order-logo.png"
-        alt="PlaceURorder"
-        style={{
-          height: `${height}px`,
-          width: "auto",
-          maxWidth: "240px",
-          objectFit: "contain",
-          display: "block",
-        }}
-      />
+      {wordmarkOnly ? (
+        <span className="mt-onboarding-logo__wordmark"><span>Place</span><span>URorder</span></span>
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src="/place-ur-order-logo.png"
+          alt="PlaceURorder"
+          style={{
+            height: `${height}px`,
+            width: "auto",
+            maxWidth: "240px",
+            objectFit: "contain",
+            display: "block",
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -52,7 +56,7 @@ export function OnboardingTopBar({
           })}
         </div>
         <span className="mt-sr-only">Step {currentStep} of 6: {steps[currentStep - 1]}</span>
-        <Link href="/dashboard" className="mt-onboarding-topbar__logo" aria-label="PlaceURorder dashboard"><PlaceURorderLogo /></Link>
+        <Link href="/dashboard" className="mt-onboarding-topbar__logo" aria-label="PlaceURorder dashboard"><PlaceURorderLogo wordmarkOnly /></Link>
         <button
           type="button"
           className="mt-onboarding-topbar__continue"
