@@ -174,12 +174,17 @@ test("onboarding flow stays consistent from business setup through Test Kiosk", 
   await page.goto("/setup/business-type");
   const selectedType = page.locator('.mt-business-type-option[aria-checked="true"]');
   await expect(selectedType).toBeVisible();
-  expect(await selectedType.evaluate((option) => getComputedStyle(option).borderTopColor)).toBe("rgb(11, 87, 240)");
+  await page.locator(".mt-business-type-option img").evaluateAll((images) => Promise.all(images.map((image) => (image as HTMLImageElement).decode())));
+  expect(await selectedType.evaluate((option) => getComputedStyle(option).borderTopColor)).toBe("rgb(52, 64, 84)");
+  expect(await page.locator(".mt-business-type-continue").evaluate((button) => getComputedStyle(button).backgroundColor)).toBe("rgb(52, 64, 84)");
+  await expect(page.locator(".mt-onboarding-topbar__logo img")).toHaveCount(0);
+  await expect(page.locator(".mt-onboarding-topbar__logo")).toContainText("PlaceURorder");
   await captureResponsive("business-type");
 
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.locator(".mt-business-type-continue").click();
   await expect(page).toHaveURL(/\/setup\/business-details$/);
+  expect(await page.locator(".mt-tax-mode input:checked").evaluate((input) => getComputedStyle(input).accentColor)).toBe("rgb(52, 64, 84)");
   await captureResponsive("business-details");
 
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -191,7 +196,7 @@ test("onboarding flow stays consistent from business setup through Test Kiosk", 
   for (let index = 0; index < 4; index += 1) await menuItems.nth(index).click();
   const selectedMenuItems = page.locator('.mt-menu-selection-card[aria-pressed="true"]');
   await expect(selectedMenuItems).toHaveCount(4);
-  expect(await selectedMenuItems.first().evaluate((card) => getComputedStyle(card).borderTopColor)).toBe("rgb(11, 87, 240)");
+  expect(await selectedMenuItems.first().evaluate((card) => getComputedStyle(card).borderTopColor)).toBe("rgb(52, 64, 84)");
   await expect(page.locator(".mt-onboarding-topbar__continue")).toBeEnabled();
   await captureResponsive("menu-items");
 
