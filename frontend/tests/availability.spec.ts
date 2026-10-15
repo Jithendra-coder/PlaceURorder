@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { comboAvailability } from "../src/components/dashboard/AvailabilityPage";
+import { comboAvailability } from "../src/features/dashboard/kiosk-experience/AvailabilityPage";
 import type { Combo } from "../src/lib/types";
 
 const combo = {

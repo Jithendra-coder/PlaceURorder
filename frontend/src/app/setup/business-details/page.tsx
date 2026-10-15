@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { LogoUploadField } from "@/components/ui/LogoUploadField";
 import { useBusiness } from "@/components/layout/BusinessProvider";
 import { SetupField, SetupInput, SetupSelect, SetupShell } from "@/components/layout/SetupShell";
 import { api } from "@/services/api";
@@ -22,8 +23,6 @@ type Details = {
   tagline: string;
   phone: string;
   email: string;
-  accent: string;
-  logoShape: "square" | "circle";
   state: string;
   city: string;
   postal: string;
@@ -35,7 +34,7 @@ type Details = {
 };
 
 const empty: Details = {
-  name: "", tagline: "", phone: "", email: "", accent: "#000000", logoShape: "square",
+  name: "", tagline: "", phone: "", email: "",
   state: "", city: "", postal: "", address: "", taxMode: "inclusive", tax: "5", gstin: "", fssai: "",
 };
 
@@ -63,7 +62,6 @@ export default function BusinessDetailsPage() {
       name: business.name,
       tagline: business.tagline || "",
       phone: business.contact_phone || "",
-      accent: business.brand_color || "#000000",
       state: business.state || "",
       city: business.city || "",
       postal: business.postal_code || "",
@@ -94,7 +92,6 @@ export default function BusinessDetailsPage() {
         state: details.state,
         postal_code: details.postal,
         tax_percent: Number(details.tax) || 0,
-        brand_color: details.accent,
         onboarding_step: 2,
       };
       let saved = business ? await api.updateBusiness(business.id, payload) : await api.createBusiness(payload);
@@ -137,21 +134,11 @@ export default function BusinessDetailsPage() {
                 <SetupInput id="email" type="email" value={details.email} onChange={(event) => update("email", event.target.value)} placeholder="Enter business email address" />
               </SetupField>
             </div>
-            <div className="mt-business-pair">
-              <SetupField id="accent" label="Brand Accent Color" optional>
-                <div className="mt-colour-control"><SetupInput id="accent-picker" type="color" value={details.accent} onChange={(event) => update("accent", event.target.value.toUpperCase())} /><SetupInput id="accent" value={details.accent} onChange={(event) => update("accent", event.target.value.toUpperCase().slice(0, 7))} /><button type="button" onClick={() => update("accent", "#000000")}>Reset</button></div>
-              </SetupField>
-              <SetupField id="logo-shape-square" label="Logo Shape">
-                <div className="mt-logo-shape">
-                  {(["square", "circle"] as const).map((shape) => <button id={`logo-shape-${shape}`} type="button" key={shape} aria-pressed={details.logoShape === shape} onClick={() => update("logoShape", shape)}><i data-shape={shape} />{shape[0].toUpperCase() + shape.slice(1)}</button>)}
-                </div>
-              </SetupField>
-            </div>
           </div>
 
           <aside className="mt-business-media">
-            <div><span className="mt-business-media__label">Selected Business</span><div className="mt-business-type-preview"><Image src={`/business-types/${typeId}.webp`} alt="" width={80} height={80} /><strong>{typeId.replaceAll("-", " ")}</strong></div></div>
-            <label className="mt-logo-upload" htmlFor="business-logo"><span>Business Logo</span><div>{logo ? logo.name : "Upload logo"}</div><input id="business-logo" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={(event) => setLogo(event.target.files?.[0] || null)} /></label>
+            <LogoUploadField value={business?.logo_path} onFile={setLogo} onClearSelection={() => setLogo(null)} />
+            <div className="mt-business-media__selected"><span className="mt-business-media__label">Selected Business</span><div className="mt-business-type-preview"><Image src={`/business-types/${typeId}.webp`} alt="" width={80} height={80} /><strong>{typeId.replaceAll("-", " ")}</strong></div></div>
           </aside>
         </div>
 

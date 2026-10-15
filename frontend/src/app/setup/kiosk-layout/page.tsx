@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { KioskRuntime } from "@/app/kiosk/[id]/page";
+import { KioskRuntime } from "@/features/kiosk/KioskApp";
 import { VirtualKioskFrame } from "@/components/onboarding/VirtualKioskFrame";
 import { useBusiness } from "@/components/layout/BusinessProvider";
 import { SetupInfoBanner, SetupSelectedBadge, SetupShell } from "@/components/layout/SetupShell";
@@ -46,7 +46,7 @@ export default function KioskLayoutPage() {
   }, [business, selectedPresets]);
 
   const save = async () => {
-    if (!business || !selected || busy) return;
+    if (!business || !selected || selectedPresets.length < 4 || busy) return;
     setBusy(true);
     setError("");
     try {
@@ -60,13 +60,9 @@ export default function KioskLayoutPage() {
   };
 
   return (
-    <SetupShell step={4} title="Kiosk Layout" description="Choose how your menu should appear on the kiosk." onContinue={() => void save()} continueDisabled={loading || !business || !selected || !selectedPresets.length} continueBusy={busy} className="mt-setup-page--layout">
+    <SetupShell step={4} title="Kiosk Layout" description="Choose how your menu should appear on the kiosk." onContinue={() => void save()} continueDisabled={loading || !business || !selected || selectedPresets.length < 4} continueBusy={busy} className="mt-setup-page--layout">
       {error && <p className="mt-setup-error" role="alert">{error}</p>}
-      {!loading && !selectedPresets.length && (
-        <p className="mt-setup-error" role="alert">
-          Choose at least four preview items on the Menu Items step before selecting a layout.
-        </p>
-      )}
+      {!loading && selectedPresets.length < 4 && <SetupInfoBanner>Choose at least four menu items on the Menu Items step to preview kiosk layouts.</SetupInfoBanner>}
       <div className="mt-kiosk-layout-grid" role="radiogroup" aria-label="Choose a kiosk layout">
         {layouts.map((layout) => {
           const chosen = selected === layout.id;
@@ -111,7 +107,7 @@ export default function KioskLayoutPage() {
           );
         })}
       </div>
-      <SetupInfoBanner>You can always change the layout later from settings.</SetupInfoBanner>
+      {selectedPresets.length >= 4 && <SetupInfoBanner>You can always change the layout later from settings.</SetupInfoBanner>}
     </SetupShell>
   );
 }

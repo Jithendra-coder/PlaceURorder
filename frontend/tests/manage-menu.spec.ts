@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { filterMenuProducts, formatMenuPrice, itemAttentionIssues } from "../src/components/dashboard/ManageMenuPage";
+import { filterMenuProducts, formatMenuPrice, itemAttentionIssues } from "../src/features/dashboard/kiosk-experience/ManageMenuPage";
 import type { Product } from "../src/lib/types";
 
 const rows = [

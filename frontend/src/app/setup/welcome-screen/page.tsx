@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { KioskRuntime } from "@/app/kiosk/[id]/page";
+import { KioskRuntime } from "@/features/kiosk/KioskApp";
 import { useBusiness } from "@/components/layout/BusinessProvider";
 import { VirtualKioskFrame } from "@/components/onboarding/VirtualKioskFrame";
 import { SetupInfoBanner, SetupSelectedBadge, SetupShell } from "@/components/layout/SetupShell";
@@ -43,7 +43,7 @@ export default function WelcomeScreenPage() {
     : null, [business, selectedPresets]);
 
   const save = async () => {
-    if (!business || busy) return;
+    if (!business || selectedPresets.length < 4 || busy) return;
     setBusy(true);
     setError("");
     try {
@@ -60,13 +60,9 @@ export default function WelcomeScreenPage() {
   };
 
   return (
-    <SetupShell step={5} title="Welcome Screen" description="Preview how customers begin using your kiosk." onContinue={() => void save()} continueDisabled={loading || !business || !selectedPresets.length} continueBusy={busy} className="mt-setup-page--welcome">
+    <SetupShell step={5} title="Welcome Screen" description="Preview how customers begin using your kiosk." onContinue={() => void save()} continueDisabled={loading || !business || selectedPresets.length < 4} continueBusy={busy} className="mt-setup-page--welcome">
       {error && <p className="mt-setup-error" role="alert">{error}</p>}
-      {!loading && !selectedPresets.length && (
-        <p className="mt-setup-error" role="alert">
-          Choose preview items on the Menu Items step to continue the onboarding flow.
-        </p>
-      )}
+      {!loading && selectedPresets.length < 4 && <SetupInfoBanner>Choose at least four menu items on the Menu Items step to preview the welcome screen.</SetupInfoBanner>}
       <div className="mt-welcome-selection-grid mt-welcome-selection-grid--single">
         <section className="mt-welcome-selection-card" data-selected="true" aria-label="Selected welcome screen">
           <div className="mt-welcome-selection-card__header"><strong>Welcome screen</strong><SetupSelectedBadge /></div>
@@ -88,7 +84,7 @@ export default function WelcomeScreenPage() {
           </div>
         </section>
       </div>
-      <SetupInfoBanner>You can change the welcome screen settings later.</SetupInfoBanner>
+      {selectedPresets.length >= 4 && <SetupInfoBanner>You can change the welcome screen settings later.</SetupInfoBanner>}
     </SetupShell>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { KioskRuntime } from "@/app/kiosk/[id]/page";
+import { KioskRuntime } from "@/features/kiosk/KioskApp";
 import { api } from "@/lib/api";
 import { testSessionStateMessage } from "@/features/test-runtime";
 

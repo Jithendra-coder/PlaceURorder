@@ -1,3 +1,3 @@
-import { AdministrationModule } from "@/components/dashboard/AdministrationModule";
+import { AdministrationModule } from "@/features/dashboard/administration/AdministrationModule";
 
 export default function AdministrationLocationsPage() { return <AdministrationModule mode="locations" />; }

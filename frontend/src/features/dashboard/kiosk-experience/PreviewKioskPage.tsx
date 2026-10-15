@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Check, Info, Maximize2, Minimize2, RefreshCw, RotateCcw, X } from "lucide-react";
-import { KioskRuntime, type KioskExperienceData } from "@/app/kiosk/[id]/page";
+import { KioskRuntime, type KioskExperienceData } from "@/features/kiosk/KioskApp";
 import { Skeleton } from "@/components/ui/DashboardUI";
 import { api as dataApi, type PromotionRecord } from "@/lib/api";
 import { parseKioskThemeSelection } from "@/lib/constants";

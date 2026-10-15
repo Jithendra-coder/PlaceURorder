@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Check, ChevronRight, History, Info, Play, RotateCcw, ShieldCheck } from "lucide-react";
-import { KioskRuntime, type KioskExperienceData } from "@/app/kiosk/[id]/page";
+import { KioskRuntime, type KioskExperienceData } from "@/features/kiosk/KioskApp";
 import { useBusiness } from "@/components/layout/BusinessProvider";
 import { ConfirmationDialog, DetailsDrawer, Skeleton } from "@/components/ui/DashboardUI";
 import { VirtualKioskFrame } from "@/components/onboarding/VirtualKioskFrame";

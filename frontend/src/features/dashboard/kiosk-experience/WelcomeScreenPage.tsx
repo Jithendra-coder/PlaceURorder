@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Check, ExternalLink, Image as ImageIcon, Info, Loader2, RefreshCw, RotateCcw, Upload, X } from "lucide-react";
-import { KioskRuntime, type KioskExperienceData } from "@/app/kiosk/[id]/page";
+import { KioskRuntime, type KioskExperienceData } from "@/features/kiosk/KioskApp";
 import { DetailsDrawer, Skeleton, Toggle } from "@/components/ui/DashboardUI";
 import { api as dashboardApi, assetUrl as nullableAssetUrl } from "@/lib/api";
 import type { Business, Category, Product } from "@/lib/types";
