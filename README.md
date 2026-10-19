@@ -54,43 +54,46 @@ PlaceURorder is a restaurant ordering and operations platform for self-service k
 
 ## Repository Structure
 
-`	ext
-universal-kiosk-app/
+The repository keeps the web app, API, and database migration history in separate top-level areas:
+
+```text
+.
+├── .github/
+│   └── workflows/quality.yml   # CI quality checks
 ├── backend/
-│   ├── migrations/             # Schema migration scripts
-│   ├── routers/                # Modular API route controllers
-│   ├── services/               # Business logic and domain services
-│   ├── tests/                  # Backend unit and integration tests
-│   ├── config.py               # Application settings and environment variables
-│   ├── database.py             # PostgreSQL connection pool and query helpers
+│   ├── knowledge/              # Curated assistant help content
+│   ├── migrations/             # Backend SQL migrations
+│   ├── routers/                # FastAPI route handlers
+│   ├── services/               # Business logic and integrations
+│   ├── tests/                  # Backend tests
+│   ├── config.py               # Application configuration
+│   ├── database.py             # Database connection and query helpers
 │   ├── main.py                 # FastAPI application entry point
-│   ├── postgres_schema.sql     # Database tables, triggers, and indices
-│   ├── requirements.txt        # Python production dependencies
-│   └── README.md               # Dedicated backend documentation
-│
+│   ├── postgres_schema.sql     # Local PostgreSQL schema
+│   ├── requirements.txt        # Backend dependencies
+│   ├── README.md               # Backend setup and API notes
+│   └── webhook_worker.py       # Queued webhook delivery worker
+├── docs/legal/                 # Privacy notice and terms drafts
 ├── frontend/
-│   ├── public/                 # Static assets, branding presets, and icons
-│   ├── scripts/                # Verification and linting scripts
+│   ├── public/                 # Static assets
+│   ├── scripts/                # Frontend quality checks
 │   ├── src/
-│   │   ├── app/                # Next.js 16 App Router pages and layouts
-│   │   │   ├── (auth)/         # Sign-in, sign-up, password reset
-│   │   │   ├── counter/        # Counter POS interface
-│   │   │   ├── dashboard/      # Merchant administration portal
-│   │   │   ├── device/         # Device activation and pairing
-│   │   │   ├── kiosk/          # Customer self-service kiosk
-│   │   │   ├── kitchen/        # Kitchen display system (KDS)
-│   │   │   └── setup/          # Business onboarding and setup wizard
-│   │   ├── components/         # Reusable UI components
-│   │   ├── features/           # Domain-specific feature modules
-│   │   ├── lib/                # Client utilities and helpers
-│   │   └── services/           # Frontend API client and auth services
-│   ├── tests/                  # Playwright E2E test specs
-│   ├── package.json            # Node.js dependencies and scripts
-│   └── playwright.config.ts    # End-to-end testing configuration
-│
-├── .env.example                # Root environment template
-└── README.md                   # Project overview and guide
-`
+│   │   ├── app/                # App Router pages and route-specific components
+│   │   ├── components/         # Shared UI components
+│   │   ├── features/           # Domain-focused frontend modules
+│   │   ├── lib/                # Shared utilities and types
+│   │   └── services/           # API and authentication clients
+│   ├── tests/                  # Playwright end-to-end tests
+│   ├── package.json            # Frontend scripts and dependencies
+│   └── playwright.config.ts    # End-to-end test configuration
+├── supabase/migrations/        # Hosted Supabase schema migrations
+├── .env.example                # Local environment template
+├── compose.yaml                # Local development services
+├── pytest.ini                  # Backend test configuration
+└── README.md                   # Project setup and overview
+```
+
+The Next.js routes live under `frontend/src/app/` (`admin`, `auth`, `counter`, `dashboard`, `device`, `kiosk`, `kitchen`, `setup`, and `test`). Backend SQL migrations are in `backend/migrations/`; Supabase migrations are tracked separately in `supabase/migrations/`.
 
 ---
 
