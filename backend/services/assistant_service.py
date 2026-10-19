@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import math
@@ -14,6 +15,7 @@ from uuid import UUID
 
 from fastapi import HTTPException
 
+from config import get_settings
 from database import DbClient
 from schemas import StaffRole
 from services import business_service
@@ -21,6 +23,12 @@ from services import business_service
 
 POLICY_PATH = Path(__file__).resolve().parents[1] / "knowledge" / "placeurorder-help-policy.md"
 DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite"
+EMBEDDING_MODEL = "gemini-embedding-001"
+EMBEDDING_DIMENSIONS = 768
+KNOWLEDGE_SOURCE_KEY = "placeurorder-help-policy"
+RAG_RESULT_LIMIT = 3
+# shortcut: initial cutoff; recalibrate against reviewed questions as the guide grows.
+RAG_MIN_SIMILARITY = 0.45
 logger = logging.getLogger(__name__)
 STOP_WORDS = {"a", "all", "an", "and", "are", "available", "currently", "current", "do", "does", "for", "how", "i", "in", "is", "it", "last", "list", "me", "my", "of", "on", "please", "show", "the", "to", "unavailable", "what", "when", "where", "which", "with", "you", "your"}
 MENU_TERMS = {"catalog", "category", "categories", "item", "items", "menu", "price", "prices", "product", "products"}
@@ -79,9 +87,18 @@ def answer(client: DbClient, business_id: UUID, user_id: UUID, question: str, lo
             answer_kind="data" if source["kind"] == "live" else "narrative",
         )
 
-    if policy_sources:
-        api_key = os.getenv("GEMINI_API_KEY", "").strip()
-        model = (os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL).strip() or DEFAULT_GEMINI_MODEL).removeprefix("models/")
+    settings = get_settings()
+    api_key = (os.getenv("GEMINI_API_KEY") or settings.gemini_api_key or "").strip()
+    if api_key and client is not None and (policy_sources or _is_help_question(question)):
+        vector_sources = _retrieve_policy_pgvector(client, question, api_key)
+        if vector_sources:
+            policy_sources = vector_sources
+
+    intent = _classify_intent(tokens, bool(policy_sources), question)
+    if intent == "product_help" and policy_sources:
+        model = (os.getenv("GEMINI_MODEL") or settings.gemini_model or DEFAULT_GEMINI_MODEL).strip().removeprefix("models/")
+        if api_key and client is not None:
+            client.commit()
         generated = _generate_answer(question, policy_sources, api_key, model) if api_key else None
         return _response(
             "product_help",
@@ -190,6 +207,8 @@ def _policy_version() -> str:
     for line in POLICY_PATH.read_text(encoding="utf-8").splitlines():
         if line.startswith("Version:"):
             return line.partition(":")[2].strip()
+        if line.startswith("- **Version:**"):
+            return line.removeprefix("- **Version:**").strip()
     return "unversioned"
 
 
@@ -197,22 +216,56 @@ def _policy_version() -> str:
 def _policy_sections() -> tuple[dict, ...]:
     text = POLICY_PATH.read_text(encoding="utf-8")
     sections: list[dict] = []
-    title = "Product help"
+    title: str | None = None
     lines: list[str] = []
+
+    def append_section() -> None:
+        if title is None:
+            return
+        content = " ".join(part.strip() for part in lines if part.strip())
+        if content:
+            sections.append({"title": title, "content": content, "tokens": _tokens(content)})
+
     for line in text.splitlines():
         if line.startswith("## ") or line.startswith("### "):
-            if lines:
-                content = " ".join(part.strip() for part in lines if part.strip())
-                if content:
-                    sections.append({"title": title, "content": content, "tokens": _tokens(content)})
+            append_section()
             title = line.lstrip("# ").strip()
             lines = []
-        else:
+        elif title is not None:
             lines.append(line)
-    content = " ".join(part.strip() for part in lines if part.strip())
-    if content:
-        sections.append({"title": title, "content": content, "tokens": _tokens(content)})
+    append_section()
     return tuple(sections)
+
+
+def _policy_chunks(max_chars: int = 1200, overlap_chars: int = 160) -> list[dict]:
+    chunks = []
+    for section in _policy_sections():
+        title_key = "-".join(sorted(_tokens(section["title"]))) or "section"
+        text = section["content"].strip()
+        start = 0
+        index = 1
+        while start < len(text):
+            end = min(start + max_chars, len(text))
+            if end < len(text):
+                boundary = text.rfind(" ", start + max_chars // 2, end)
+                if boundary > start:
+                    end = boundary
+            content = text[start:end].strip()
+            if content:
+                chunks.append({
+                    "section_key": f"{title_key[:80]}-{index:03d}",
+                    "title": section["title"],
+                    "content": content,
+                    "content_hash": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+                    "source_version": _policy_version(),
+                })
+                index += 1
+            if end >= len(text):
+                break
+            start = max(start + 1, end - overlap_chars)
+            while start < end and text[start] != " ":
+                start += 1
+    return chunks
 
 
 def _retrieve_policy(query_tokens: set[str]) -> list[dict]:
@@ -238,6 +291,100 @@ def _retrieve_policy(query_tokens: set[str]) -> list[dict]:
         for score, section in ranked[:3]
         if score >= 0.08
     ]
+
+
+def _is_help_question(question: str) -> bool:
+    normalized = question.casefold().strip()
+    return normalized.startswith((
+        "how do i ", "how can i ", "how to ", "where do i ", "where can i ",
+        "can i ", "what is ", "what does ", "why is ", "why does ",
+    ))
+
+
+def _retrieve_policy_pgvector(client: DbClient, question: str, api_key: str) -> list[dict]:
+    client.commit()
+    try:
+        embedding = _request_embeddings([question], api_key, "RETRIEVAL_QUERY")[0]
+        rows = client.fetch_all(
+            """select title, content, source_version,
+            1 - (embedding OPERATOR(extensions.<=>) %(query_vector)s::extensions.vector) as similarity
+            from public.assistant_knowledge_chunks
+            where source_key = %(source_key)s
+              and source_version = %(source_version)s
+              and embedding_model = %(embedding_model)s
+              and is_active
+            order by embedding OPERATOR(extensions.<=>) %(query_vector)s::extensions.vector
+            limit %(limit)s""",
+            {
+                "query_vector": _vector_literal(embedding),
+                "source_key": KNOWLEDGE_SOURCE_KEY,
+                "source_version": _policy_version(),
+                "embedding_model": EMBEDDING_MODEL,
+                "limit": RAG_RESULT_LIMIT,
+            },
+        )
+        return [
+            {
+                "kind": "policy",
+                "title": row["title"],
+                "excerpt": row["content"][:1200],
+                "version": row["source_version"],
+            }
+            for row in rows
+            if float(row["similarity"]) >= RAG_MIN_SIMILARITY
+        ]
+    except Exception as exc:
+        client.rollback()
+        logger.warning("Ask AI vector retrieval unavailable (%s)", type(exc).__name__)
+        return []
+
+
+def _request_embeddings(texts: list[str], api_key: str, task_type: str) -> list[list[float]]:
+    if not texts:
+        return []
+    body = json.dumps({
+        "requests": [
+            {
+                "model": f"models/{EMBEDDING_MODEL}",
+                "content": {"parts": [{"text": text}]},
+                "embedContentConfig": {
+                    "taskType": task_type,
+                    "outputDimensionality": EMBEDDING_DIMENSIONS,
+                },
+            }
+            for text in texts
+        ],
+    }, ensure_ascii=False).encode("utf-8")
+    request = Request(
+        f"https://generativelanguage.googleapis.com/v1beta/models/{EMBEDDING_MODEL}:batchEmbedContents",
+        data=body,
+        headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=15) as response:
+            result = json.loads(response.read())
+    except HTTPError as exc:
+        logger.warning("Gemini embedding request failed (HTTP %s)", exc.code)
+        raise
+    vectors = [item["values"] for item in result.get("embeddings", [])]
+    if len(vectors) != len(texts):
+        raise ValueError("Gemini returned an unexpected embedding count.")
+    return [_normalize_embedding(vector) for vector in vectors]
+
+
+def _normalize_embedding(values: list[float]) -> list[float]:
+    vector = [float(value) for value in values]
+    if len(vector) != EMBEDDING_DIMENSIONS or not all(math.isfinite(value) for value in vector):
+        raise ValueError("Gemini returned an invalid embedding vector.")
+    magnitude = math.sqrt(sum(value * value for value in vector))
+    if magnitude == 0:
+        raise ValueError("Gemini returned a zero-length embedding vector.")
+    return [value / magnitude for value in vector]
+
+
+def _vector_literal(vector: list[float]) -> str:
+    return "[" + ",".join(format(value, ".9g") for value in vector) + "]"
 
 
 def _tokens(value: str) -> set[str]:
