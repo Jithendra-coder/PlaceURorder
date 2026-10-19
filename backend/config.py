@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     redis_url: str | None = None
     redis_menu_ttl_seconds: int = 120
 
+    gemini_api_key: str | None = None
+    gemini_model: str = "gemini-3.1-flash-lite"
+
     stripe_secret_key: str | None = None
     stripe_webhook_secret: str | None = None
     stripe_connect_refresh_url: str | None = None
