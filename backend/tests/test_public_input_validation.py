@@ -3,7 +3,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from routers.devices import DeviceToken, PairingCode
 from routers.kiosk import BusinessSlug
-from schemas import AuthLogin, DeviceActivate, OrderCreate, ResetPasswordRequest
+from schemas import AuthLogin, DeviceActivate, KioskTestOrderCreate, OrderCreate, ResetPasswordRequest
 
 
 def test_generated_public_identifiers_are_accepted():
@@ -46,3 +46,10 @@ def test_live_order_item_count_is_bounded():
     assert len(OrderCreate(items=[item] * 100).items) == 100
     with pytest.raises(ValidationError):
         OrderCreate(items=[item] * 101)
+
+
+def test_onboarding_test_order_customizations_are_bounded():
+    item = {"product_id": "00000000-0000-0000-0000-000000000001", "quantity": 1}
+    assert len(KioskTestOrderCreate(items=[{**item, "customizations": [{}] * 20}]).items[0].customizations) == 20
+    with pytest.raises(ValidationError):
+        KioskTestOrderCreate(items=[{**item, "customizations": [{}] * 21}])

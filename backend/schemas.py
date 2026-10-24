@@ -103,7 +103,7 @@ class KioskSetupAttestationCreate(BaseModel):
 class KioskTestOrderItem(BaseModel):
     product_id: UUID
     quantity: int = Field(..., ge=1, le=99)
-    customizations: List[Dict[str, Any]] = Field(default_factory=list)
+    customizations: List[Dict[str, Any]] = Field(default_factory=list, max_length=20)
 
 
 class KioskTestOrderCreate(BaseModel):
