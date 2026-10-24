@@ -22,22 +22,32 @@ VALID_TRANSITIONS = {
 }
 
 
-def _next_order_number(client: DbClient, business_id: UUID) -> int:
+def _next_order_number(client: DbClient, business_id: UUID, order_date: str) -> int:
     try:
-        response = client.rpc("next_order_number", {"p_business_id": str(business_id)}).execute()
-        if response.data:
-            return int(response.data)
+        row = client.execute_one(
+            """
+            insert into order_counters as counters (business_id, counter_date, next_number)
+            values (%(business_id)s::uuid, %(counter_date)s::date, 2)
+            on conflict (business_id, counter_date)
+            do update set next_number = counters.next_number + 1
+            returning next_number - 1 as order_number
+            """,
+            {"business_id": str(business_id), "counter_date": order_date},
+        )
+        if row and row.get("order_number") is not None:
+            return int(row["order_number"])
     except Exception as exc:
         raise HTTPException(status_code=500, detail="Could not allocate an order number.") from exc
 
     raise HTTPException(status_code=500, detail="Could not allocate an order number.")
 
 
-def _current_order_date(client: DbClient) -> str:
-    row = client.execute_one("select current_date as order_date")
-    if not row or not row.get("order_date"):
-        raise HTTPException(status_code=500, detail="Could not resolve the order date.")
-    return str(row["order_date"])
+def _business_order_date(business: dict) -> str:
+    try:
+        tz = ZoneInfo(business.get("timezone") or "UTC")
+    except ZoneInfoNotFoundError:
+        tz = timezone.utc
+    return datetime.now(tz).date().isoformat()
 
 
 def _locked_products_for_order(client: DbClient, business_id: UUID, product_ids: list[str]) -> dict[str, dict]:
@@ -313,8 +323,8 @@ def create_kiosk_order(
     tax_rate = float(live_business.get("tax_percent") or 0)
     tax_amount = round(subtotal * tax_rate / 100, 2)
     total_amount = round(subtotal + tax_amount, 2)
-    order_number = _next_order_number(client, business_id)
-    order_date = _current_order_date(client)
+    order_date = _business_order_date(live_business)
+    order_number = _next_order_number(client, business_id, order_date)
     location_id = None
     if payload.location_id:
         location = client.table("business_locations").select("id").eq("business_id", str(business_id)).eq("id", str(payload.location_id)).execute().data or []
