@@ -82,7 +82,11 @@ async def http_exception(request: Request, exc: HTTPException):
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception(request: Request, exc: RequestValidationError):
-    return _error(422, "Please check the submitted fields.", request, exc.errors())
+    details = [
+        {key: error[key] for key in ("loc", "msg", "type") if key in error}
+        for error in exc.errors()
+    ]
+    return _error(422, "Please check the submitted fields.", request, details)
 
 
 @app.exception_handler(OperationalError)

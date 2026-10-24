@@ -3,9 +3,10 @@ import json
 
 import pytest
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
 from starlette.requests import Request
 
-from main import http_exception
+from main import app, http_exception
 
 
 @pytest.mark.parametrize(
@@ -32,3 +33,14 @@ def test_http_error_contract_preserves_status_code_and_headers(status_code, erro
     assert response.headers["Retry-After"] == "17"
     assert response.headers["X-Request-ID"] == "request-test"
     assert json.loads(response.body)["error"]["code"] == error_code
+
+
+def test_validation_response_does_not_echo_submitted_secrets():
+    response = TestClient(app).post(
+        "/api/auth/login",
+        json={"email": "owner@example.test", "password": "tiny"},
+    )
+
+    assert response.status_code == 422
+    assert "tiny" not in response.text
+    assert all(set(error) <= {"loc", "msg", "type"} for error in response.json()["detail"])
