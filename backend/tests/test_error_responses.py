@@ -44,3 +44,18 @@ def test_validation_response_does_not_echo_submitted_secrets():
     assert response.status_code == 422
     assert "tiny" not in response.text
     assert all(set(error) <= {"loc", "msg", "type"} for error in response.json()["detail"])
+
+
+def test_deep_health_uses_service_unavailable_when_database_check_fails(monkeypatch):
+    class UnavailableDatabase:
+        def __enter__(self):
+            raise RuntimeError("database unavailable")
+
+        def __exit__(self, *_args):
+            return False
+
+    monkeypatch.setattr("main.db_context", UnavailableDatabase)
+    response = TestClient(app).get("/api/health")
+
+    assert response.status_code == 503
+    assert response.json()["status"] == "database_unavailable"

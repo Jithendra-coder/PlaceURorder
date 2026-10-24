@@ -2,7 +2,7 @@ import os
 import logging
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -131,7 +131,7 @@ def health():
 
 @app.get("/health")
 @app.get(f"{settings.api_prefix}/health")
-def deep_health():
+def deep_health(response: Response):
     db_ok = False
     try:
         with db_context() as client:
@@ -139,6 +139,8 @@ def deep_health():
         db_ok = True
     except Exception:
         db_ok = False
+    if not db_ok:
+        response.status_code = 503
     return {
         "status": "ok" if db_ok else "database_unavailable",
         "database": "connected" if db_ok else "not_verified",
