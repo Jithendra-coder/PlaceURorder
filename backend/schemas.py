@@ -800,6 +800,12 @@ class ComboCreate(BaseModel):
     available_end_time: Optional[time] = None
     sections: List[ComboSectionInput] = Field(default_factory=list)
 
+    @model_validator(mode="after")
+    def validate_section_limits(self) -> "ComboCreate":
+        if any(section.max_select > len(section.options) for section in self.sections):
+            raise ValueError("A section maximum cannot exceed its available options.")
+        return self
+
 
 class ComboUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=2, max_length=140)
@@ -818,9 +824,21 @@ class ComboUpdate(BaseModel):
     available_end_time: Optional[time] = None
     sections: Optional[List[ComboSectionInput]] = None
 
+    @model_validator(mode="after")
+    def validate_section_limits(self) -> "ComboUpdate":
+        if self.sections is not None and any(section.max_select > len(section.options) for section in self.sections):
+            raise ValueError("A section maximum cannot exceed its available options.")
+        return self
+
 
 class ComboSectionCreate(ComboSectionInput):
     options: List[ComboOptionInput] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_option_capacity(self) -> "ComboSectionCreate":
+        if self.options and self.max_select > len(self.options):
+            raise ValueError("A section maximum cannot exceed its available options.")
+        return self
 
 
 class ComboSectionUpdate(BaseModel):

@@ -201,6 +201,10 @@ def update_section(
     next_max = data.get("max_select", section["max_select"])
     if next_min > next_max:
         raise HTTPException(status_code=422, detail="min_select cannot be greater than max_select.")
+    if {"min_select", "max_select", "required"} & data.keys():
+        options = client.table("combo_options").select("id").eq("section_id", str(section_id)).execute().data or []
+        if next_max > len(options):
+            raise HTTPException(status_code=422, detail="A section maximum cannot exceed its available options.")
     response = client.table("combo_sections").update(data).eq("id", str(section_id)).execute()
     if not response.data:
         raise HTTPException(status_code=404, detail="Combo section not found.")

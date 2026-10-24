@@ -21,7 +21,10 @@ from schemas import (
     BusinessUpdate,
     ComboCreate,
     ComboOptionInput,
+    ComboSectionCreate,
     ComboSectionInput,
+    ComboSectionUpdate,
+    ComboUpdate,
     DeviceCreate,
     ModifierGroupCreate,
     ModifierGroupUpdate,
@@ -288,6 +291,50 @@ def test_combo_option_sources_are_mutually_exclusive():
             existing_item_id=uuid4(),
             exclusive_name="Combo-only dip",
         )
+
+
+def test_combo_section_limits_cannot_exceed_available_options():
+    section = {
+        "title": "Choose a drink",
+        "section_type": "optional_upgrades",
+        "min_select": 0,
+        "max_select": 2,
+        "options": [{"source_type": "exclusive_combo_item", "exclusive_name": "Cola"}],
+    }
+    with pytest.raises(ValidationError):
+        ComboCreate(name="Lunch combo", sections=[section])
+    with pytest.raises(ValidationError):
+        ComboUpdate(sections=[section])
+    with pytest.raises(ValidationError):
+        ComboSectionCreate(**section)
+
+
+def test_combo_section_update_cannot_exceed_existing_options(monkeypatch):
+    section_id = uuid4()
+    section = {"id": str(section_id), "combo_id": str(uuid4()), "min_select": 0, "max_select": 2}
+    combo = {"id": section["combo_id"], "business_id": str(uuid4())}
+
+    class OptionsQuery:
+        def select(self, _columns):
+            return self
+
+        def eq(self, _column, _value):
+            return self
+
+        def execute(self):
+            return SimpleNamespace(data=[{"id": "one"}, {"id": "two"}])
+
+    class Client:
+        def table(self, _name):
+            return OptionsQuery()
+
+    monkeypatch.setattr(combo_service, "_get_section_and_combo", lambda *_args: (section, combo))
+    monkeypatch.setattr(combo_service, "assert_business_access", lambda *_args: None)
+
+    with pytest.raises(HTTPException) as error:
+        combo_service.update_section(Client(), section_id, uuid4(), ComboSectionUpdate(max_select=3))
+
+    assert error.value.status_code == 422
 
 
 def test_combo_section_limits_must_be_consistent():
