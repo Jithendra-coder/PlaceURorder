@@ -68,16 +68,16 @@ logger = logging.getLogger(__name__)
 MAX_REQUEST_BYTES = 8 * 1024 * 1024
 
 
-def _error(status_code: int, message: str, request: Request, detail=None) -> JSONResponse:
-    code = {400: "BAD_REQUEST", 401: "AUTHENTICATION_REQUIRED", 403: "FORBIDDEN", 404: "NOT_FOUND", 409: "CONFLICT", 413: "REQUEST_TOO_LARGE", 422: "VALIDATION_ERROR", 503: "SERVICE_UNAVAILABLE"}.get(status_code, "INTERNAL_ERROR")
+def _error(status_code: int, message: str, request: Request, detail=None, headers=None) -> JSONResponse:
+    code = {400: "BAD_REQUEST", 401: "AUTHENTICATION_REQUIRED", 403: "FORBIDDEN", 404: "NOT_FOUND", 405: "METHOD_NOT_ALLOWED", 409: "CONFLICT", 413: "REQUEST_TOO_LARGE", 415: "UNSUPPORTED_MEDIA_TYPE", 422: "VALIDATION_ERROR", 429: "RATE_LIMITED", 502: "BAD_GATEWAY", 503: "SERVICE_UNAVAILABLE", 504: "GATEWAY_TIMEOUT"}.get(status_code, "INTERNAL_ERROR")
     body = {"error": {"code": code, "message": message, "request_id": request.state.request_id}, "detail": detail if detail is not None else message}
-    return JSONResponse(body, status_code=status_code, headers={"X-Request-ID": request.state.request_id})
+    return JSONResponse(body, status_code=status_code, headers={**(headers or {}), "X-Request-ID": request.state.request_id})
 
 
 @app.exception_handler(HTTPException)
 async def http_exception(request: Request, exc: HTTPException):
     message = exc.detail if isinstance(exc.detail, str) else "Request could not be completed."
-    return _error(exc.status_code, message, request, exc.detail)
+    return _error(exc.status_code, message, request, exc.detail, exc.headers)
 
 
 @app.exception_handler(RequestValidationError)
