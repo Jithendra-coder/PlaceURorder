@@ -319,6 +319,14 @@ def update_modifier_group(
     data = clean_payload(payload.model_dump(mode="json"))
     if not data:
         return group
+    if {"min_select", "max_select", "is_required"} & data.keys():
+        options = client.table("product_modifier_options").select("id").eq("group_id", str(group_id)).execute().data or []
+        min_select = int(data.get("min_select", group.get("min_select") or 0))
+        max_select = int(data.get("max_select", group.get("max_select") or 0))
+        if min_select > max_select:
+            raise HTTPException(status_code=422, detail="min_select cannot be greater than max_select.")
+        if max_select > len(options):
+            raise HTTPException(status_code=422, detail="max_select cannot be greater than the number of options.")
     response = client.table("product_modifier_groups").update(data).eq("id", str(group_id)).execute()
     if not response.data:
         raise HTTPException(status_code=404, detail="Modifier group not found.")

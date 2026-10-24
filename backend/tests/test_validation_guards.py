@@ -243,6 +243,40 @@ def test_modifier_group_limits_must_be_consistent():
     with pytest.raises(ValidationError):
         ModifierGroupUpdate(min_select=3, max_select=2)
 
+    options = [{"name": "Small"}, {"name": "Large"}]
+    assert ModifierGroupCreate(name="Size", max_select=2, options=options)
+    with pytest.raises(ValidationError):
+        ModifierGroupCreate(name="Size", max_select=3, options=options)
+    with pytest.raises(ValidationError):
+        ModifierGroupCreate(name="Size", max_select=100, options=[{"name": "Option"}] * 101)
+
+
+def test_modifier_group_update_cannot_exceed_existing_options(monkeypatch):
+    group_id = uuid4()
+    group = {"id": str(group_id), "business_id": str(uuid4()), "min_select": 0, "max_select": 2}
+
+    class OptionsQuery:
+        def select(self, _columns):
+            return self
+
+        def eq(self, _column, _value):
+            return self
+
+        def execute(self):
+            return SimpleNamespace(data=[{"id": "one"}, {"id": "two"}])
+
+    class Client:
+        def table(self, _name):
+            return OptionsQuery()
+
+    monkeypatch.setattr(product_service, "get_modifier_group", lambda *_args: group)
+    monkeypatch.setattr(product_service, "assert_business_access", lambda *_args: None)
+
+    with pytest.raises(HTTPException) as error:
+        product_service.update_modifier_group(Client(), group_id, uuid4(), ModifierGroupUpdate(max_select=3))
+
+    assert error.value.status_code == 422
+
 
 def test_combo_option_sources_are_mutually_exclusive():
     with pytest.raises(ValidationError):

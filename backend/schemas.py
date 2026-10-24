@@ -704,12 +704,14 @@ class ModifierGroupCreate(BaseModel):
     max_select: int = Field(1, ge=0)
     is_required: bool = False
     sort_order: int = 0
-    options: List[ModifierOptionCreate] = Field(default_factory=list)
+    options: List[ModifierOptionCreate] = Field(default_factory=list, max_length=100)
 
     @model_validator(mode="after")
     def validate_selection_limits(self) -> "ModifierGroupCreate":
         if self.min_select > self.max_select:
             raise ValueError("min_select cannot be greater than max_select.")
+        if self.max_select > len(self.options):
+            raise ValueError("max_select cannot be greater than the number of options.")
         return self
 
 
