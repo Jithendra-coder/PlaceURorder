@@ -876,7 +876,7 @@ class OrderCreate(BaseModel):
     customer_phone: Optional[str] = Field(None, max_length=30)
     notes: Optional[str] = Field(None, max_length=400)
     payment_method: Optional[str] = "pay_at_counter"
-    items: List[OrderItemCreate] = Field(..., min_length=1)
+    items: List[OrderItemCreate] = Field(..., min_length=1, max_length=100)
 
 
 class PaymentProvider(str, Enum):

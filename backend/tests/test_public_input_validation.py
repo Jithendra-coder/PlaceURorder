@@ -3,7 +3,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from routers.devices import DeviceToken, PairingCode
 from routers.kiosk import BusinessSlug
-from schemas import AuthLogin, DeviceActivate, ResetPasswordRequest
+from schemas import AuthLogin, DeviceActivate, OrderCreate, ResetPasswordRequest
 
 
 def test_generated_public_identifiers_are_accepted():
@@ -39,3 +39,10 @@ def test_schema_boundaries_and_unknown_fields_remain_compatible():
 
     login = AuthLogin(email="user@example.com", password="password123", unexpected="still-ignored")
     assert login.email == "user@example.com"
+
+
+def test_live_order_item_count_is_bounded():
+    item = {"product_id": "00000000-0000-0000-0000-000000000001", "quantity": 1}
+    assert len(OrderCreate(items=[item] * 100).items) == 100
+    with pytest.raises(ValidationError):
+        OrderCreate(items=[item] * 101)
