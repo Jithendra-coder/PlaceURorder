@@ -3,7 +3,16 @@ from pydantic import TypeAdapter, ValidationError
 
 from routers.devices import DeviceToken, PairingCode
 from routers.kiosk import BusinessSlug
-from schemas import AuthLogin, DeviceActivate, KioskTestOrderCreate, OrderCreate, ResetPasswordRequest
+from schemas import (
+    AuthLogin,
+    ComboCreate,
+    ComboSectionCreate,
+    ComboUpdate,
+    DeviceActivate,
+    KioskTestOrderCreate,
+    OrderCreate,
+    ResetPasswordRequest,
+)
 
 
 def test_generated_public_identifiers_are_accepted():
@@ -53,3 +62,46 @@ def test_onboarding_test_order_customizations_are_bounded():
     assert len(KioskTestOrderCreate(items=[{**item, "customizations": [{}] * 20}]).items[0].customizations) == 20
     with pytest.raises(ValidationError):
         KioskTestOrderCreate(items=[{**item, "customizations": [{}] * 21}])
+
+
+def test_combo_configuration_collections_are_bounded():
+    section = {
+        "title": "Options",
+        "section_type": "optional_upgrades",
+        "max_select": 0,
+        "options": [],
+    }
+    with pytest.raises(ValidationError):
+        ComboCreate(name="Lunch combo", sections=[section] * 101)
+    with pytest.raises(ValidationError):
+        ComboUpdate(sections=[section] * 101)
+    with pytest.raises(ValidationError):
+        ComboCreate(name="Lunch combo", tags=["popular"] * 51)
+    with pytest.raises(ValidationError):
+        ComboCreate(name="Lunch combo", available_days=["monday"] * 8)
+
+    option = {"source_type": "exclusive_combo_item", "exclusive_name": "Cola"}
+    with pytest.raises(ValidationError):
+        ComboCreate(
+            name="Lunch combo",
+            sections=[{
+                "title": "Options",
+                "section_type": "optional_upgrades",
+                "max_select": 100,
+                "options": [option] * 101,
+            }],
+        )
+    with pytest.raises(ValidationError):
+        ComboUpdate(sections=[{
+            "title": "Options",
+            "section_type": "optional_upgrades",
+            "max_select": 100,
+            "options": [option] * 101,
+        }])
+    with pytest.raises(ValidationError):
+        ComboSectionCreate(
+            title="Options",
+            section_type="optional_upgrades",
+            max_select=100,
+            options=[option] * 101,
+        )
