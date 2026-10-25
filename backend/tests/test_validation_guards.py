@@ -373,6 +373,22 @@ def test_product_discount_types_and_percentages_match_supported_rules():
     with pytest.raises(HTTPException) as error:
         product_service._validate_discount({"discount_type": "percentage", "discount_value": 101})
     assert error.value.status_code == 422
+
+
+def test_product_discount_window_validation_includes_partial_updates():
+    with pytest.raises(HTTPException) as error:
+        product_service._validate_discount_window({
+            "discount_starts_at": "2026-10-26T12:00:00+00:00",
+            "discount_ends_at": "2026-10-26T11:00:00+00:00",
+        })
+    assert error.value.status_code == 422
+
+    with pytest.raises(HTTPException) as error:
+        product_service._validate_discount_window(
+            {"discount_ends_at": "2026-10-26T11:00:00+00:00"},
+            {"discount_starts_at": "2026-10-26T12:00:00+00:00", "discount_ends_at": None},
+        )
+    assert error.value.status_code == 422
     with pytest.raises(HTTPException) as error:
         product_service._validate_discount({"discount_value": 101}, {"discount_type": "percentage", "discount_value": 10})
     assert error.value.status_code == 422

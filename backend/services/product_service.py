@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -94,6 +96,7 @@ def create_product(client: DbClient, business_id: UUID, user_id: UUID, payload: 
     assert_business_access(client, business_id, user_id, FULL_ACCESS_ROLES)
     data = payload.model_dump(mode="json")
     _validate_discount(data)
+    _validate_discount_window(data)
     _normalize_menu_status_fields(data, payload.model_fields_set)
     _assert_product_category(client, data, business_id)
     data["business_id"] = str(business_id)
@@ -121,6 +124,7 @@ def update_product(client: DbClient, product_id: UUID, user_id: UUID, payload: P
     if not data:
         return product
     _validate_discount(data, product)
+    _validate_discount_window(data, product)
     _normalize_menu_status_fields(data, payload.model_fields_set)
     _assert_product_category(client, data, business_id, product)
     response = (
@@ -157,6 +161,20 @@ def _validate_discount(data: dict, current: dict | None = None) -> None:
     discount_value = data.get("discount_value", (current or {}).get("discount_value", 0))
     if discount_type == "percentage" and float(discount_value or 0) > 100:
         raise HTTPException(status_code=422, detail="Percentage discounts cannot exceed 100%.")
+
+
+def _validate_discount_window(data: dict, current: dict | None = None) -> None:
+    starts_at = _comparable_datetime(data.get("discount_starts_at", (current or {}).get("discount_starts_at")))
+    ends_at = _comparable_datetime(data.get("discount_ends_at", (current or {}).get("discount_ends_at")))
+    if starts_at and ends_at and starts_at >= ends_at:
+        raise HTTPException(status_code=422, detail="Discount end must be after its start.")
+
+
+def _comparable_datetime(value) -> datetime | None:
+    if not value:
+        return None
+    parsed = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
 
 
 def _assert_product_category(client: DbClient, data: dict, business_id: UUID, current: dict | None = None) -> None:
