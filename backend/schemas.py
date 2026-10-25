@@ -523,7 +523,7 @@ class ProductCreate(BaseModel):
     sku: Optional[str] = None
     item_type: ItemType = ItemType.OTHER
     price: FiniteFloat = Field(..., ge=0)
-    discount_type: str = "none"
+    discount_type: Literal["none", "percentage", "fixed"] = "none"
     discount_value: FiniteFloat = Field(0, ge=0)
     discount_label: Optional[str] = Field(None, max_length=80)
     discount_starts_at: Optional[datetime] = None
@@ -553,7 +553,7 @@ class ProductUpdate(BaseModel):
     sku: Optional[str] = None
     item_type: Optional[ItemType] = None
     price: Optional[FiniteFloat] = Field(None, ge=0)
-    discount_type: Optional[str] = None
+    discount_type: Optional[Literal["none", "percentage", "fixed"]] = None
     discount_value: Optional[FiniteFloat] = Field(None, ge=0)
     discount_label: Optional[str] = Field(None, max_length=80)
     discount_starts_at: Optional[datetime] = None

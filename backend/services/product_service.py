@@ -93,6 +93,7 @@ def get_product(client: DbClient, product_id: UUID) -> dict:
 def create_product(client: DbClient, business_id: UUID, user_id: UUID, payload: ProductCreate) -> dict:
     assert_business_access(client, business_id, user_id, FULL_ACCESS_ROLES)
     data = payload.model_dump(mode="json")
+    _validate_discount(data)
     _normalize_menu_status_fields(data, payload.model_fields_set)
     _assert_product_category(client, data, business_id)
     data["business_id"] = str(business_id)
@@ -119,6 +120,7 @@ def update_product(client: DbClient, product_id: UUID, user_id: UUID, payload: P
     data = payload.model_dump(mode="json", exclude_unset=True)
     if not data:
         return product
+    _validate_discount(data, product)
     _normalize_menu_status_fields(data, payload.model_fields_set)
     _assert_product_category(client, data, business_id, product)
     response = (
@@ -148,6 +150,13 @@ def _normalize_menu_status_fields(data: dict, explicitly_set: set[str]) -> None:
         data["is_available"] = data["menu_status"] == "shown"
     elif "is_available" in explicitly_set:
         data["menu_status"] = "shown" if data["is_available"] else "unavailable"
+
+
+def _validate_discount(data: dict, current: dict | None = None) -> None:
+    discount_type = data.get("discount_type", (current or {}).get("discount_type", "none"))
+    discount_value = data.get("discount_value", (current or {}).get("discount_value", 0))
+    if discount_type == "percentage" and float(discount_value or 0) > 100:
+        raise HTTPException(status_code=422, detail="Percentage discounts cannot exceed 100%.")
 
 
 def _assert_product_category(client: DbClient, data: dict, business_id: UUID, current: dict | None = None) -> None:

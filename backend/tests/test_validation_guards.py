@@ -367,6 +367,17 @@ def test_new_business_uses_universal_kiosk_defaults():
     assert business.offer_enabled is False
 
 
+def test_product_discount_types_and_percentages_match_supported_rules():
+    with pytest.raises(ValidationError):
+        ProductCreate(name="Latte", price=5, discount_type="label")
+    with pytest.raises(HTTPException) as error:
+        product_service._validate_discount({"discount_type": "percentage", "discount_value": 101})
+    assert error.value.status_code == 422
+    with pytest.raises(HTTPException) as error:
+        product_service._validate_discount({"discount_value": 101}, {"discount_type": "percentage", "discount_value": 10})
+    assert error.value.status_code == 422
+
+
 def test_database_adapter_wraps_every_jsonb_schema_column():
     schema_path = Path(__file__).parents[1] / "postgres_schema.sql"
     schema = schema_path.read_text(encoding="utf-8")
