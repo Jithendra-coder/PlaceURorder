@@ -2,6 +2,7 @@ from datetime import datetime, time
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional
 from uuid import UUID
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_validator, model_validator
 
@@ -85,6 +86,16 @@ def _normalize_weekdays(values: list[str] | None) -> list[str] | None:
     if len(set(normalized)) != len(normalized):
         raise ValueError("Days cannot contain duplicates.")
     return normalized
+
+
+def _validate_timezone_name(value: str | None) -> str | None:
+    if value is None:
+        return None
+    try:
+        ZoneInfo(value)
+    except (ZoneInfoNotFoundError, ValueError):
+        raise ValueError("Use a valid IANA time zone.") from None
+    return value
 
 
 class WelcomeScreenConfiguration(BaseModel):
@@ -294,6 +305,11 @@ class BusinessLocationCreate(BaseModel):
     ordering_settings: Optional[Dict[str, Any]] = None
     receipt_settings: Optional[Dict[str, Any]] = None
 
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, value):
+        return _validate_timezone_name(value)
+
 
 class BusinessLocationUpdate(BusinessLocationCreate):
     name: Optional[str] = Field(None, min_length=2, max_length=120)
@@ -414,6 +430,11 @@ class BusinessBase(BaseModel):
     store_schedule: Dict[str, Any] = Field(default_factory=dict)
     receipt_settings: Dict[str, Any] = Field(default_factory=dict)
 
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, value):
+        return _validate_timezone_name(value)
+
 
 class BusinessCreate(BusinessBase):
     onboarding_step: int = Field(0, ge=0, le=5)
@@ -480,6 +501,11 @@ class BusinessUpdate(BaseModel):
     onboarding_step: Optional[int] = Field(None, ge=0, le=5)
     is_active: Optional[bool] = None
     owner_pin: Optional[str] = Field(None, min_length=4, max_length=6, pattern=r"^\d+$")
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, value):
+        return _validate_timezone_name(value)
 
 
 class Business(BusinessBase):

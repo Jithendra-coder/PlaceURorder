@@ -7,6 +7,9 @@ from schemas import (
     AuthLogin,
     AvailabilityRuleCreate,
     BusinessCreate,
+    BusinessLocationCreate,
+    BusinessUpdate,
+    BusinessCreate,
     ComboCreate,
     ComboSectionCreate,
     ComboUpdate,
@@ -145,3 +148,12 @@ def test_availability_day_values_are_normalized_and_validated():
         ProductCreate(name="Latte", price=5, available_days=["Funday"])
     with pytest.raises(ValidationError):
         AvailabilityRuleCreate(target_type="menu", rule_type="schedule", days=["mon"], time_windows=[{"start": "09:00", "end": "10:00"}])
+
+
+def test_business_timezones_must_be_supported_iana_names():
+    assert BusinessCreate(name="Coffee Shop", timezone="Asia/Kolkata").timezone == "Asia/Kolkata"
+    assert BusinessLocationCreate(name="Downtown", timezone="UTC").timezone == "UTC"
+    with pytest.raises(ValidationError):
+        BusinessCreate(name="Coffee Shop", timezone="Mars/Colony")
+    with pytest.raises(ValidationError):
+        BusinessUpdate(timezone="Mars/Colony")
