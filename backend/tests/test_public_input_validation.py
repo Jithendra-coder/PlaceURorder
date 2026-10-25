@@ -5,6 +5,7 @@ from routers.devices import DeviceToken, PairingCode
 from routers.kiosk import BusinessSlug
 from schemas import (
     AuthLogin,
+    AvailabilityRuleCreate,
     BusinessCreate,
     ComboCreate,
     ComboSectionCreate,
@@ -136,3 +137,11 @@ def test_promotion_relation_lists_reject_duplicates_before_database_writes():
         PromotionUpdate(location_ids=[location_id, location_id])
     with pytest.raises(ValidationError):
         PromotionUpdate(placements=["welcome_screen", "welcome_screen"])
+
+
+def test_availability_day_values_are_normalized_and_validated():
+    assert ProductCreate(name="Latte", price=5, available_days=["MONDAY", " Tuesday "]).available_days == ["monday", "tuesday"]
+    with pytest.raises(ValidationError):
+        ProductCreate(name="Latte", price=5, available_days=["Funday"])
+    with pytest.raises(ValidationError):
+        AvailabilityRuleCreate(target_type="menu", rule_type="schedule", days=["mon"], time_windows=[{"start": "09:00", "end": "10:00"}])

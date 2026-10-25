@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Any, Dict, List, Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, model_validator
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_validator, model_validator
 
 
 class BusinessType(str, Enum):
@@ -73,6 +73,18 @@ class ApiResponse(BaseModel):
 
 
 KioskLayoutId = Literal["side-navigation", "top-navigation", "category-first"]
+WEEKDAYS = {"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"}
+
+
+def _normalize_weekdays(values: list[str] | None) -> list[str] | None:
+    if values is None:
+        return None
+    normalized = [day.strip().lower() for day in values]
+    if any(day not in WEEKDAYS for day in normalized):
+        raise ValueError("Days must use full weekday names.")
+    if len(set(normalized)) != len(normalized):
+        raise ValueError("Days cannot contain duplicates.")
+    return normalized
 
 
 class WelcomeScreenConfiguration(BaseModel):
@@ -545,6 +557,11 @@ class ProductCreate(BaseModel):
     available_days: List[str] = Field(default_factory=list, max_length=7)
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
+    @field_validator("available_days")
+    @classmethod
+    def validate_available_days(cls, value):
+        return _normalize_weekdays(value)
+
 
 class ProductUpdate(BaseModel):
     category_id: Optional[UUID] = None
@@ -574,6 +591,11 @@ class ProductUpdate(BaseModel):
     availability_type: Optional[Literal["always", "scheduled"]] = None
     available_days: Optional[List[str]] = Field(None, max_length=7)
     metadata: Optional[Dict[str, Any]] = None
+
+    @field_validator("available_days")
+    @classmethod
+    def validate_available_days(cls, value):
+        return _normalize_weekdays(value)
 
 
 class Product(ProductCreate):
@@ -686,6 +708,11 @@ class AvailabilityRuleCreate(BaseModel):
     location_ids: List[UUID] = Field(default_factory=list, max_length=100)
     reason: Optional[str] = Field(None, max_length=240)
 
+    @field_validator("days")
+    @classmethod
+    def validate_days(cls, value):
+        return _normalize_weekdays(value)
+
     @model_validator(mode="after")
     def validate_rule(self) -> "AvailabilityRuleCreate":
         if self.target_type != "menu" and self.target_id is None:
@@ -707,6 +734,11 @@ class AvailabilityRuleUpdate(BaseModel):
     ends_at: Optional[datetime] = None
     location_ids: Optional[List[UUID]] = Field(None, max_length=100)
     reason: Optional[str] = Field(None, max_length=240)
+
+    @field_validator("days")
+    @classmethod
+    def validate_days(cls, value):
+        return _normalize_weekdays(value)
 
 
 class ModifierOptionCreate(BaseModel):
@@ -819,6 +851,11 @@ class ComboCreate(BaseModel):
     available_end_time: Optional[time] = None
     sections: List[ComboSectionInput] = Field(default_factory=list, max_length=100)
 
+    @field_validator("available_days")
+    @classmethod
+    def validate_available_days(cls, value):
+        return _normalize_weekdays(value)
+
     @model_validator(mode="after")
     def validate_section_limits(self) -> "ComboCreate":
         if any(len(section.options) > 100 for section in self.sections):
@@ -844,6 +881,11 @@ class ComboUpdate(BaseModel):
     available_start_time: Optional[time] = None
     available_end_time: Optional[time] = None
     sections: Optional[List[ComboSectionInput]] = Field(None, max_length=100)
+
+    @field_validator("available_days")
+    @classmethod
+    def validate_available_days(cls, value):
+        return _normalize_weekdays(value)
 
     @model_validator(mode="after")
     def validate_section_limits(self) -> "ComboUpdate":
