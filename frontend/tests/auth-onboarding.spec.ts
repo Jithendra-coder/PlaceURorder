@@ -79,7 +79,7 @@ test("sign-in error stays readable and the full form is reachable in a short vie
   await page.locator("#password").fill("test-only-not-a-credential");
   await page.getByRole("button", { name: "Sign In" }).click();
 
-  await expect(page.locator(".mt-auth-status--error")).toHaveText("The service returned an unexpected response. Please try again.");
+  await expect(page.locator(".mt-auth-status--error")).toHaveText("The service is temporarily unavailable. Please try again shortly.");
 
   const card = page.locator(".mt-auth-card");
   await expect(card).toBeVisible();

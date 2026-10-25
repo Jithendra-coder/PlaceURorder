@@ -143,6 +143,7 @@ async function performApiRequest<T>(
   const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, requestTimeout);
 
   let response: Response;
+  let text: string;
   try {
     response = await fetch(`${API_BASE}${path}`, {
       ...fetchOptions,
@@ -150,6 +151,7 @@ async function performApiRequest<T>(
       signal: controller.signal,
       credentials: fetchOptions.credentials ?? "include",
     });
+    text = await response.text();
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {
       throw new Error(timedOut ? "The server is taking too long to respond. Please try again." : "The request was cancelled.");
@@ -163,12 +165,17 @@ async function performApiRequest<T>(
     fetchOptions.signal?.removeEventListener("abort", abortRequest);
   }
 
-  const text = await response.text();
   let payload: unknown = null;
+  let invalidJson = false;
   try {
     payload = text ? JSON.parse(text) : null;
   } catch {
-    payload = { detail: "The service returned an unexpected response. Please try again." };
+    invalidJson = true;
+    payload = {
+      detail: response.status >= 500
+        ? "The service is temporarily unavailable. Please try again shortly."
+        : "The service could not complete this request. Please try again.",
+    };
   }
 
   if (!response.ok) {
@@ -179,7 +186,7 @@ async function performApiRequest<T>(
     const detail = errorPayload?.error?.message ?? errorPayload?.detail ?? errorPayload?.message ?? "Request failed.";
     const message = formatApiError(detail);
     if (useAuth !== false && response.status === 401) {
-      if (allowRefresh && path !== "/auth/refresh" && await refreshAuthSession()) {
+      if (allowRefresh && path !== "/auth/refresh" && await refreshAuthSession(requestTimeout)) {
         return performApiRequest<T>(path, options, false);
       }
       auth.clear();
@@ -190,6 +197,10 @@ async function performApiRequest<T>(
     throw new ApiError(message, response.status);
   }
 
+  if (invalidJson) {
+    throw new ApiError("The service returned an unreadable response. Please try again.", response.status);
+  }
+
   const method = (fetchOptions.method ?? "GET").toUpperCase();
   if (typeof window !== "undefined" && method !== "GET" && /businesses|products|categories|modifier|combos|combo-/.test(path)) {
     window.dispatchEvent(new CustomEvent("menutap:configuration-saved"));
@@ -198,12 +209,14 @@ async function performApiRequest<T>(
   return payload as T;
 }
 
-function refreshAuthSession() {
+function refreshAuthSession(timeoutMs = DEFAULT_TIMEOUT_MS) {
   if (!refreshInFlight) {
-    refreshInFlight = fetch(`${API_BASE}/auth/refresh`, { method: "POST", credentials: "include" })
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    refreshInFlight = fetch(`${API_BASE}/auth/refresh`, { method: "POST", credentials: "include", signal: controller.signal })
       .then((response) => response.ok)
       .catch(() => false)
-      .finally(() => { refreshInFlight = null; });
+      .finally(() => { clearTimeout(timeout); refreshInFlight = null; });
   }
   return refreshInFlight;
 }
