@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Any, Dict, List, Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, model_validator
 
 
 class BusinessType(str, Enum):
@@ -389,7 +389,7 @@ class BusinessBase(BaseModel):
     offer_background: str = "emerald"
     currency_code: str = "INR"
     currency_symbol: str = "Rs"
-    tax_percent: float = Field(0, ge=0, le=100)
+    tax_percent: FiniteFloat = Field(0, ge=0, le=100)
     address_line1: Optional[str] = None
     city: Optional[str] = None
     state: Optional[str] = None
@@ -453,7 +453,7 @@ class BusinessUpdate(BaseModel):
     offer_background: Optional[str] = None
     currency_code: Optional[str] = None
     currency_symbol: Optional[str] = None
-    tax_percent: Optional[float] = Field(None, ge=0, le=100)
+    tax_percent: Optional[FiniteFloat] = Field(None, ge=0, le=100)
     address_line1: Optional[str] = None
     city: Optional[str] = None
     state: Optional[str] = None
@@ -522,9 +522,9 @@ class ProductCreate(BaseModel):
     description: Optional[str] = None
     sku: Optional[str] = None
     item_type: ItemType = ItemType.OTHER
-    price: float = Field(..., ge=0)
+    price: FiniteFloat = Field(..., ge=0)
     discount_type: str = "none"
-    discount_value: float = Field(0, ge=0)
+    discount_value: FiniteFloat = Field(0, ge=0)
     discount_label: Optional[str] = Field(None, max_length=80)
     discount_starts_at: Optional[datetime] = None
     discount_ends_at: Optional[datetime] = None
@@ -536,7 +536,7 @@ class ProductCreate(BaseModel):
     daily_limit: Optional[int] = Field(None, ge=0)
     availability_start_time: Optional[time] = None
     availability_end_time: Optional[time] = None
-    original_price: Optional[float] = Field(None, ge=0)
+    original_price: Optional[FiniteFloat] = Field(None, ge=0)
     display_badge: Optional[str] = Field(None, max_length=40)
     tags: List[str] = Field(default_factory=list, max_length=50)
     menu_status: Literal["draft", "shown", "hidden", "unavailable"] = "shown"
@@ -552,9 +552,9 @@ class ProductUpdate(BaseModel):
     description: Optional[str] = None
     sku: Optional[str] = None
     item_type: Optional[ItemType] = None
-    price: Optional[float] = Field(None, ge=0)
+    price: Optional[FiniteFloat] = Field(None, ge=0)
     discount_type: Optional[str] = None
-    discount_value: Optional[float] = Field(None, ge=0)
+    discount_value: Optional[FiniteFloat] = Field(None, ge=0)
     discount_label: Optional[str] = Field(None, max_length=80)
     discount_starts_at: Optional[datetime] = None
     discount_ends_at: Optional[datetime] = None
@@ -566,7 +566,7 @@ class ProductUpdate(BaseModel):
     daily_limit: Optional[int] = Field(None, ge=0)
     availability_start_time: Optional[time] = None
     availability_end_time: Optional[time] = None
-    original_price: Optional[float] = Field(None, ge=0)
+    original_price: Optional[FiniteFloat] = Field(None, ge=0)
     display_badge: Optional[str] = Field(None, max_length=40)
     tags: Optional[List[str]] = Field(None, max_length=50)
     menu_status: Optional[Literal["draft", "shown", "hidden", "unavailable"]] = None
@@ -588,7 +588,7 @@ class PromotionCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=140)
     description: Optional[str] = None
     discount_type: Literal["percentage", "fixed", "label"] = "percentage"
-    discount_value: float = Field(0, ge=0)
+    discount_value: FiniteFloat = Field(0, ge=0)
     starts_at: Optional[datetime] = None
     ends_at: Optional[datetime] = None
     status: Literal["draft", "scheduled", "active", "paused", "expired", "needs_attention"] = "draft"
@@ -602,7 +602,7 @@ class PromotionUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=2, max_length=140)
     description: Optional[str] = None
     discount_type: Optional[Literal["percentage", "fixed", "label"]] = None
-    discount_value: Optional[float] = Field(None, ge=0)
+    discount_value: Optional[FiniteFloat] = Field(None, ge=0)
     starts_at: Optional[datetime] = None
     ends_at: Optional[datetime] = None
     status: Optional[Literal["draft", "scheduled", "active", "paused", "expired", "needs_attention"]] = None
@@ -692,7 +692,7 @@ class AvailabilityRuleUpdate(BaseModel):
 
 class ModifierOptionCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=80)
-    price_delta: float = 0
+    price_delta: FiniteFloat = 0
     is_default: bool = False
     is_available: bool = True
     sort_order: int = 0
@@ -745,7 +745,7 @@ class ComboOptionInput(BaseModel):
     exclusive_image_path: Optional[str] = None
     exclusive_type: Optional[ComboExclusiveType] = None
     quantity: int = Field(1, ge=1)
-    price_impact: float = Field(0, ge=0)
+    price_impact: FiniteFloat = Field(0, ge=0)
     default_selected: bool = True
     removable: bool = True
     visible: bool = True
@@ -788,8 +788,8 @@ class ComboCreate(BaseModel):
     description: Optional[str] = Field(None, max_length=1000)
     image_path: Optional[str] = None
     category_id: Optional[UUID] = None
-    price: float = Field(0, ge=0)
-    original_price: Optional[float] = Field(None, ge=0)
+    price: FiniteFloat = Field(0, ge=0)
+    original_price: Optional[FiniteFloat] = Field(None, ge=0)
     display_badge: Optional[str] = Field(None, max_length=40)
     tags: List[str] = Field(default_factory=list, max_length=50)
     status: ComboStatus = "draft"
@@ -814,8 +814,8 @@ class ComboUpdate(BaseModel):
     description: Optional[str] = Field(None, max_length=1000)
     image_path: Optional[str] = None
     category_id: Optional[UUID] = None
-    price: Optional[float] = Field(None, ge=0)
-    original_price: Optional[float] = Field(None, ge=0)
+    price: Optional[FiniteFloat] = Field(None, ge=0)
+    original_price: Optional[FiniteFloat] = Field(None, ge=0)
     display_badge: Optional[str] = Field(None, max_length=40)
     tags: Optional[List[str]] = Field(None, max_length=50)
     status: Optional[ComboStatus] = None
@@ -874,7 +874,7 @@ class ComboOptionUpdate(BaseModel):
     exclusive_image_path: Optional[str] = None
     exclusive_type: Optional[ComboExclusiveType] = None
     quantity: Optional[int] = Field(None, ge=1)
-    price_impact: Optional[float] = Field(None, ge=0)
+    price_impact: Optional[FiniteFloat] = Field(None, ge=0)
     default_selected: Optional[bool] = None
     removable: Optional[bool] = None
     visible: Optional[bool] = None
@@ -934,7 +934,7 @@ class PaymentAccountDisconnect(BaseModel):
 
 class CounterPaymentMarkPaid(BaseModel):
     business_id: UUID
-    amount: Optional[float] = Field(None, ge=0)
+    amount: Optional[FiniteFloat] = Field(None, ge=0)
     method: Optional[str] = Field("counter", max_length=40)
 
 
@@ -1107,10 +1107,10 @@ class Order(BaseModel):
     table_label: Optional[str] = None
     customer_name: Optional[str] = None
     customer_phone: Optional[str] = None
-    subtotal: float
-    tax_amount: float
-    discount_amount: float
-    total_amount: float
+    subtotal: FiniteFloat
+    tax_amount: FiniteFloat
+    discount_amount: FiniteFloat
+    total_amount: FiniteFloat
     payment_status: PaymentStatus
     payment_method: Optional[str] = None
     notes: Optional[str] = None
@@ -1124,30 +1124,30 @@ class Order(BaseModel):
 
 
 class DashboardStats(BaseModel):
-    revenue_today: float
+    revenue_today: FiniteFloat
     active_orders: int
     orders_today: int
     orders_last_hour: int
     orders_past_7_days: int
     items_sold: int = 0
-    average_order_value: float
+    average_order_value: FiniteFloat
     top_selling_item: Optional[Dict[str, Any]] = None
     top_selling_items: List[Dict[str, Any]] = Field(default_factory=list)
-    gross_sales_today: float = 0
-    discounts_today: float = 0
-    refunds_today: float = 0
-    cancellations_today: float = 0
-    net_sales_today: float = 0
+    gross_sales_today: FiniteFloat = 0
+    discounts_today: FiniteFloat = 0
+    refunds_today: FiniteFloat = 0
+    cancellations_today: FiniteFloat = 0
+    net_sales_today: FiniteFloat = 0
     weekly_revenue: List[Dict[str, Any]]
     period_start: Optional[datetime] = None
     period_end: Optional[datetime] = None
     completed_orders: int = 0
-    period_gross_sales: float = 0
-    period_discounts: float = 0
-    period_refunds: float = 0
-    period_cancellations: float = 0
-    period_net_sales: float = 0
-    period_average_order_value: float = 0
+    period_gross_sales: FiniteFloat = 0
+    period_discounts: FiniteFloat = 0
+    period_refunds: FiniteFloat = 0
+    period_cancellations: FiniteFloat = 0
+    period_net_sales: FiniteFloat = 0
+    period_average_order_value: FiniteFloat = 0
     order_type_summary: Dict[str, int] = Field(default_factory=dict)
     payment_method_summary: Dict[str, int] = Field(default_factory=dict)
     order_funnel: Dict[str, int] = Field(default_factory=dict)

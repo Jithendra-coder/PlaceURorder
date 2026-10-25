@@ -5,12 +5,16 @@ from routers.devices import DeviceToken, PairingCode
 from routers.kiosk import BusinessSlug
 from schemas import (
     AuthLogin,
+    BusinessCreate,
     ComboCreate,
     ComboSectionCreate,
     ComboUpdate,
     DeviceActivate,
     KioskTestOrderCreate,
+    ModifierOptionCreate,
     OrderCreate,
+    ProductCreate,
+    PromotionCreate,
     ResetPasswordRequest,
 )
 
@@ -105,3 +109,18 @@ def test_combo_configuration_collections_are_bounded():
             max_select=100,
             options=[option] * 101,
         )
+
+
+@pytest.mark.parametrize(
+    ("model", "payload"),
+    [
+        (BusinessCreate, {"name": "Coffee Shop", "tax_percent": float("inf")}),
+        (ProductCreate, {"name": "Latte", "price": float("inf")}),
+        (PromotionCreate, {"name": "Summer deal", "discount_value": float("inf")}),
+        (ModifierOptionCreate, {"name": "Extra shot", "price_delta": float("inf")}),
+        (ComboCreate, {"name": "Lunch combo", "price": float("inf")}),
+    ],
+)
+def test_financial_values_must_be_finite(model, payload):
+    with pytest.raises(ValidationError):
+        model(**payload)
