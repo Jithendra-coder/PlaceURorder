@@ -107,6 +107,14 @@ async def add_security_headers(request, call_next):
     content_length = request.headers.get("content-length")
     if content_length and content_length.isdigit() and int(content_length) > MAX_REQUEST_BYTES:
         return _error(413, "Request body is too large.", request)
+
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > MAX_REQUEST_BYTES:
+            return _error(413, "Request body is too large.", request)
+
+    request._body = bytes(body)
     response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
