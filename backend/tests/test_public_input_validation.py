@@ -15,6 +15,7 @@ from schemas import (
     OrderCreate,
     ProductCreate,
     PromotionCreate,
+    PromotionUpdate,
     ResetPasswordRequest,
 )
 
@@ -124,3 +125,14 @@ def test_combo_configuration_collections_are_bounded():
 def test_financial_values_must_be_finite(model, payload):
     with pytest.raises(ValidationError):
         model(**payload)
+
+
+def test_promotion_relation_lists_reject_duplicates_before_database_writes():
+    target_id = "00000000-0000-0000-0000-000000000001"
+    location_id = "00000000-0000-0000-0000-000000000002"
+    with pytest.raises(ValidationError):
+        PromotionCreate(name="Summer deal", target_ids=[target_id, target_id])
+    with pytest.raises(ValidationError):
+        PromotionUpdate(location_ids=[location_id, location_id])
+    with pytest.raises(ValidationError):
+        PromotionUpdate(placements=["welcome_screen", "welcome_screen"])

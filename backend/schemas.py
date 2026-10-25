@@ -595,7 +595,14 @@ class PromotionCreate(BaseModel):
     target_type: Literal["product", "category", "combo"] = "product"
     target_ids: List[UUID] = Field(default_factory=list, max_length=100)
     location_ids: List[UUID] = Field(default_factory=list, max_length=100)
-    placements: List[Literal["deals_category", "welcome_screen", "kiosk_banner"]] = Field(default_factory=list)
+    placements: List[Literal["deals_category", "welcome_screen", "kiosk_banner"]] = Field(default_factory=list, max_length=3)
+
+    @model_validator(mode="after")
+    def validate_unique_relations(self) -> "PromotionCreate":
+        _validate_unique_values(self.target_ids, "target_ids")
+        _validate_unique_values(self.location_ids, "location_ids")
+        _validate_unique_values(self.placements, "placements")
+        return self
 
 
 class PromotionUpdate(BaseModel):
@@ -609,7 +616,19 @@ class PromotionUpdate(BaseModel):
     target_type: Optional[Literal["product", "category", "combo"]] = None
     target_ids: Optional[List[UUID]] = Field(None, max_length=100)
     location_ids: Optional[List[UUID]] = Field(None, max_length=100)
-    placements: Optional[List[Literal["deals_category", "welcome_screen", "kiosk_banner"]]] = None
+    placements: Optional[List[Literal["deals_category", "welcome_screen", "kiosk_banner"]]] = Field(None, max_length=3)
+
+    @model_validator(mode="after")
+    def validate_unique_relations(self) -> "PromotionUpdate":
+        _validate_unique_values(self.target_ids, "target_ids")
+        _validate_unique_values(self.location_ids, "location_ids")
+        _validate_unique_values(self.placements, "placements")
+        return self
+
+
+def _validate_unique_values(values: list[Any] | None, field_name: str) -> None:
+    if values is not None and len(set(values)) != len(values):
+        raise ValueError(f"{field_name} cannot contain duplicates.")
 
 
 class QrCodeCreate(BaseModel):
