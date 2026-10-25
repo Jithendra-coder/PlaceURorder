@@ -78,13 +78,12 @@ def update_promotion(client: DbClient, promotion_id: UUID, user_id: UUID, payloa
     if payload.status in {"active", "scheduled"} and client.fetch_one("select 1 from kiosk_promotion_placements where promotion_id = %(id)s and placement = 'deals_category'", {"id": str(promotion_id)}):
         _assert_single_deals_placement(client, UUID(row["business_id"]), promotion_id)
     if payload.target_ids is not None or payload.location_ids is not None or payload.placements is not None or payload.target_type is not None:
-        current_type = payload.target_type or client.fetch_one("select target_type from kiosk_promotion_targets where promotion_id = %(id)s limit 1", {"id": str(promotion_id)}) or {"target_type": "product"}
-        target_type = current_type if isinstance(current_type, str) else current_type.get("target_type", "product")
-        _validate_targets(client, UUID(row["business_id"]), target_type, payload.target_ids or [])
-        _validate_locations(client, UUID(row["business_id"]), payload.location_ids or [])
+        target_type, target_ids, location_ids, placements = _merged_relations(client, promotion_id, payload)
+        _validate_targets(client, UUID(row["business_id"]), target_type, target_ids)
+        _validate_locations(client, UUID(row["business_id"]), location_ids)
         if payload.placements and "deals_category" in payload.placements: _ensure_deals_category(client, UUID(row["business_id"]), (payload.status or row.get("status")) in {"active", "scheduled"})
         if payload.placements and "deals_category" in payload.placements: _assert_single_deals_placement(client, UUID(row["business_id"]), promotion_id)
-        _replace_relations(client, promotion_id, target_type, payload.target_ids or [], payload.location_ids or [], payload.placements or [])
+        _replace_relations(client, promotion_id, target_type, target_ids, location_ids, placements)
     _audit(client, UUID(row["business_id"]), user_id, "promotion_updated", promotion_id)
     return row
 
@@ -114,6 +113,18 @@ def _validate_locations(client: DbClient, business_id: UUID, ids: list[UUID]) ->
     if not ids: return
     count = client.fetch_one("select count(*)::int as count from business_locations where business_id = %(business_id)s and id = any(%(ids)s)", {"business_id": str(business_id), "ids": [str(item) for item in ids]})
     if not count or count["count"] != len(set(str(item) for item in ids)): raise HTTPException(status_code=404, detail="One or more locations are outside this business.")
+
+
+def _merged_relations(client: DbClient, promotion_id: UUID, payload: PromotionUpdate) -> tuple[str, list[UUID], list[UUID], list[str]]:
+    params = {"id": str(promotion_id)}
+    targets = client.fetch_all("select target_type, target_id from kiosk_promotion_targets where promotion_id = %(id)s", params)
+    locations = client.fetch_all("select location_id from kiosk_promotion_locations where promotion_id = %(id)s", params)
+    placements = client.fetch_all("select placement from kiosk_promotion_placements where promotion_id = %(id)s", params)
+    target_type = payload.target_type or (targets[0]["target_type"] if targets else "product")
+    target_ids = payload.target_ids if payload.target_ids is not None else [UUID(str(row["target_id"])) for row in targets]
+    location_ids = payload.location_ids if payload.location_ids is not None else [UUID(str(row["location_id"])) for row in locations]
+    placement_values = payload.placements if payload.placements is not None else [row["placement"] for row in placements]
+    return target_type, target_ids, location_ids, placement_values
 
 
 def _ensure_deals_category(client: DbClient, business_id: UUID, first: bool = False) -> None:

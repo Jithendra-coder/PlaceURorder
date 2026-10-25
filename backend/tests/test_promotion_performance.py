@@ -1,5 +1,6 @@
 from uuid import uuid4
 
+from schemas import PromotionUpdate
 from services import promotion_service
 
 
@@ -48,3 +49,22 @@ def test_list_promotions_with_no_rows_skips_relation_queries(monkeypatch):
 
     assert promotion_service.list_promotions(client, uuid4(), uuid4()) == {"promotions": []}
     assert client.calls == 1
+
+
+def test_partial_promotion_update_preserves_relations_that_were_not_sent():
+    promotion_id = uuid4()
+    target_id, location_id = uuid4(), uuid4()
+
+    class RelationsClient:
+        def fetch_all(self, query, _params):
+            if "kiosk_promotion_targets" in query:
+                return [{"target_type": "product", "target_id": str(target_id)}]
+            if "kiosk_promotion_locations" in query:
+                return [{"location_id": str(location_id)}]
+            if "kiosk_promotion_placements" in query:
+                return [{"placement": "deals_category"}]
+            raise AssertionError(query)
+
+    merged = promotion_service._merged_relations(RelationsClient(), promotion_id, PromotionUpdate(placements=["welcome_screen"]))
+
+    assert merged == ("product", [target_id], [location_id], ["welcome_screen"])
