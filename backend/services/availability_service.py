@@ -63,6 +63,7 @@ def update_rule(client: DbClient, business_id: UUID, rule_id: UUID, user_id: UUI
     if not changes:
         return current
     candidate = {**current, **changes}
+    _validate_rule_candidate(candidate)
     _validate_scope(client, business_id, candidate)
     _validate_conflicts(client, business_id, candidate, rule_id)
     changes.update({"updated_by": str(user_id), "updated_at": datetime.now(timezone.utc).isoformat()})
@@ -121,6 +122,14 @@ def _validate_scope(client: DbClient, business_id: UUID, data: dict) -> None:
         rows = client.table("business_locations").select("id").eq("business_id", str(business_id)).execute().data or []
         if not location_ids.issubset({str(row["id"]) for row in rows}):
             raise HTTPException(status_code=404, detail="One or more locations are outside this business.")
+
+
+def _validate_rule_candidate(candidate: dict) -> None:
+    if candidate.get("rule_type") == "schedule" and candidate.get("status") == "active" and (not candidate.get("days") or not candidate.get("time_windows")):
+        raise HTTPException(status_code=422, detail="An active schedule needs at least one day and time window.")
+    starts_at, ends_at = _datetime(candidate.get("starts_at")), _datetime(candidate.get("ends_at"))
+    if starts_at and ends_at and starts_at >= ends_at:
+        raise HTTPException(status_code=422, detail="Availability end must be after its start.")
 
 
 def _validate_conflicts(client: DbClient, business_id: UUID, candidate: dict, current_id: UUID | None = None) -> None:

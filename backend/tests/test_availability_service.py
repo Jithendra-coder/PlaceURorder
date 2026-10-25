@@ -1,7 +1,10 @@
 from datetime import datetime
+
+import pytest
+from fastapi import HTTPException
 from zoneinfo import ZoneInfo
 
-from services.availability_service import _windows_overlap, resolve_product
+from services.availability_service import _validate_rule_candidate, _windows_overlap, resolve_product
 
 
 BUSINESS = {"timezone": "Asia/Kolkata"}
@@ -35,3 +38,15 @@ def test_location_scope_and_multiple_schedule_windows():
 def test_schedule_overlap_including_overnight_windows():
     assert _windows_overlap([{"start": "22:00", "end": "02:00"}], [{"start": "01:00", "end": "03:00"}]) is True
     assert _windows_overlap([{"start": "08:00", "end": "10:00"}], [{"start": "10:00", "end": "12:00"}]) is False
+
+
+def test_active_schedule_update_cannot_clear_required_days_or_windows():
+    with pytest.raises(HTTPException) as error:
+        _validate_rule_candidate({"rule_type": "schedule", "status": "active", "days": [], "time_windows": [{"start": "09:00", "end": "10:00"}]})
+    assert error.value.status_code == 422
+
+
+def test_schedule_update_rejects_an_end_before_its_start():
+    with pytest.raises(HTTPException) as error:
+        _validate_rule_candidate({"rule_type": "exception", "status": "active", "starts_at": "2026-10-26T12:00:00Z", "ends_at": "2026-10-26T11:00:00Z"})
+    assert error.value.status_code == 422
