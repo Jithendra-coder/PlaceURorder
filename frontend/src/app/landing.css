@@ -77,6 +77,7 @@ body {
   font-weight: 400;
   overflow-x: hidden;
 }
+body:has(#landing-page-root) { overflow: visible; }
 img { max-width: 100%; display: block; }
 a { text-decoration: none; color: inherit; }
 button { cursor: pointer; border: none; background: none; font-family: inherit; }
@@ -485,8 +486,8 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .hero-kiosk-col {
   position: sticky;
   top: 72px;
-  height: 695px;
-  min-height: 695px;
+  height: min(695px, calc(100vh - 88px));
+  min-height: 0;
   display: flex;
   justify-content: center;
   align-items: flex-start;
@@ -1843,20 +1844,27 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   }
   .roi-results { grid-template-columns: 1fr; }
 }
-@media (max-height: 760px) {
-  .hero-kiosk-col { top: 68px; }
+@media (min-width: 861px) and (max-height: 768px) {
+  .hero-kiosk-col {
+    top: 68px;
+    height: min(590px, calc(100vh - 88px));
+  }
   .kiosk-chassis {
     height: 590px;
     transform: scale(0.92);
     transform-origin: top center;
   }
 }
-@media (max-height: 660px) {
+@media (min-width: 861px) and (max-height: 660px) {
+  .hero-kiosk-col { height: min(550px, calc(100vh - 88px)); }
   .kiosk-chassis {
     height: 550px;
     transform: scale(0.84);
     transform-origin: top center;
   }
+}
+@media (min-width: 861px) and (max-height: 560px) {
+  .kiosk-chassis { transform: scale(0.72); }
 }
 @media (max-width: 480px) {
   .hero-metrics-strip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
