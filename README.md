@@ -1,5 +1,7 @@
 # PlaceURorder
 
+[![Frontend quality checks](https://github.com/Jithendra-coder/PlaceURorder/actions/workflows/quality.yml/badge.svg?branch=main)](https://github.com/Jithendra-coder/PlaceURorder/actions/workflows/quality.yml)
+
 > A modern, responsive self-service kiosk, counter point-of-sale (POS), kitchen display system (KDS), and merchant administration platform built with **Next.js 16 (React 19)** and **FastAPI (PostgreSQL)**.
 
 ---
@@ -142,47 +144,47 @@ Ask AI handles approved live business lookups in MenuTap and retrieves relevant 
 
 Create a PostgreSQL database for the application:
 
-`ash
+```bash
 # Using psql
 psql -U postgres -c "CREATE DATABASE universal_kiosk_app;"
 
 # Apply the database schema
 psql -U postgres -d universal_kiosk_app -f backend/postgres_schema.sql
-`
+```
 
 ---
 
 ### 2. Backend Setup
 
 1. Navigate to the backend directory:
-   `ash
+   ```bash
    cd backend
-   `
+   ```
 
 2. Create a virtual environment and activate it:
-   `ash
+   ```bash
    python -m venv venv
    # On Windows:
    venv\Scripts\activate
    # On macOS/Linux:
    source venv/bin/activate
-   `
+   ```
 
 3. Install dependencies:
-   `ash
+   ```bash
    pip install -r requirements.txt
-   `
+   ```
 
 4. Configure environment variables:
-   `ash
+   ```bash
    cp .env.example .env
-   `
+   ```
    Set `DATABASE_URL`, `SUPABASE_URL`, and `SUPABASE_PUBLISHABLE_KEY` for the Supabase project, plus `JWT_SECRET` and any payment provider credentials. Copy the database connection string from Supabase Dashboard → Connect; keep its password private.
 
 5. Start the FastAPI development server:
-   `ash
+   ```bash
    uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-   `
+   ```
    API interactive documentation will be available at http://localhost:8000/docs.
 
 ---
@@ -190,24 +192,24 @@ psql -U postgres -d universal_kiosk_app -f backend/postgres_schema.sql
 ### 3. Frontend Setup
 
 1. Navigate to the frontend directory:
-   `ash
+   ```bash
    cd frontend
-   `
+   ```
 
 2. Install dependencies:
-   `ash
+   ```bash
    npm install
-   `
+   ```
 
 3. Configure environment variables:
-   `ash
+   ```bash
    cp .env.example .env.local
-   `
+   ```
 
 4. Start the Next.js development server:
-   `ash
+   ```bash
    npm run dev
-   `
+   ```
    Open http://localhost:3000 to access the application.
 
 ---
@@ -215,23 +217,23 @@ psql -U postgres -d universal_kiosk_app -f backend/postgres_schema.sql
 ## Testing & Quality Assurance
 
 ### Frontend Typecheck & Linting
-`ash
+```bash
 cd frontend
 npm run typecheck
 npm run lint
-`
+```
 
 ### End-to-End Tests (Playwright)
-`ash
+```bash
 cd frontend
 npx playwright test
-`
+```
 
 ### Backend Unit Tests
-`ash
+```bash
 cd backend
 pytest
-`
+```
 
 ---
 
@@ -246,4 +248,4 @@ pytest
 
 ## License
 
-This project is licensed under the MIT License.
+This repository currently has no tracked `LICENSE` file, so its reuse and redistribution terms are not explicitly stated. Add a license before relying on those permissions.
