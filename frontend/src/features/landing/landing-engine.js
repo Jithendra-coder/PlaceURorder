@@ -26,6 +26,7 @@ export function initLandingEngine() {
 
   // 2. SCROLL ENGINE & CHOREOGRAPHY
   const showcaseWrapper = document.getElementById('demo');
+  const showcaseKiosk = showcaseWrapper?.querySelector('.hero-kiosk-col');
 
   // Kiosk Screens
   const viewMenu = document.getElementById('viewMenu');
@@ -89,19 +90,34 @@ export function initLandingEngine() {
   let handY = 280;
   let lastTriggeredAction = -1;
 
+  function getScrollRange() {
+    if (!showcaseWrapper) return { start: 0, end: 1 };
+    const kioskParent = showcaseKiosk?.parentElement;
+    if (showcaseKiosk && kioskParent && getComputedStyle(showcaseKiosk).position === 'sticky') {
+      const parentRect = kioskParent.getBoundingClientRect();
+      const stickyTop = Number.parseFloat(getComputedStyle(showcaseKiosk).top) || 0;
+      const parentTop = parentRect.top + window.scrollY;
+      const kioskRect = showcaseKiosk.getBoundingClientRect();
+      const normalOffsetTop = Math.abs(kioskRect.top - stickyTop) < 1
+        ? showcaseKiosk.offsetTop - window.scrollY
+        : showcaseKiosk.offsetTop;
+      const start = parentTop + normalOffsetTop - stickyTop;
+      const end = parentRect.bottom + window.scrollY - stickyTop - showcaseKiosk.offsetHeight;
+      if (end > start) return { start, end };
+    }
+    const start = showcaseWrapper.getBoundingClientRect().top + window.scrollY;
+    return { start, end: start + Math.max(1, showcaseWrapper.offsetHeight - window.innerHeight) };
+  }
+
   function updateScrollProgress() {
     if (!showcaseWrapper) return;
-    const rect = showcaseWrapper.getBoundingClientRect();
-    const windowH = window.innerHeight;
-    const totalDist = showcaseWrapper.offsetHeight - windowH;
-    const scrolled = -rect.top;
-    targetProgress = Math.max(0, Math.min(1, scrolled / totalDist));
+    const { start, end } = getScrollRange();
+    targetProgress = Math.max(0, Math.min(1, (window.scrollY - start) / (end - start)));
   }
   function scrollToProgress(progress) {
     if (!showcaseWrapper) return;
-    const top = showcaseWrapper.getBoundingClientRect().top + window.scrollY;
-    const distance = Math.max(0, showcaseWrapper.offsetHeight - window.innerHeight);
-    window.scrollTo({ top: top + distance * progress, behavior: 'smooth' });
+    const { start, end } = getScrollRange();
+    window.scrollTo({ top: start + (end - start) * progress, behavior: 'smooth' });
   }
   window.addEventListener('scroll', updateScrollProgress, { passive: true });
   window.addEventListener('resize', updateScrollProgress);
