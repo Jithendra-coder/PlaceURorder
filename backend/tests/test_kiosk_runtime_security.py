@@ -40,6 +40,17 @@ def test_test_sessions_store_only_hashes_and_reject_unknown_tokens(monkeypatch):
     assert exc.value.status_code == 401
 
 
+def test_cookie_session_activity_touch_is_throttled():
+    client = SessionClient()
+
+    session = test_session_service.from_cookie(client, "valid-token")
+
+    sql, params = client.commands[-1]
+    assert session["id"] == "session-1"
+    assert "last_used_at is null or last_used_at < now() - interval '1 minute'" in sql
+    assert params == {"id": "session-1"}
+
+
 class ReplayClient:
     def __init__(self):
         self.locked = False

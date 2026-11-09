@@ -49,8 +49,10 @@ def from_cookie(client: DbClient, token: str | None) -> dict:
     if not token:
         raise HTTPException(status_code=401, detail="Test kiosk session is required.")
     session = _valid_session(client, token)
+    # shortcut: activity can lag by one minute; use a separate activity log if audit-grade freshness is needed.
     client.execute_command(
-        "update kiosk_test_sessions set last_used_at = now() where id = %(id)s",
+        """update kiosk_test_sessions set last_used_at = now()
+        where id = %(id)s and (last_used_at is null or last_used_at < now() - interval '1 minute')""",
         {"id": session["id"]},
     )
     return session
