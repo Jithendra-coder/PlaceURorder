@@ -21,7 +21,7 @@ test("landing kiosk stays pinned through the order demo, then releases", async (
   expect(range.end).toBeGreaterThan(range.start);
   await page.evaluate((top) => window.scrollTo({ top, behavior: "instant" }), range.start + (range.end - range.start) * 0.5);
   await expect.poll(() => page.locator(".hero-kiosk-col").evaluate((el) => Math.round(el.getBoundingClientRect().top))).toBe(Math.round(range.stickyTop));
-  await expect.poll(() => page.locator(".story-stage-card.is-active").count()).toBeGreaterThan(0);
+  await expect(page.locator("#storyStage2")).toHaveClass(/is-active/);
 
   await page.evaluate((top) => window.scrollTo({ top, behavior: "instant" }), range.end);
   await expect(page.locator("#viewSuccess")).toHaveClass(/active/);
