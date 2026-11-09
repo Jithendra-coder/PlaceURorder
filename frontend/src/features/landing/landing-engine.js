@@ -1,6 +1,7 @@
 export function initLandingEngine() {
   let animFrameId;
   let clockIntervalId;
+  const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
 
   
   
@@ -117,7 +118,7 @@ export function initLandingEngine() {
   function scrollToProgress(progress) {
     if (!showcaseWrapper) return;
     const { start, end } = getScrollRange();
-    window.scrollTo({ top: start + (end - start) * progress, behavior: 'smooth' });
+    window.scrollTo({ top: start + (end - start) * progress, behavior: motionPreference.matches ? 'instant' : 'smooth' });
   }
   window.addEventListener('scroll', updateScrollProgress, { passive: true });
   window.addEventListener('resize', updateScrollProgress);
@@ -307,7 +308,8 @@ export function initLandingEngine() {
   // 100% Silky Frame Loop
   function renderFrame() {
     // Smooth continuous damping
-    currentProgress += (targetProgress - currentProgress) * 0.09;
+    const reduceMotion = motionPreference.matches;
+    currentProgress = reduceMotion ? targetProgress : currentProgress + (targetProgress - currentProgress) * 0.09;
     const p = currentProgress;
 
     const targetPos = getHandPosition(p);
@@ -316,7 +318,7 @@ export function initLandingEngine() {
     handCursor.style.transform = `translate(${handX}px, ${handY}px)`;
 
     // Hand visibility: only show when scrolling down to explore interactive kiosk flow
-    if (p < 0.05) {
+    if (reduceMotion || p < 0.05) {
       handCursor.style.opacity = '0';
       handCursor.style.pointerEvents = 'none';
     } else if (p < 0.12) {
