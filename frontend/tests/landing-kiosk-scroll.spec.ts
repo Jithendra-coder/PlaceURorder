@@ -57,3 +57,12 @@ test("landing kiosk respects reduced-motion preferences", async ({ page }) => {
   });
   expect(scrollY).toBe(Math.round(range.start + (range.end - range.start) * 0.35));
 });
+
+test("landing FAQ responds once after effect replay", async ({ page }) => {
+  await page.goto("/");
+  const question = page.locator(".faq-question").nth(1);
+
+  await expect(question).toHaveAttribute("aria-expanded", "false");
+  await question.click();
+  await expect(question).toHaveAttribute("aria-expanded", "true");
+});

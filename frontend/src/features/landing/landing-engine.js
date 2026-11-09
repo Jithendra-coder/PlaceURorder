@@ -1,7 +1,18 @@
 export function initLandingEngine() {
   let animFrameId;
   let clockIntervalId;
+  let revealObserver;
+  const eventController = new AbortController();
+  const timeoutIds = new Set();
   const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  function scheduleTimeout(callback, delay) {
+    const timeoutId = window.setTimeout(() => {
+      timeoutIds.delete(timeoutId);
+      callback();
+    }, delay);
+    timeoutIds.add(timeoutId);
+  }
 
   
   
@@ -120,8 +131,8 @@ export function initLandingEngine() {
     const { start, end } = getScrollRange();
     window.scrollTo({ top: start + (end - start) * progress, behavior: motionPreference.matches ? 'instant' : 'smooth' });
   }
-  window.addEventListener('scroll', updateScrollProgress, { passive: true });
-  window.addEventListener('resize', updateScrollProgress);
+  window.addEventListener('scroll', updateScrollProgress, { passive: true, signal: eventController.signal });
+  window.addEventListener('resize', updateScrollProgress, { signal: eventController.signal });
   updateScrollProgress();
 
   function triggerTapEffect() {
@@ -129,7 +140,7 @@ export function initLandingEngine() {
     void touchRipple.offsetWidth;
     touchRipple.classList.add('burst');
     handCursor.classList.add('tapping');
-    setTimeout(() => {
+    scheduleTimeout(() => {
       handCursor.classList.remove('tapping');
     }, 180);
   }
@@ -202,8 +213,8 @@ export function initLandingEngine() {
       };
     }
   }
-  window.addEventListener('resize', measureElements);
-  setTimeout(measureElements, 250);
+  window.addEventListener('resize', measureElements, { signal: eventController.signal });
+  scheduleTimeout(measureElements, 250);
 
   // MATHEMATICALLY EXACT COORDINATES (Calibrated to vertical kiosk chassis):
   function getHandPosition(p) {
@@ -513,7 +524,7 @@ export function initLandingEngine() {
         if (lastTriggeredAction !== 5) {
           triggerTapEffect();
           dockActionButton.classList.add('pressed');
-          setTimeout(() => dockActionButton.classList.remove('pressed'), 200);
+          scheduleTimeout(() => dockActionButton.classList.remove('pressed'), 200);
           lastTriggeredAction = 5;
         }
       }
@@ -608,21 +619,21 @@ export function initLandingEngine() {
   }
   animFrameId = requestAnimationFrame(renderFrame);
 
-  if (sheetCloseBtn) sheetCloseBtn.addEventListener('click', () => scrollToProgress(0.35));
-  if (sheetConfirmBtn) sheetConfirmBtn.addEventListener('click', () => scrollToProgress(0.52));
-  if (kioskBackButtons[0]) kioskBackButtons[0].addEventListener('click', () => scrollToProgress(0.56));
-  if (kioskBackButtons[1]) kioskBackButtons[1].addEventListener('click', () => scrollToProgress(0.62));
-  if (kioskAddMoreBtn) kioskAddMoreBtn.addEventListener('click', () => scrollToProgress(0.56));
+  if (sheetCloseBtn) sheetCloseBtn.addEventListener('click', () => scrollToProgress(0.35), { signal: eventController.signal });
+  if (sheetConfirmBtn) sheetConfirmBtn.addEventListener('click', () => scrollToProgress(0.52), { signal: eventController.signal });
+  if (kioskBackButtons[0]) kioskBackButtons[0].addEventListener('click', () => scrollToProgress(0.56), { signal: eventController.signal });
+  if (kioskBackButtons[1]) kioskBackButtons[1].addEventListener('click', () => scrollToProgress(0.62), { signal: eventController.signal });
+  if (kioskAddMoreBtn) kioskAddMoreBtn.addEventListener('click', () => scrollToProgress(0.56), { signal: eventController.signal });
   if (dockActionButton) dockActionButton.addEventListener('click', () => {
     scrollToProgress(targetProgress < 0.60 ? 0.62 : targetProgress < 0.72 ? 0.75 : 0.88);
-  });
+  }, { signal: eventController.signal });
 
   // Category rail tab click interactivity
   document.querySelectorAll('.kiosk-category-tab').forEach(tab => {
     tab.addEventListener('click', () => {
       document.querySelectorAll('.kiosk-category-tab').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
-    });
+    }, { signal: eventController.signal });
   });
 
   // Printed Slip Interactivity (Print Bill & Close)
@@ -630,20 +641,20 @@ export function initLandingEngine() {
     printSlipBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       if (receiptSlipWrapper) receiptSlipWrapper.classList.toggle('slip-active');
-    });
+    }, { signal: eventController.signal });
   }
   if (closeReceiptBtn) {
     closeReceiptBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       if (receiptSlipWrapper) receiptSlipWrapper.classList.remove('slip-active');
-    });
+    }, { signal: eventController.signal });
   }
   if (receiptSlipWrapper) {
     receiptSlipWrapper.addEventListener('click', (e) => {
       if (e.target === receiptSlipWrapper) {
         receiptSlipWrapper.classList.remove('slip-active');
       }
-    });
+    }, { signal: eventController.signal });
   }
 
   // 3. ROI CALCULATOR ENGINE
@@ -713,11 +724,11 @@ export function initLandingEngine() {
     btn.addEventListener('click', () => {
       wageSlider.value = btn.dataset.wage;
       calculateROI();
-    });
+    }, { signal: eventController.signal });
   });
 
-  customerSlider.addEventListener('input', calculateROI);
-  wageSlider.addEventListener('input', calculateROI);
+  customerSlider.addEventListener('input', calculateROI, { signal: eventController.signal });
+  wageSlider.addEventListener('input', calculateROI, { signal: eventController.signal });
   calculateROI();
 
   // 4. FAQ ACCORDION ENGINE (Single-open, centered SVG +/x rotation)
@@ -739,12 +750,12 @@ export function initLandingEngine() {
         currentItem.classList.add('open');
         btn.setAttribute('aria-expanded', 'true');
       }
-    });
+    }, { signal: eventController.signal });
   });
 
   // 4. SCROLL REVEAL OBSERVER (Vercel / Linear Reveal on Scroll)
   if ('IntersectionObserver' in window) {
-    const revealObserver = new IntersectionObserver((entries, observer) => {
+    revealObserver = new IntersectionObserver((entries, observer) => {
       entries.forEach(entry => {
         if (entry.isIntersecting) {
           entry.target.classList.add('is-revealed');
@@ -763,8 +774,8 @@ export function initLandingEngine() {
   return function cleanup() {
     if (animFrameId) cancelAnimationFrame(animFrameId);
     if (clockIntervalId) clearInterval(clockIntervalId);
-    window.removeEventListener('scroll', updateScrollProgress);
-    window.removeEventListener('resize', updateScrollProgress);
-    window.removeEventListener('resize', measureElements);
+    eventController.abort();
+    timeoutIds.forEach(clearTimeout);
+    revealObserver?.disconnect();
   };
 }
