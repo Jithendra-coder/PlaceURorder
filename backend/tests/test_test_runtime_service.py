@@ -31,6 +31,7 @@ class RuntimeClient:
     def __init__(self):
         self.events = []
         self.commands = []
+        self.orders_by_key = {}
         self.order = {
             "id": str(ORDER_ID), "test_session_id": "session-1", "business_id": "business-1",
             "source": "kiosk", "order_type": "dine_in", "payment_status": "awaiting_payment",
@@ -49,9 +50,11 @@ class RuntimeClient:
 
     def fetch_one(self, sql, params):
         if "from test_runtime_orders" in sql and "idempotency_key" in sql and "select *" in sql:
-            return None
+            return self.orders_by_key.get(params["idempotency_key"])
         if "insert into test_runtime_orders" in sql:
             self.order = {**self.order, "source": params["source"], "order_type": params["order_type"], "items": params["items"].obj, "subtotal": params["subtotal"], "tax_amount": params["tax"], "total_amount": params["total"], "payment_status": "awaiting_payment", "kitchen_status": "pending_payment", "idempotency_key": params["idempotency_key"]}
+            if params["idempotency_key"]:
+                self.orders_by_key[params["idempotency_key"]] = self.order
             return self.order
         if "update test_runtime_orders" in sql:
             if self.order["payment_status"] == "awaiting_payment":
@@ -74,6 +77,10 @@ class RuntimeClient:
         self.commands.append((sql, params))
         return 1
 
+    def execute_one(self, sql, params):
+        self.commands.append((sql, params))
+        return None
+
 
 def payload(source="kiosk", key=None):
     return RuntimeOrderCreate(source=source, items=[{"product_id": PRODUCT_ID, "quantity": 2}], idempotency_key=key)
@@ -90,6 +97,18 @@ def test_create_uses_server_session_scope_and_one_shared_order(monkeypatch):
     assert order["source"] == "kiosk"
     assert client.events[0]["event_type"] == "created"
     assert "business_id" not in payload().model_dump()
+
+
+def test_create_serializes_and_reuses_idempotent_retries(monkeypatch):
+    client = RuntimeClient()
+    monkeypatch.setattr(test_runtime_service.test_session_service, "runtime_context", lambda *_args: {**SESSION, "app_type": "kiosk"})
+
+    first = test_runtime_service.create(client, "token", "kiosk", payload("kiosk", "create-retry"))
+    second = test_runtime_service.create(client, "token", "kiosk", payload("kiosk", "create-retry"))
+
+    assert first == second
+    assert sum(event["event_type"] == "created" for event in client.events) == 1
+    assert sum("pg_advisory_xact_lock" in sql for sql, _params in client.commands) == 2
 
 
 def test_counter_cannot_create_a_kiosk_source_order(monkeypatch):

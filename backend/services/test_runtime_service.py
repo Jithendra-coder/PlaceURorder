@@ -74,6 +74,10 @@ def create(client: DbClient, token: str | None, app_type: str, payload: TestRunt
     scope = _scope(session)
     _assert_location(client, payload.location_id, scope["business_id"])
     if payload.idempotency_key:
+        client.execute_one(
+            "select pg_advisory_xact_lock(hashtextextended(%(key)s, 0)) as locked",
+            {"key": f"test-runtime:{scope['business_id']}:{scope['test_session_id']}:{payload.idempotency_key}"},
+        )
         replay = client.fetch_one(
             "select * from test_runtime_orders where test_session_id=%(test_session_id)s and business_id=%(business_id)s and idempotency_key=%(idempotency_key)s",
             {**scope, "idempotency_key": payload.idempotency_key},
