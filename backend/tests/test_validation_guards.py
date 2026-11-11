@@ -745,6 +745,8 @@ def test_production_rejects_dev_auth_bypass_enabled():
         Settings(
             _env_file=None,
             environment="production",
+            frontend_base_url="https://app.placeurorder.example",
+            redis_url="redis://cache.example.test:6379/0",
             database_url="postgresql://prod-db.example.com:5432/menutap",
             supabase_url="https://example.supabase.co",
             supabase_publishable_key="sb_publishable_test",
@@ -761,6 +763,8 @@ def test_production_requires_payment_expiry_cron_secret():
         Settings(
             _env_file=None,
             environment="production",
+            frontend_base_url="https://app.placeurorder.example",
+            redis_url="redis://cache.example.test:6379/0",
             database_url="postgresql://prod-db.example.com:5432/menutap",
             supabase_url="https://example.supabase.co",
             supabase_publishable_key="sb_publishable_test",
@@ -775,6 +779,8 @@ def test_production_settings_accept_normal_auth_configuration():
     settings = Settings(
         _env_file=None,
         environment="production",
+        frontend_base_url="https://app.placeurorder.example",
+        redis_url="redis://cache.example.test:6379/0",
         database_url="postgresql://prod-db.example.com:5432/menutap",
         supabase_url="https://example.supabase.co",
         supabase_publishable_key="sb_publishable_test",
@@ -795,6 +801,8 @@ def test_production_rejects_documented_placeholder_jwt_secrets(secret):
         Settings(
             _env_file=None,
             environment="production",
+            frontend_base_url="https://app.placeurorder.example",
+            redis_url="redis://cache.example.test:6379/0",
             database_url="postgresql://prod-db.example.com:5432/menutap",
             supabase_url="https://example.supabase.co",
             supabase_publishable_key="sb_publishable_test",

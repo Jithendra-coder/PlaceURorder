@@ -49,6 +49,9 @@ export default function RootNotFound() {
           <Link href="/" className="mt-button mt-button--primary">
             Return to PlaceURorder
           </Link>
+          <Link href="/dashboard" style={{ marginLeft: "8px", fontSize: "14px", fontWeight: 600, color: "#175cd3", textDecoration: "none" }}>
+            Open dashboard
+          </Link>
         </div>
       </div>
     </main>

@@ -1,6 +1,11 @@
-import os
+import hashlib
+import hmac
 import json
+import os
+import time
 from datetime import datetime, timezone
+from io import BytesIO
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -208,26 +213,137 @@ def test_full_kiosk_order_inventory_and_kitchen_flow(monkeypatch):
         )
         assert invalid_upload.status_code == 400
 
-        def fake_online_checkout(db, _business, _order, payment, _method, _provider):
-            db.table("payments").update({"status": "paid"}).eq("id", payment["id"]).execute()
-            db.table("orders").update({"status": "pending", "payment_status": "paid"}).eq("id", payment["order_id"]).execute()
-            return {"payment": {**payment, "status": "paid"}, "checkout_url": "https://checkout.test/session"}
+        stripe_webhook_secret = "whsec_integration_test"
+        monkeypatch.setattr(
+            payment_service,
+            "get_settings",
+            lambda: SimpleNamespace(
+                stripe_secret_key="sk_test_integration",
+                stripe_webhook_secret=stripe_webhook_secret,
+                frontend_base_url="https://kiosk.example.test",
+            ),
+        )
+        provider_requests = []
 
-        monkeypatch.setattr(payment_service, "_create_online_checkout", fake_online_checkout)
+        class StripeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return json.dumps(
+                    {
+                        "id": "cs_test_integration",
+                        "url": "https://checkout.stripe.test/session",
+                        "payment_intent": None,
+                    }
+                ).encode()
+
+        def fake_stripe_urlopen(request, timeout=20):
+            provider_requests.append(request)
+            assert timeout == 20
+            assert request.full_url == "https://api.stripe.com/v1/checkout/sessions"
+            assert request.get_header("Authorization") == "Bearer sk_test_integration"
+            assert request.get_header("Stripe-account") == "acct_test"
+            assert b"line_items%5B0%5D%5Bprice_data%5D%5Bunit_amount%5D=10500" in request.data
+            if len(provider_requests) == 1:
+                raise payment_service.error.HTTPError(
+                    request.full_url,
+                    503,
+                    "Unavailable",
+                    hdrs=None,
+                    fp=BytesIO(b'{"error":"provider-private-detail"}'),
+                )
+            return StripeResponse()
+
+        monkeypatch.setattr(payment_service.request, "urlopen", fake_stripe_urlopen)
 
         menu = client.get(f"/api/kiosk/{slug}/menu")
         assert menu.status_code == 200, menu.text
         assert any(item["id"] == product_id for item in menu.json()["products"])
 
+        order_payload = {
+            "order_type": "dine_in",
+            "payment_method": "stripe",
+            "items": [{"product_id": product_id, "quantity": 1}],
+        }
+        idempotency_key = f"order-{suffix}"
+        before_provider_failure = _business_row_counts(business_id)
+        inventory_before_provider_failure = _product_inventory(product_id)
+        provider_failure = client.post(
+            f"/api/kiosk/{slug}/orders",
+            headers={"X-Idempotency-Key": idempotency_key},
+            json=order_payload,
+        )
+        assert provider_failure.status_code == 502
+        assert provider_failure.json()["detail"] == "Payment provider request failed."
+        assert "provider-private-detail" not in provider_failure.text
+        assert _business_row_counts(business_id) == before_provider_failure
+        assert _product_inventory(product_id) == inventory_before_provider_failure
+
         order = client.post(
             f"/api/kiosk/{slug}/orders",
-            json={"order_type": "dine_in", "payment_method": "stripe", "items": [{"product_id": product_id, "quantity": 1}]},
+            headers={"X-Idempotency-Key": idempotency_key},
+            json=order_payload,
         )
         assert order.status_code == 200, order.text
         order_data = order.json()["data"]
         assert order_data["subtotal"] == 100
         assert order_data["tax_amount"] == 5
         assert order_data["total_amount"] == 105
+        assert order_data["payment"]["checkout_url"] == "https://checkout.stripe.test/session"
+        assert len(provider_requests) == 2
+
+        counts_after_order = _business_row_counts(business_id)
+        replay = client.post(
+            f"/api/kiosk/{slug}/orders",
+            headers={"X-Idempotency-Key": idempotency_key},
+            json=order_payload,
+        )
+        assert replay.status_code == 200, replay.text
+        assert replay.json()["data"]["id"] == order_data["id"]
+        assert replay.json()["data"]["payment"]["payment"]["id"] == order_data["payment"]["payment"]["id"]
+        assert replay.json()["data"]["payment"]["checkout_url"] == order_data["payment"]["checkout_url"]
+        assert _business_row_counts(business_id) == counts_after_order
+        assert len(provider_requests) == 2
+
+        stripe_event = {
+            "id": f"evt_{suffix}",
+            "type": "checkout.session.completed",
+            "data": {
+                "object": {
+                    "id": "cs_test_integration",
+                    "payment_status": "paid",
+                    "payment_intent": "pi_test_integration",
+                    "metadata": {
+                        "payment_id": order_data["payment"]["payment"]["id"],
+                        "order_id": order_data["id"],
+                    },
+                }
+            },
+        }
+        stripe_event_body = json.dumps(stripe_event, separators=(",", ":")).encode()
+        timestamp = str(int(time.time()))
+        signature = hmac.new(
+            stripe_webhook_secret.encode(),
+            timestamp.encode() + b"." + stripe_event_body,
+            hashlib.sha256,
+        ).hexdigest()
+        webhook_headers = {"Stripe-Signature": f"t={timestamp},v1={signature}"}
+        webhook = client.post("/api/payments/webhooks/stripe", content=stripe_event_body, headers=webhook_headers)
+        duplicate_webhook = client.post("/api/payments/webhooks/stripe", content=stripe_event_body, headers=webhook_headers)
+        assert webhook.status_code == 200, webhook.text
+        assert webhook.json()["payment_status"] == "paid"
+        assert duplicate_webhook.status_code == 200, duplicate_webhook.text
+        assert duplicate_webhook.json() == {"status": "ignored", "reason": "duplicate"}
+        with db_context() as db:
+            paid_order = db.fetch_one(
+                "select status, payment_status from orders where id = %(order_id)s",
+                {"order_id": order_data["id"]},
+            )
+        assert paid_order == {"status": "pending", "payment_status": "paid"}
 
         oversized_order = client.post(
             f"/api/kiosk/{slug}/orders",

@@ -133,12 +133,9 @@ def create_paytm_dynamic_qr(
 def payment_status(
     payment_id: UUID,
     request: Request,
-    payment_token: str | None = None,
     x_payment_status_token: str | None = Header(default=None, alias="X-Payment-Status-Token", min_length=8, max_length=120),
     client: DbClient = Depends(get_db_client),
 ):
-    if payment_token is not None:
-        raise HTTPException(status_code=400, detail="Payment status token must be sent in the request body or X-Payment-Status-Token header.")
     token = x_payment_status_token
     assert_rate_limit(request, PAYMENT_STATUS_LIMIT, identity_parts=[str(payment_id)])
     return payment_service.payment_status(client, payment_id, token)

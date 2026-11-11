@@ -19,33 +19,47 @@ async function mockTestRuntime(page: Page, app: "counter" | "kitchen" | "kiosk")
 
 test("standalone Counter and Kitchen routes render their shared apps without the owner shell", async ({ page }) => {
   await mockTestRuntime(page, "counter");
-  await page.goto("/test/counter");
-  await expect(page.locator(".staff-app")).toBeVisible();
-  await expect(page.locator(".staff-brand")).toContainText("TEST MODE");
+  await page.goto("/test/counter", { waitUntil: "domcontentloaded" });
+  await expect(page.getByText("Test mode", { exact: true })).toBeVisible();
   await expect(page.locator(".mt-dashboard-shell")).toHaveCount(0);
   await expect(page).toHaveURL(/\/test\/counter/);
 
   await mockTestRuntime(page, "kitchen");
-  await page.goto("/test/kitchen");
-  await expect(page.locator(".staff-app")).toBeVisible();
-  await expect(page.locator(".staff-brand")).toContainText("TEST MODE");
+  await page.goto("/test/kitchen", { waitUntil: "domcontentloaded" });
+  await expect(page.getByText("Test mode", { exact: true })).toBeVisible();
   await expect(page.locator(".mt-dashboard-shell")).toHaveCount(0);
   await expect(page).toHaveURL(/\/test\/kitchen/);
 });
 
 test("missing Test Kiosk session stays in a dedicated recovery state", async ({ page }) => {
   await page.route("**/api/kiosk/test/session/context/kiosk", (route) => route.fulfill({ status: 401, json: { detail: "Test kiosk session is required." } }));
-  await page.goto("/test/kiosk");
+  await page.goto("/test/kiosk", { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: "PlaceURorder Test Kiosk" })).toBeVisible();
   await expect(page.getByText("Test session unavailable.")).toBeVisible();
   await expect(page).toHaveURL(/\/test\/kiosk$/);
   await expect(page.getByRole("button", { name: "Return to Test Hub" })).toBeVisible();
 });
 
+test("incomplete Test Kiosk menu stays recoverable instead of crashing", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.route("**/api/kiosk/test/session/context/kiosk", (route) => route.fulfill({
+    json: { session: { id: "session-1", business_id: business.id, expires_at: new Date(Date.now() + 60_000).toISOString(), app_type: "kiosk" } },
+  }));
+  await page.route("**/api/kiosk/test/session/menu", (route) => route.fulfill({ json: { business } }));
+
+  await page.goto("/test/kiosk", { waitUntil: "domcontentloaded" });
+
+  await expect(page.getByRole("heading", { name: "This kiosk is unavailable" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Retry now" })).toBeVisible();
+  await page.screenshot({ path: "test-results/incomplete-kiosk-menu-recovery.png", fullPage: true });
+  expect(pageErrors).toEqual([]);
+});
+
 test("expired Test Kitchen session does not fall back to a live device", async ({ page }) => {
   await page.route("**/api/kiosk/test/session/menu", (route) => route.fulfill({ json: menu }));
   await page.route("**/api/kiosk/test/session/context/kitchen", (route) => route.fulfill({ status: 401, json: { detail: "This test kiosk session is invalid or expired." } }));
-  await page.goto("/test/kitchen");
+  await page.goto("/test/kitchen", { waitUntil: "domcontentloaded" });
   await expect(page.getByText("Test session expired.")).toBeVisible();
   await expect(page).toHaveURL(/\/test\/kitchen$/);
   await expect(page.getByText("Pair or recover device")).toHaveCount(0);

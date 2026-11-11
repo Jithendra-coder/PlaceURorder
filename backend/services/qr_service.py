@@ -1,27 +1,22 @@
 from __future__ import annotations
 
-import hashlib
-from io import BytesIO
-import struct
-import zlib
 from datetime import datetime, timezone
+from io import BytesIO
+from urllib.parse import quote
 from uuid import UUID
 
+import qrcode
 from fastapi import HTTPException
 from psycopg.types.json import Jsonb
-try:
-    import qrcode
-    from PIL import Image
-except ImportError:  # pragma: no cover - dependency is declared in requirements
-    qrcode = None
-    Image = None
 
+from config import get_settings
 from database import DbClient
 from schemas import QrCodeCreate, QrCodeUpdate
-from services import business_service
+from services import business_service, cache_service, order_service, setup_service
 
 
 DESTINATIONS = {"main_menu", "category", "item", "deal", "table", "takeaway"}
+QR_UPDATE_COLUMNS = {"name", "active", "expires_at", "tracking_metadata", "updated_by"}
 
 
 def _business(client: DbClient, business_id: UUID, user_id: UUID) -> dict:
@@ -52,6 +47,9 @@ def update_qr_code(client: DbClient, qr_id: UUID, user_id: UUID, payload: QrCode
     if "tracking_metadata" in values: values["tracking_metadata"] = Jsonb(values["tracking_metadata"])
     if values:
         values["updated_by"] = str(user_id)
+        unknown = set(values) - QR_UPDATE_COLUMNS
+        if unknown:
+            raise HTTPException(status_code=422, detail="Unsupported QR field.")
         sets = ", ".join(f"{key} = %({key})s" for key in values)
         row = client.fetch_one(f"update kiosk_qr_codes set {sets}, updated_at = now() where id = %(id)s returning *", {**values, "id": str(qr_id)})
     if payload.active is False: _audit(client, UUID(row["business_id"]), user_id, "qr_disabled", qr_id)
@@ -77,13 +75,60 @@ def render_qr(client: DbClient, qr_id: UUID, user_id: UUID, fmt: str) -> tuple[b
     raise HTTPException(status_code=400, detail="Format must be png or svg.")
 
 
+def public_base_url() -> str:
+    return get_settings().frontend_base_url.rstrip("/")
+
+
+def store_url(slug: str) -> str:
+    """The shareable customer ordering link for a store. QR codes encode exactly this URL."""
+    return f"{public_base_url()}/order/{quote(slug, safe='')}"
+
+
 def destination_url(business: dict, row: dict) -> str:
-    base = f"/kiosk/{business['slug']}"
+    base = store_url(business["slug"])
     kind = row["destination_type"]
     if kind == "main_menu": return base
     if kind == "takeaway": return f"{base}?order_type=takeaway"
-    if kind == "table": return f"{base}?table={row.get('table_token') or ''}"
-    return f"{base}?{kind}={row.get('destination_id') or ''}"
+    if kind == "table": return f"{base}?table={quote(row.get('table_token') or '', safe='')}"
+    return f"{base}?{kind}={quote(str(row.get('destination_id') or ''), safe='')}"
+
+
+def store_ordering_status(client: DbClient, slug: str) -> dict:
+    """Public, non-sensitive view of whether a store accepts QR orders right now."""
+    business = business_service.get_business_by_slug(client, slug)
+    configuration = setup_service.live_configuration(client, business)
+    live = {**business, **configuration["business"]}
+    settings = live.get("kiosk_order_settings") or {}
+    return {
+        "name": live.get("name") or "",
+        "slug": live.get("slug") or slug,
+        "currency_symbol": live.get("currency_symbol") or "",
+        "tax_percent": float(live.get("tax_percent") or 0),
+        "qr_ordering_enabled": (business.get("kiosk_order_settings") or {}).get("qr_ordering_enabled") is True,
+        "is_open": order_service.store_is_open(live),
+        "order_modes": live.get("order_modes") or ["dine_in", "takeaway"],
+        "require_customer_name": bool(settings.get("require_customer_name")),
+        "require_customer_phone": bool(settings.get("require_customer_phone")),
+        "allow_customer_notes": settings.get("allow_customer_notes") is not False,
+        "store_url": store_url(live.get("slug") or slug),
+    }
+
+
+def owner_store_ordering(client: DbClient, business_id: UUID, user_id: UUID) -> dict:
+    business = _business(client, business_id, user_id)
+    return {**store_ordering_status(client, business["slug"]), "business_id": str(business_id)}
+
+
+def set_qr_ordering(client: DbClient, business_id: UUID, user_id: UUID, enabled: bool) -> dict:
+    """Turns QR ordering on or off with one targeted JSON update, so other kiosk settings are never overwritten."""
+    business = _business(client, business_id, user_id)
+    client.execute_command(
+        "update businesses set kiosk_order_settings = jsonb_set(coalesce(kiosk_order_settings, '{}'::jsonb), '{qr_ordering_enabled}', %(enabled)s, true) where id = %(id)s",
+        {"id": str(business_id), "enabled": Jsonb(bool(enabled))},
+    )
+    cache_service.invalidate_slug(business.get("slug"))
+    _audit(client, business_id, user_id, "qr_ordering_enabled" if enabled else "qr_ordering_disabled", business_id, entity="business")
+    return {**store_ordering_status(client, business["slug"]), "business_id": str(business_id)}
 
 
 def _validate_destination(client: DbClient, business: dict, payload: QrCodeCreate) -> None:
@@ -100,45 +145,27 @@ def _validate_destination(client: DbClient, business: dict, payload: QrCodeCreat
     if not row or row.get("is_active") is False or row.get("status") in {"expired", "paused"}: raise HTTPException(status_code=409, detail="The selected destination is archived, inactive, or outside this business.")
 
 
-def _audit(client: DbClient, business_id: UUID, user_id: UUID, action: str, entity_id: UUID) -> None:
-    client.table("audit_logs").insert({"business_id": str(business_id), "user_id": str(user_id), "action": action, "entity": "qr_code", "entity_id": str(entity_id), "metadata": Jsonb({})}).execute()
+def _audit(client: DbClient, business_id: UUID, user_id: UUID, action: str, entity_id: UUID, entity: str = "qr_code") -> None:
+    client.table("audit_logs").insert({"business_id": str(business_id), "user_id": str(user_id), "action": action, "entity": entity, "entity_id": str(entity_id), "metadata": Jsonb({})}).execute()
 
 
-def _matrix(value: str, size: int = 29) -> list[list[int]]:
-    digest = hashlib.sha256(value.encode()).digest()
-    matrix = [[0] * size for _ in range(size)]
-    for y in range(size):
-        for x in range(size): matrix[y][x] = (digest[(x + y * size) % len(digest)] >> ((x + y) % 8)) & 1
-    for ox, oy in ((0, 0), (size - 7, 0), (0, size - 7)):
-        for y in range(7):
-            for x in range(7): matrix[oy + y][ox + x] = int(x in (0, 6) or y in (0, 6) or (2 <= x <= 4 and 2 <= y <= 4))
-    return matrix
+def _qr(value: str, box_size: int) -> qrcode.QRCode:
+    # Error correction M and a 4-module quiet zone keep the code scannable from phone cameras.
+    qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=box_size, border=4)
+    qr.add_data(value)
+    qr.make(fit=True)
+    return qr
 
 
 def svg(value: str) -> bytes:
-    matrix = _qr_matrix(value); size = len(matrix); cells = "".join(f"<rect x='{x}' y='{y}' width='1' height='1'/>" for y, row in enumerate(matrix) for x, bit in enumerate(row) if bit)
+    matrix = _qr(value, box_size=1).get_matrix()
+    size = len(matrix)
+    cells = "".join(f"<rect x='{x}' y='{y}' width='1' height='1'/>" for y, row in enumerate(matrix) for x, bit in enumerate(row) if bit)
     return f"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {size} {size}' shape-rendering='crispEdges'><rect width='100%' height='100%' fill='white'/><g fill='black'>{cells}</g></svg>".encode()
 
 
 def png(value: str) -> bytes:
-    matrix = _qr_matrix(value)
-    if qrcode and Image:
-        image = Image.new("1", (len(matrix), len(matrix)), 1)
-        pixels = image.load()
-        for y, row in enumerate(matrix):
-            for x, bit in enumerate(row): pixels[x, y] = 0 if bit else 1
-        output = BytesIO(); image.save(output, format="PNG"); return output.getvalue()
-    raw = b"".join(b"\x00" + bytes(0 if bit else 255 for bit in row) for row in matrix); return _png_chunk(b"\x89PNG\r\n\x1a\n") + _png_chunk(b"IHDR" + struct.pack(">IIBBBBB", len(matrix), len(matrix), 8, 0, 0, 0, 0)) + _png_chunk(b"IDAT" + zlib.compress(raw)) + _png_chunk(b"IEND")
-
-
-def _qr_matrix(value: str) -> list[list[int]]:
-    if qrcode:
-        qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=1, border=1)
-        qr.add_data(value); qr.make(fit=True)
-        return [[int(bit) for bit in row] for row in qr.get_matrix()]
-    return _matrix(value)
-
-
-def _png_chunk(data: bytes) -> bytes:
-    if data.startswith(b"\x89PNG"): return data
-    return struct.pack(">I", len(data) - 4) + data + struct.pack(">I", zlib.crc32(data) & 0xffffffff)
+    image = _qr(value, box_size=12).make_image(fill_color="black", back_color="white")
+    output = BytesIO()
+    image.save(output, format="PNG")
+    return output.getvalue()

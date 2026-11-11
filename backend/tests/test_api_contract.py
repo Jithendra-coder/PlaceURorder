@@ -2,7 +2,10 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
+
+from config import get_settings
 
 from database import get_db_client
 import deps
@@ -133,6 +136,16 @@ def test_public_health_and_openapi_contract():
         assert path in paths
 
 
+@pytest.fixture
+def production_auth(monkeypatch):
+    # Pin the dev header bypass off so this contract holds even when a developer .env.local enables it for demo login.
+    monkeypatch.setenv("ALLOW_DEV_AUTH_BYPASS", "false")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+@pytest.mark.usefixtures("production_auth")
 def test_protected_routes_reject_missing_bearer_token():
     business_id = uuid4()
     product_id = uuid4()
@@ -334,8 +347,8 @@ def test_device_token_exchange_sets_httponly_cookie_and_clean_launch_path(monkey
     )
     try:
         response = local_client.post(
-            "/api/devices/live/device_kiosk_unit_token/session",
-            json={"expected_type": "kiosk"},
+            "/api/devices/live/session/exchange",
+            json={"device_token": "device_kiosk_unit_token", "expected_type": "kiosk"},
         )
     finally:
         app.dependency_overrides.clear()
@@ -440,14 +453,15 @@ def test_payment_status_rejects_query_token_and_accepts_body(monkeypatch):
         },
     )
     try:
+        # A token in the URL is ignored, so it can never authenticate the request or be parsed from a log-visible URL.
         query_response = client.get(f"/api/payments/{payment_id}/status?payment_token=secret-token")
-        assert query_response.status_code == 400
-        assert captured_tokens == []
+        assert query_response.status_code == 200
+        assert captured_tokens == [None]
 
         body_response = client.post(f"/api/payments/{payment_id}/status", json={"payment_token": "secret-token"})
         assert body_response.status_code == 200
         assert body_response.json()["status"] == "pending"
-        assert captured_tokens == ["secret-token"]
+        assert captured_tokens == [None, "secret-token"]
     finally:
         app.dependency_overrides.clear()
         reset_rate_limits()

@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
-import { useState } from "react";
-import { AuthField, AuthInput, AuthPrimaryButton, AuthShell, AuthStatus } from "@/components/AuthShell";
+import { useState, type FormEvent } from "react";
+import { AuthLink, AuthLinks, AuthNotice, AuthShell, AuthSubmit, AuthTextField } from "@/components/AuthShell";
+import { VStack } from "@astryxdesign/core/Stack";
 import { AuthService } from "@/services/auth";
 
 export default function ForgotPasswordPage() {
@@ -11,7 +11,7 @@ export default function ForgotPasswordPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const submit = async (event: React.FormEvent) => {
+  const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!email.trim() || busy) return;
     setBusy(true);
@@ -28,13 +28,15 @@ export default function ForgotPasswordPage() {
 
   return (
     <AuthShell title="Reset your password" description="Enter your email address and we’ll send you a secure reset link.">
-      <AuthStatus>{error}</AuthStatus>
-      <AuthStatus tone="success">{message}</AuthStatus>
-      <form onSubmit={submit} className="mt-auth-form">
-        <AuthField id="email" label="Email"><AuthInput id="email" type="email" placeholder="Enter your email address" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} disabled={busy} required /></AuthField>
-        <div className="mt-auth-action"><AuthPrimaryButton type="submit" disabled={!email.trim()} busy={busy}>Continue</AuthPrimaryButton></div>
+      <form onSubmit={submit} noValidate>
+        <VStack gap={5}>
+          <AuthNotice message={error} />
+          <AuthNotice tone="success" message={message} />
+          <AuthTextField id="email" name="email" type="email" label="Email" placeholder="Enter your email address" autoComplete="email" value={email} onChange={setEmail} disabled={busy} required />
+          <AuthSubmit label="Continue" disabled={!email.trim()} busy={busy} />
+          <AuthLinks><AuthLink href="/auth/sign-in" label="Back to sign in" /></AuthLinks>
+        </VStack>
       </form>
-      <div className="mt-auth-route-links"><Link href="/auth/sign-in">Back to sign in</Link></div>
     </AuthShell>
   );
 }

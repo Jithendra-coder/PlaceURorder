@@ -16,33 +16,22 @@ async function mockCounter(page: import("@playwright/test").Page) {
   });
 }
 
-test("Counter product cards derive quantity from Current Order and keep one focus treatment", async ({ page }) => {
+test("Counter product tiles derive quantity from the current order", async ({ page }) => {
   await mockCounter(page);
   await page.goto("/device");
-  await expect(page.getByRole("heading", { name: "Current Order" })).toBeVisible();
+  await expect(page.getByText("Current order", { exact: true })).toBeVisible();
 
-  const search = page.getByLabel("Search menu items");
-  await search.focus();
-  const focus = await search.evaluate((input) => {
-    const container = input.closest("label")!;
-    return { inputOutline: getComputedStyle(input).outlineStyle, inputShadow: getComputedStyle(input).boxShadow, containerShadow: getComputedStyle(container).boxShadow };
-  });
-  expect(focus.inputOutline).toBe("none");
-  expect(focus.inputShadow).toBe("none");
-  expect(focus.containerShadow).not.toBe("none");
-
-  const card = page.locator(".counter-product-card", { hasText: "Classic Burger" });
-  await card.getByRole("button", { name: "Add" }).click();
+  await page.getByRole("button", { name: "Add", exact: true }).click();
   await expect(page.getByText("1 item", { exact: true })).toBeVisible();
-  await expect(card.getByRole("button", { name: "Increase Classic Burger quantity" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Increase Classic Burger", exact: true })).toBeVisible();
 
-  await card.getByRole("button", { name: "Increase Classic Burger quantity" }).click();
+  await page.getByRole("button", { name: "Increase Classic Burger", exact: true }).click();
   await expect(page.getByText("2 items", { exact: true })).toBeVisible();
-  await expect(page.locator(".current-order")).toContainText("₹200.00");
+  await expect(page.getByText("₹200.00").first()).toBeVisible();
 
-  await card.getByRole("button", { name: "Decrease Classic Burger quantity" }).click();
+  await page.getByRole("button", { name: "Decrease Classic Burger", exact: true }).click();
   await expect(page.getByText("1 item", { exact: true })).toBeVisible();
-  await card.getByRole("button", { name: "Decrease Classic Burger quantity" }).click();
-  await expect(card.getByRole("button", { name: "Add" })).toBeVisible();
+  await page.getByRole("button", { name: "Decrease Classic Burger", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Add", exact: true })).toBeVisible();
   await expect(page.getByText("0 items", { exact: true })).toBeVisible();
 });

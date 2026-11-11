@@ -73,6 +73,9 @@ class AssistantResponse(BaseModel):
     growth_summary: GrowthSummary | None = None
 
 
+ASSISTANT_ROLES = business_service.ADMIN_ROLES | {StaffRole.VIEWER}
+
+
 @router.post("/chat", response_model=AssistantResponse)
 def ask(
     payload: AskRequest,
@@ -81,5 +84,5 @@ def ask(
     client: DbClient = Depends(get_db_client),
 ):
     assert_rate_limit(request, ASK_LIMIT, identity_parts=[str(user_id), str(payload.business_id)])
-    business_service.assert_business_access(client, payload.business_id, user_id, set(StaffRole))
+    business_service.assert_business_access(client, payload.business_id, user_id, ASSISTANT_ROLES)
     return assistant_service.answer(client, payload.business_id, user_id, payload.question, payload.location_id)

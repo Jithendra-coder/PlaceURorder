@@ -1,29 +1,30 @@
 "use client";
 
 import { useEffect } from "react";
-import { AutoRecoveringState } from "@/components/ui/AutoRecoveringState";
+import { Button } from "@astryxdesign/core/Button";
+import { VStack } from "@astryxdesign/core/Stack";
+import { Heading, Text } from "@astryxdesign/core/Text";
+import { DashboardPage, NoticeBanner, PageHeader } from "@/components/dashboard/kit";
 
-export default function DashboardError({
-  error,
-  reset,
-}: {
-  error: Error & { digest?: string };
-  reset: () => void;
-}) {
+export default function DashboardError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {
     console.error("Dashboard error caught by boundary:", error);
   }, [error]);
 
   return (
-    <div style={{ padding: "40px 24px", maxWidth: "720px", margin: "0 auto" }}>
-      <AutoRecoveringState
-        title="Could not load Dashboard module"
-        description={
-          error.message ||
-          "This dashboard section encountered an unexpected error. It will automatically reload once connectivity is verified."
-        }
-        onRetry={reset}
-      />
-    </div>
+    <DashboardPage width={720}>
+      <VStack gap={5}>
+        <PageHeader title="Could not load this dashboard section" description="This section hit an unexpected problem. Try again, or return to Home." />
+        <NoticeBanner
+          tone="danger"
+          title="Something went wrong"
+          description={error.message || "This dashboard section encountered an unexpected error. Your data has not been changed."}
+          action={<Button label="Try again" variant="secondary" onClick={reset} />}
+        />
+        <Heading level={3} weight="semibold">Need a fresh start?</Heading>
+        <Text type="body" color="secondary">Reloading the page re-checks your connection and session.</Text>
+        <Button label="Reload page" variant="ghost" onClick={() => window.location.reload()} />
+      </VStack>
+    </DashboardPage>
   );
 }

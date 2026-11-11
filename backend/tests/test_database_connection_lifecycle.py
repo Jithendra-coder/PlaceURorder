@@ -8,6 +8,23 @@ from routers import auth
 from services import auth_service
 
 
+def test_new_connection_has_a_finite_connect_timeout(monkeypatch):
+    settings = type("Settings", (), {"database_url": "postgresql://example.test/app"})()
+    calls = {}
+    connection = object()
+
+    def fake_connect(*args, **kwargs):
+        calls["args"] = args
+        calls["kwargs"] = kwargs
+        return connection
+
+    monkeypatch.setattr(database, "get_settings", lambda: settings)
+    monkeypatch.setattr(database, "connect", fake_connect)
+
+    assert database.new_connection() is connection
+    assert calls["kwargs"]["connect_timeout"] == 5
+
+
 class BrokenRollbackConnection:
     closed = False
     broken = False

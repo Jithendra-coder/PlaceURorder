@@ -1,11 +1,17 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { AlertTriangle, Check, ExternalLink, Image as ImageIcon, Info, LayoutTemplate, Loader2, Monitor, RefreshCw, RotateCcw, ShoppingBag, Smartphone } from "lucide-react";
+import { Check, ExternalLink, Image as ImageIcon, Monitor, RotateCcw, ShoppingBag, Smartphone } from "lucide-react";
+import { Button } from "@astryxdesign/core/Button";
+import { Grid } from "@astryxdesign/core/Grid";
+import { SelectableCard } from "@astryxdesign/core/SelectableCard";
+import { HStack, VStack } from "@astryxdesign/core/Stack";
+import { Skeleton } from "@astryxdesign/core/Skeleton";
+import { Text } from "@astryxdesign/core/Text";
+import { Card } from "@astryxdesign/core/Card";
+import { DashboardPageWithPanel, DetailDrawer, KioskDevice, Metric, MetricGrid, NoticeBanner, PageHeader, Panel, StatusBadge } from "@/components/dashboard/kit";
 import { KioskRuntime, type KioskExperienceData } from "@/features/kiosk/KioskApp";
-import { DetailsDrawer, Skeleton } from "@/components/ui/DashboardUI";
 import { api as dashboardApi, assetUrl as nullableAssetUrl } from "@/lib/api";
 import { formatKioskThemeSelection, parseKioskThemeSelection } from "@/lib/constants";
 import { kioskBusinessConfig, type KioskLayoutId } from "@/lib/kiosk/kiosk-business-config";
@@ -25,20 +31,17 @@ type SaveState = "saved" | "saving" | "error";
 
 const layoutOptions: Array<{ id: KioskLayoutId; label: string; meta: string }> = [
   { id: "category_gate", label: "Gate", meta: "Category Gate" },
-  { id: "left_category", label: "Left Rail", meta: "Left Category Rail" },
-  { id: "top_category", label: "Top Bar", meta: "Top Category Bar" },
+  { id: "left_category", label: "Left rail", meta: "Left Category Rail" },
+  { id: "top_category", label: "Top bar", meta: "Top Category Bar" },
 ];
-
 const orientationOptions: Array<{ id: KioskScreenOrientation; label: string }> = [
   { id: "portrait", label: "Portrait" },
   { id: "landscape", label: "Landscape" },
 ];
-
 const categoryOptions = [
   { id: "picture" as const, label: "Picture", meta: "Picture Category" },
   { id: "simple" as const, label: "Simple", meta: "Simple Category" },
 ];
-
 const productOptions = [
   { id: "detailed" as const, label: "Detailed", meta: "Detailed Product" },
   { id: "simple" as const, label: "Simple", meta: "Simple Product" },
@@ -110,7 +113,16 @@ function previewBusiness(business: ApiBusiness, config: ScreenConfig): Business 
 }
 
 export function KioskScreensSkeleton() {
-  return <div className="mt-kiosk-screens mt-kiosk-screens--loading" aria-busy="true"><div className="mt-kiosk-screens-header"><div><Skeleton lines={2} label="Loading Kiosk Screens" /></div><Skeleton lines={1} label="Loading preview actions" /></div><div className="mt-kiosk-screens-workspace"><div className="mt-kiosk-screens-config"><Skeleton lines={12} label="Loading screen settings" /></div><div className="mt-kiosk-screens-preview-skeleton"><Skeleton lines={8} label="Loading kiosk preview" /></div></div></div>;
+  return (
+    <VStack gap={4} aria-busy="true">
+      <Skeleton height={48} width="40%" radius={3} />
+      <Grid columns={{ minWidth: 220, repeat: "fit" }} gap={4}>
+        <Skeleton height={160} width="100%" radius={3} />
+        <Skeleton height={160} width="100%" radius={3} />
+        <Skeleton height={160} width="100%" radius={3} />
+      </Grid>
+    </VStack>
+  );
 }
 
 export function KioskScreensPage({ business, products, categories, setup, refresh }: { business: ApiBusiness; products: Product[]; categories: Category[]; setup: { unpublishedChanges: number } | null; refresh: () => Promise<ApiBusiness | null> }) {
@@ -123,7 +135,6 @@ export function KioskScreensPage({ business, products, categories, setup, refres
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [saveError, setSaveError] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewKey, setPreviewKey] = useState(0);
   const [unpublishedCount, setUnpublishedCount] = useState(setup?.unpublishedChanges || 0);
   const isDirty = !sameConfig(config, baseline);
 
@@ -164,7 +175,6 @@ export function KioskScreensPage({ business, products, categories, setup, refres
     setSaveState("saving");
     setSaveError("");
   };
-
   const reset = () => {
     if (!isDirty) return;
     requestRef.current += 1;
@@ -175,103 +185,172 @@ export function KioskScreensPage({ business, products, categories, setup, refres
   };
 
   const previewData: KioskExperienceData = useMemo(() => ({ business: previewBusiness(business, config), categories, products }), [business, categories, config, products]);
-
   const categoriesWithoutImages = categories.filter((category) => !category.image_path).length;
   const productsWithoutImages = products.filter((product) => !product.primary_image_path).length;
   const missingMenu = products.length === 0;
   const missingCategories = products.length > 0 && categories.length === 0;
-  const setupCount = unpublishedCount;
 
-  return <div className="mt-kiosk-screens">
-    <header className="mt-kiosk-screens-header">
-      <div><h1>Kiosk Screens</h1><p>Choose how your kiosk menu is presented.</p></div>
-      <div className="mt-kiosk-screens-header__actions">
-        {setupCount > 0 && <Link className="mt-kiosk-screens-draft" href="/dashboard/kiosk-experience/publish"><span aria-hidden="true">●</span> {setupCount} unpublished change{setupCount === 1 ? "" : "s"} <span>Review →</span></Link>}
-        <button className="mt-button mt-button--secondary mt-kiosk-screens-preview-trigger" type="button" onClick={() => setPreviewOpen(true)}><Monitor size={16} /> Preview</button>
-        <Link className="mt-button mt-button--secondary" href="/dashboard/kiosk-experience/preview"><ExternalLink size={16} /> Open full preview</Link>
-      </div>
-    </header>
-    <div className="mt-kiosk-screens-workspace">
-      <div>
-        <section className="mt-kiosk-screens-config" aria-label="Kiosk screen configuration">
-          <ScreenSection number="1" title="Orientation" helper="Choose the screen orientation."><div className="mt-kiosk-screen-options mt-kiosk-screen-options--orientation" role="radiogroup" aria-label="Screen orientation">{orientationOptions.map((option) => <RadioOption key={option.id} checked={config.orientation === option.id} label={option.label} onSelect={() => select({ orientation: option.id })} onKeyDown={(event) => moveRadio(event, orientationOptions.map((item) => item.id), config.orientation, (value) => select({ orientation: value as KioskScreenOrientation }))}><OrientationIcon orientation={option.id} /></RadioOption>)}</div></ScreenSection>
-          <ScreenSection number="2" title="Kiosk layout" helper="Choose how customers move through categories."><div className="mt-kiosk-screen-options mt-kiosk-screen-options--layouts" role="radiogroup" aria-label="Kiosk layout">{layoutOptions.map((option) => <RadioOption key={option.id} checked={config.layout === option.id} label={option.label} meta={option.meta} onSelect={() => select({ layout: option.id })} onKeyDown={(event) => moveRadio(event, layoutOptions.map((item) => item.id), config.layout, (value) => select({ layout: value as KioskLayoutId }))}><LayoutMiniature layout={option.id} /></RadioOption>)}</div></ScreenSection>
-          <ScreenSection number="3" title="Category cards" helper="Choose how category choices appear."><div className="mt-kiosk-screen-options mt-kiosk-screen-options--cards" role="radiogroup" aria-label="Category card style">{categoryOptions.map((option) => <RadioOption key={option.id} checked={config.categoryCardStyle === option.id} label={option.label} meta={option.meta} onSelect={() => select({ categoryCardStyle: option.id })} onKeyDown={(event) => moveRadio(event, categoryOptions.map((item) => item.id), config.categoryCardStyle, (value) => select({ categoryCardStyle: value as ScreenConfig["categoryCardStyle"] }))}><CategoryMiniature style={option.id} category={categories[0]} /></RadioOption>)}</div></ScreenSection>
-          <ScreenSection number="4" title="Menu item cards" helper="Choose how products appear to customers."><div className="mt-kiosk-screen-options mt-kiosk-screen-options--cards" role="radiogroup" aria-label="Menu item card style">{productOptions.map((option) => <RadioOption key={option.id} checked={config.productCardStyle === option.id} label={option.label} meta={option.meta} onSelect={() => select({ productCardStyle: option.id })} onKeyDown={(event) => moveRadio(event, productOptions.map((item) => item.id), config.productCardStyle, (value) => select({ productCardStyle: value as ScreenConfig["productCardStyle"] }))}><ProductMiniature style={option.id} product={products[0]} /></RadioOption>)}</div></ScreenSection>
-        </section>
-        <CurrentSetup config={config} baseline={baseline} onReset={reset} saveState={saveState} saveError={saveError} onRetry={() => void saveConfig(configRef.current)} unpublishedCount={setupCount} />
-        {(missingMenu || missingCategories || categoriesWithoutImages > 0 || productsWithoutImages > 0) && <div className="mt-kiosk-screens-warnings" aria-live="polite">
-          {missingMenu && <WarningRow message="No menu items to preview" detail="Add items to see your kiosk menu." href="/dashboard/kiosk-experience/menu?mode=items" action="Go to Manage Menu →" />}
-          {missingCategories && <WarningRow message="No categories available to preview." detail="Create categories to organize your menu." href="/dashboard/kiosk-experience/menu?mode=categories" action="Manage categories →" />}
-          {config.categoryCardStyle === "picture" && categoriesWithoutImages > 0 && <WarningRow message={`${categoriesWithoutImages} categor${categoriesWithoutImages === 1 ? "y has" : "ies have"} no images`} href="/dashboard/kiosk-experience/menu?mode=categories" action="Review →" />}
-          {productsWithoutImages > 0 && <WarningRow message={`${productsWithoutImages} item${productsWithoutImages === 1 ? " has" : "s have"} no images`} detail="The kiosk fallback image will be used." href="/dashboard/kiosk-experience/menu?mode=items" action="Review →" />}
-        </div>}
-      </div>
-      <PreviewPanel business={business} config={config} previewData={previewData} previewKey={previewKey} onRefresh={() => setPreviewKey((value) => value + 1)} />
-    </div>
-    <DetailsDrawer open={previewOpen} onClose={() => setPreviewOpen(false)} title="Live preview" variant="sheet" className="mt-kiosk-screens-preview-drawer" footer={<button className="mt-button mt-button--secondary" type="button" onClick={() => setPreviewOpen(false)}>Close</button>}><PreviewPanel business={business} config={config} previewData={previewData} previewKey={previewKey} onRefresh={() => setPreviewKey((value) => value + 1)} compact /></DetailsDrawer>
-  </div>;
+  const preview = <ScreenPreview business={business} config={config} previewData={previewData} />;
+
+  return (
+    <DashboardPageWithPanel panel={preview} panelWidth={400}>
+      <PageHeader
+        eyebrow="Kiosk & Menu"
+        title="Kiosk screens"
+        description="Choose how your kiosk menu is presented to customers."
+        actions={<>
+          <Button label="Preview kiosk" variant="secondary" onClick={() => setPreviewOpen(true)} icon={<Monitor size={16} aria-hidden="true" />} />
+          <Button label="Open full preview" variant="ghost" href="/dashboard/kiosk-experience/preview" icon={<ExternalLink size={16} aria-hidden="true" />} />
+        </>}
+      >
+        {unpublishedCount > 0 && <NoticeBanner tone="warning" title={`${unpublishedCount} unpublished change${unpublishedCount === 1 ? "" : "s"}`} action={<Button label="Review in Test & Publish" variant="ghost" href="/dashboard/kiosk-experience/publish" />} />}
+      </PageHeader>
+      <Panel title="Orientation" description="Choose the screen orientation.">
+        <Grid columns={{ minWidth: 200, repeat: "fit" }} gap={3}>
+          {orientationOptions.map((option) => (
+            <OptionCard key={option.id} label={option.label} selected={config.orientation === option.id} onSelect={() => select({ orientation: option.id })}>
+              <HStack gap={2} vAlign="center">
+                {option.id === "portrait" ? <Smartphone size={19} aria-hidden="true" /> : <Monitor size={19} aria-hidden="true" />}
+                <Text type="body" weight="semibold">{option.label}</Text>
+              </HStack>
+            </OptionCard>
+          ))}
+        </Grid>
+      </Panel>
+      <Panel title="Layout" description="Choose how customers move through categories.">
+        <Grid columns={{ minWidth: 200, repeat: "fit" }} gap={3}>
+          {layoutOptions.map((option) => (
+            <OptionCard key={option.id} label={option.meta} selected={config.layout === option.id} onSelect={() => select({ layout: option.id })}>
+              <LayoutMiniature layout={option.id} />
+              <Text type="body" weight="semibold">{option.label}</Text>
+            </OptionCard>
+          ))}
+        </Grid>
+      </Panel>
+      <Panel title="Category style" description="Choose how category choices appear.">
+        <Grid columns={{ minWidth: 200, repeat: "fit" }} gap={3}>
+          {categoryOptions.map((option) => (
+            <OptionCard key={option.id} label={option.meta} selected={config.categoryCardStyle === option.id} onSelect={() => select({ categoryCardStyle: option.id })}>
+              <CategoryMiniature style={option.id} category={categories[0]} />
+              <Text type="body" weight="semibold">{option.label}</Text>
+            </OptionCard>
+          ))}
+        </Grid>
+      </Panel>
+      <Panel title="Product style" description="Choose how products appear to customers.">
+        <Grid columns={{ minWidth: 200, repeat: "fit" }} gap={3}>
+          {productOptions.map((option) => (
+            <OptionCard key={option.id} label={option.meta} selected={config.productCardStyle === option.id} onSelect={() => select({ productCardStyle: option.id })}>
+              <ProductMiniature style={option.id} product={products[0]} />
+              <Text type="body" weight="semibold">{option.label}</Text>
+            </OptionCard>
+          ))}
+        </Grid>
+      </Panel>
+      <CurrentSetup config={config} baseline={baseline} onReset={reset} saveState={saveState} saveError={saveError} onRetry={() => void saveConfig(configRef.current)} unpublishedCount={unpublishedCount} />
+      {(missingMenu || missingCategories || (config.categoryCardStyle === "picture" && categoriesWithoutImages > 0) || productsWithoutImages > 0) && (
+        <VStack gap={2} aria-live="polite">
+          {missingMenu && <NoticeBanner tone="warning" title="No menu items to preview" description="Add items to see your kiosk menu." action={<Button label="Go to Manage Menu" variant="ghost" href="/dashboard/kiosk-experience/menu?mode=items" />} />}
+          {missingCategories && <NoticeBanner tone="warning" title="No categories available to preview." description="Create categories to organize your menu." action={<Button label="Manage categories" variant="ghost" href="/dashboard/kiosk-experience/menu?mode=combos" />} />}
+          {config.categoryCardStyle === "picture" && categoriesWithoutImages > 0 && <NoticeBanner tone="warning" title={`${categoriesWithoutImages} categor${categoriesWithoutImages === 1 ? "y has" : "ies have"} no images`} action={<Button label="Review" variant="ghost" href="/dashboard/kiosk-experience/menu?mode=items" />} />}
+          {productsWithoutImages > 0 && <NoticeBanner tone="info" title={`${productsWithoutImages} item${productsWithoutImages === 1 ? " has" : "s have"} no images`} description="The kiosk fallback image will be used." action={<Button label="Review" variant="ghost" href="/dashboard/kiosk-experience/menu?mode=items" />} />}
+        </VStack>
+      )}
+      <DetailDrawer title="Live preview" isOpen={previewOpen} onClose={() => setPreviewOpen(false)} width={520} footer={<Button label="Close" variant="secondary" onClick={() => setPreviewOpen(false)} />}>
+        {preview}
+      </DetailDrawer>
+    </DashboardPageWithPanel>
+  );
 }
 
-function ScreenSection({ title, children }: { number?: string; title: string; helper?: string; children: ReactNode }) {
-  const displayTitle = title === "Kiosk layout" ? "Layout" : title === "Category cards" ? "Category style" : title === "Menu item cards" ? "Product style" : title;
-  return <section className="mt-kiosk-screen-section"><header><h2>{displayTitle}</h2></header>{children}</section>;
-}
-
-function RadioOption({ checked, label, meta, children, onSelect, onKeyDown }: { checked: boolean; label: string; meta?: string; children: ReactNode; onSelect: () => void; onKeyDown: (event: React.KeyboardEvent<HTMLButtonElement>) => void }) {
-  return <button type="button" role="radio" aria-label={meta || label} aria-checked={checked} tabIndex={checked ? 0 : -1} className={`mt-kiosk-screen-option${checked ? " is-selected" : ""}`} onClick={onSelect} onKeyDown={onKeyDown}><span className="mt-kiosk-screen-option__check" aria-hidden="true">{checked && <Check size={13} />}</span><span className="mt-kiosk-screen-option__visual" aria-hidden="true">{children}</span><span className="mt-kiosk-screen-option__copy"><strong>{label}</strong></span></button>;
-}
-
-function moveRadio<T extends string>(event: React.KeyboardEvent<HTMLButtonElement>, values: T[], current: T, onChange: (value: T) => void) {
-  if (!["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp", " ", "Enter"].includes(event.key)) return;
-  event.preventDefault();
-  if (event.key === " " || event.key === "Enter") return;
-  const delta = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : -1;
-  onChange(values[(values.indexOf(current) + delta + values.length) % values.length]);
-}
-
-function OrientationIcon({ orientation }: { orientation: KioskScreenOrientation }) {
-  return orientation === "portrait" ? <Smartphone size={19} /> : <Monitor size={19} />;
+function OptionCard({ label, selected, onSelect, children }: { label: string; selected: boolean; onSelect: () => void; children: ReactNode }) {
+  return (
+    <SelectableCard label={label} isSelected={selected} onChange={(next) => { if (next) onSelect(); }} padding={3}>
+      <VStack gap={3}>
+        {children}
+        {selected && <StatusBadge tone="info">Selected</StatusBadge>}
+      </VStack>
+    </SelectableCard>
+  );
 }
 
 function LayoutMiniature({ layout }: { layout: KioskLayoutId }) {
-  return <span className={`mt-kiosk-screen-mini mt-kiosk-screen-mini--${layout}`}><i /><i /><i /><i /><i /><i /></span>;
+  const cells = Array.from({ length: 6 }, (_, index) => index);
+  return (
+    <Grid columns={layout === "top_category" ? 3 : layout === "left_category" ? 2 : 3} gap={1}>
+      {cells.map((cell) => <Card key={cell} padding={1} variant="muted" height={layout === "left_category" && cell === 0 ? 56 : 24} />)}
+    </Grid>
+  );
 }
 
 function CategoryMiniature({ style, category }: { style: "picture" | "simple"; category?: Category }) {
   const imageSrc = category?.image_path ? assetUrl(category.image_path) : "";
-  return style === "picture" ? <span className="mt-kiosk-screen-mini-card mt-kiosk-screen-mini-card--picture">{imageSrc ? <Image src={imageSrc} alt="" width={100} height={42} unoptimized /> : <ImageIcon size={18} />}<b>{category?.name || "Category"}</b></span> : <span className="mt-kiosk-screen-mini-card mt-kiosk-screen-mini-card--simple"><b>{category?.name || "Category"}</b><small>{category ? "Menu category" : "Categories"}</small></span>;
+  return style === "picture" ? (
+    <Card padding={2} variant="muted">
+      <VStack gap={2} hAlign="center">
+        {imageSrc ? <Image src={imageSrc} alt="" width={100} height={42} unoptimized /> : <ImageIcon size={18} aria-hidden="true" />}
+        <Text type="supporting">{category?.name || "Category"}</Text>
+      </VStack>
+    </Card>
+  ) : (
+    <Card padding={2} variant="muted">
+      <VStack gap={0}>
+        <Text type="body" weight="semibold">{category?.name || "Category"}</Text>
+        <Text type="supporting" color="secondary">{category ? "Menu category" : "Categories"}</Text>
+      </VStack>
+    </Card>
+  );
 }
 
 function ProductMiniature({ style, product }: { style: "detailed" | "simple"; product?: Product }) {
-  return <span className={`mt-kiosk-screen-mini-product mt-kiosk-screen-mini-product--${style}`}>{product?.primary_image_path ? <Image src={assetUrl(product.primary_image_path)} alt="" width={38} height={38} unoptimized /> : <span className="mt-kiosk-screen-product-placeholder"><ShoppingBag size={17} /></span>}<span><b>{product?.name || "Classic Burger"}</b>{style === "detailed" && <small>{product?.description || "Freshly prepared"}</small>}<em>₹{product?.price || "199"}</em></span><strong aria-hidden="true">+</strong></span>;
+  return (
+    <Card padding={2} variant="muted">
+      <HStack gap={2} vAlign="center">
+        {product?.primary_image_path ? <Image src={assetUrl(product.primary_image_path)} alt="" width={38} height={38} unoptimized /> : <ShoppingBag size={17} aria-hidden="true" />}
+        <VStack gap={0}>
+          <Text type="body" weight="semibold">{product?.name || "Classic Burger"}</Text>
+          {style === "detailed" && <Text type="supporting" color="secondary">{product?.description || "Freshly prepared"}</Text>}
+          <Text type="supporting">{`₹${product?.price || "199"}`}</Text>
+        </VStack>
+      </HStack>
+    </Card>
+  );
 }
 
 function CurrentSetup({ config, baseline, onReset, saveState, saveError, onRetry, unpublishedCount }: { config: ScreenConfig; baseline: ScreenConfig; onReset: () => void; saveState: SaveState; saveError: string; onRetry: () => void; unpublishedCount: number }) {
-  const status = saveState === "error" ? <><span className="mt-kiosk-save-status mt-kiosk-save-status--error">Couldn’t save changes</span><button type="button" onClick={onRetry}>Retry</button></> : saveState === "saving" ? <span className="mt-kiosk-save-status"><Loader2 size={13} className="mt-kiosk-spin" /> Saving…</span> : <span className="mt-kiosk-save-status mt-kiosk-save-status--success"><Check size={13} /> Changes saved as draft {unpublishedCount > 0 ? "· Publish to make them live on your kiosks." : ""}</span>;
-  return <section className="mt-kiosk-current-setup" aria-label="Current kiosk setup"><header><div><h2>Current setup</h2><p>{saveError || "Your selections update the draft preview automatically."}</p></div><button type="button" className="mt-button mt-button--secondary mt-button--compact" disabled={sameConfig(config, baseline)} onClick={onReset}><RotateCcw size={14} /> Reset</button></header><div className="mt-kiosk-current-setup__grid"><SetupValue icon={<Smartphone size={15} />} value={config.orientation[0].toUpperCase() + config.orientation.slice(1)} label="Orientation" /><SetupValue icon={<LayoutTemplate size={15} />} value={layoutOptions.find((item) => item.id === config.layout)?.label || "Kiosk layout"} label="Layout" /><SetupValue icon={<ImageIcon size={15} />} value={config.categoryCardStyle === "picture" ? "Picture Category" : "Simple Category"} label="Category cards" /><SetupValue icon={<ShoppingBag size={15} />} value={config.productCardStyle === "detailed" ? "Detailed Product" : "Simple Product"} label="Menu item cards" /></div><div className="mt-kiosk-save-row" role="status" aria-live="polite">{status}</div></section>;
+  const status = saveState === "error"
+    ? <HStack gap={2} vAlign="center"><StatusBadge tone="danger">Couldn’t save changes</StatusBadge><Button label="Retry" variant="ghost" size="sm" onClick={onRetry} /></HStack>
+    : saveState === "saving"
+      ? <Text type="supporting" color="secondary">Saving…</Text>
+      : <HStack gap={2} vAlign="center"><Check size={14} aria-hidden="true" /><Text type="supporting" color="secondary">{`Changes saved as draft${unpublishedCount > 0 ? " · publish to make them live on your kiosks" : ""}`}</Text></HStack>;
+  return (
+    <Panel title="Current setup" description={saveError || "Your selections update the draft preview automatically."} actions={<Button label="Reset" variant="secondary" size="sm" icon={<RotateCcw size={14} aria-hidden="true" />} isDisabled={sameConfig(config, baseline)} onClick={onReset} />}>
+      <MetricGrid>
+        <Metric label="Orientation" value={config.orientation[0].toUpperCase() + config.orientation.slice(1)} />
+        <Metric label="Layout" value={layoutOptions.find((item) => item.id === config.layout)?.label || "Layout"} />
+        <Metric label="Category style" value={config.categoryCardStyle === "picture" ? "Picture" : "Simple"} />
+        <Metric label="Product style" value={config.productCardStyle === "detailed" ? "Detailed" : "Simple"} />
+      </MetricGrid>
+      <VStack gap={0} role="status" aria-live="polite">{status}</VStack>
+    </Panel>
+  );
 }
 
-function SetupValue({ icon, value, label }: { icon: ReactNode; value: string; label: string }) { return <div><span aria-hidden="true">{icon}</span><strong>{value}</strong><small>{label}</small></div>; }
-
-function WarningRow({ message, detail, href, action }: { message: string; detail?: string; href: string; action: string }) { return <div className="mt-kiosk-warning"><AlertTriangle size={16} aria-hidden="true" /><span><strong>{message}</strong>{detail && <small>{detail}</small>}</span><Link href={href}>{action}</Link></div>; }
-
-function PreviewPanelLegacy({ business, config, previewData, previewKey, onRefresh, compact = false }: { business: ApiBusiness; config: ScreenConfig; previewData: KioskExperienceData; previewKey: number; onRefresh: () => void; compact?: boolean }) {
-  return <aside className={`mt-kiosk-screens-preview${compact ? " mt-kiosk-screens-preview--drawer" : ""}`}><header><div><h2>Live preview</h2><span className="mt-kiosk-preview-status"><i /> {config.orientation[0].toUpperCase() + config.orientation.slice(1)}</span></div><Link href="/dashboard/kiosk-experience/branding">Edit branding &amp; theme →</Link></header><div className="mt-kiosk-screens-preview__body"><KioskRuntime key={previewKey} routeSlug={business.slug} operationalMode="preview" experienceData={previewData} contained forcedOrientation={config.orientation} initialView="menu" /></div><footer><span><Info size={14} /> Previewing draft setup</span><button type="button" onClick={onRefresh}><RefreshCw size={14} /> Refresh preview</button></footer></aside>;
+function ScreenPreview({ business, config, previewData }: { business: ApiBusiness; config: ScreenConfig; previewData: KioskExperienceData }) {
+  const orientation = config.orientation === "landscape" ? "landscape" : "portrait";
+  return (
+    <VStack gap={4}>
+      <HStack gap={2} hAlign="between" vAlign="center" wrap="wrap">
+        <VStack gap={1}>
+          <Text type="label">Live preview</Text>
+          <Text type="supporting" color="secondary">Updates as you change the screen setup.</Text>
+        </VStack>
+        <Button label="Edit branding" variant="ghost" size="sm" href="/dashboard/kiosk-experience/branding" />
+      </HStack>
+      <KioskDevice orientation={orientation} label="Kiosk screen preview">
+        <KioskRuntime routeSlug={business.slug} operationalMode="preview" experienceData={previewData} contained forcedOrientation={orientation} initialView="menu" />
+      </KioskDevice>
+    </VStack>
+  );
 }
 
-function PreviewPanel({ business, config, previewData, previewKey, onRefresh, compact = false }: { business: ApiBusiness; config: ScreenConfig; previewData: KioskExperienceData; previewKey: number; onRefresh: () => void; compact?: boolean }) {
-  const stageRef = useRef<HTMLDivElement>(null);
-  const [stage, setStage] = useState({ width: 0, height: 0 });
-  useEffect(() => {
-    if (!stageRef.current) return;
-    const update = () => setStage({ width: stageRef.current?.clientWidth || 0, height: stageRef.current?.clientHeight || 0 });
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(stageRef.current);
-    return () => observer.disconnect();
-  }, []);
-  const canonical = config.orientation === "landscape" ? { width: 1920, height: 1080 } : { width: 1080, height: 1920 };
-  const scale = stage.width && stage.height ? Math.min(stage.width / canonical.width, stage.height / canonical.height) : 0.25;
-  return <aside className={`mt-kiosk-preview-studio${compact ? " mt-kiosk-preview-studio--drawer" : ""}`}><header className="mt-kiosk-preview-studio__header"><div><h2>Live preview</h2><span className="mt-kiosk-preview-status"><i /> {config.orientation[0].toUpperCase() + config.orientation.slice(1)}</span></div><Link href="/dashboard/kiosk-experience/branding">Branding →</Link></header><div ref={stageRef} className="mt-kiosk-preview-stage" data-testid="kiosk-preview-stage" data-canonical-width={canonical.width} data-canonical-height={canonical.height}><div className="mt-kiosk-preview-viewport" style={{ width: canonical.width * scale, height: canonical.height * scale }}><div style={{ width: canonical.width, height: canonical.height, transform: `scale(${scale})`, transformOrigin: "top left" }}><PreviewPanelLegacy business={business} config={config} previewData={previewData} previewKey={previewKey} onRefresh={onRefresh} compact /></div></div></div><footer className="mt-kiosk-preview-studio__footer"><span><Info size={14} /> Previewing draft</span><button type="button" onClick={onRefresh}><RefreshCw size={14} /> Refresh</button><Link href="/dashboard/kiosk-experience/preview">Full preview ↗</Link></footer></aside>;
-}

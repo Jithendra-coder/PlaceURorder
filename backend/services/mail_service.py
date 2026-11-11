@@ -7,7 +7,15 @@ from pathlib import Path
 from re import sub
 from time import time
 
+import logging
+
 from config import get_settings
+
+logger = logging.getLogger(__name__)
+
+# The plaintext outbox is only ever written for local development and tests. Anything else, including
+# staging or a mistyped environment name, delivers through SMTP or fails closed without writing message bodies.
+OUTBOX_ENVIRONMENTS = {"local", "dev", "development", "test", "testing"}
 
 
 def is_configured() -> bool:
@@ -18,6 +26,7 @@ def is_configured() -> bool:
 def send_email(to_email: str, subject: str, text: str, html: str | None = None) -> bool:
     settings = get_settings()
     if not is_configured():
+        logger.error("Email delivery is not configured; a PlaceURorder message was not sent.")
         _write_dev_outbox(to_email, subject, text, html)
         return False
 
@@ -42,13 +51,15 @@ def send_email(to_email: str, subject: str, text: str, html: str | None = None) 
                 server.send_message(message)
         return True
     except Exception:
+        # Never log the message body or recipient: it can contain reset links and verification codes.
+        logger.error("Email delivery failed for a PlaceURorder message.")
         _write_dev_outbox(to_email, subject, text, html)
         return False
 
 
 def _write_dev_outbox(to_email: str, subject: str, text: str, html: str | None = None) -> None:
     settings = get_settings()
-    if settings.environment.lower() in {"prod", "production"}:
+    if settings.environment.strip().lower() not in OUTBOX_ENVIRONMENTS:
         return
 
     outbox = Path(settings.email_outbox_dir)

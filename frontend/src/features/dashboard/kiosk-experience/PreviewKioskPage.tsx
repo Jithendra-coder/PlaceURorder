@@ -1,10 +1,14 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
-import { Check, Info, Maximize2, Minimize2, RefreshCw, RotateCcw, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Check, Maximize2, RotateCcw, X } from "lucide-react";
+import { Button } from "@astryxdesign/core/Button";
+import { Dialog } from "@astryxdesign/core/Dialog";
+import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
+import { HStack, VStack } from "@astryxdesign/core/Stack";
+import { Heading, Text } from "@astryxdesign/core/Text";
+import { DashboardPageWithPanel, DetailRow, KioskDevice, LoadingBlock, NoticeBanner, PageHeader, Panel, ScaledStage, StatusBadge } from "@/components/dashboard/kit";
 import { KioskRuntime, type KioskExperienceData } from "@/features/kiosk/KioskApp";
-import { Skeleton } from "@/components/ui/DashboardUI";
 import { api as dataApi, type PromotionRecord } from "@/lib/api";
 import { parseKioskThemeSelection } from "@/lib/constants";
 import type { Business as KioskBusiness, Category, KioskSetupOverview, Product } from "@/lib/types";
@@ -13,31 +17,135 @@ import { type Business } from "@/services/api";
 type PreviewContext = "welcome" | "menu";
 type PreviewKioskProps = { business: Business; products: Product[]; categories: Category[]; setup: KioskSetupOverview | null };
 type RailRow = { title: string; summary: string; href: string; label: string };
+type Attention = { title: string; detail: string; href: string; label: string };
 
 const kioskBusiness = (business: Business) => business as unknown as KioskBusiness;
 const queryFor = (context: PreviewContext) => `?from=preview-kiosk&previewContext=${context}`;
 const editHref = (path: string, context: PreviewContext) => `${path}${queryFor(context)}`;
 const readableTemplate = (value: string) => ({ category_gate: "Category Gate", left_category: "Left Rail", top_category: "Top Bar" }[value] || "Kiosk layout");
 
-export function PreviewKioskSkeleton() { return <div className="mt-preview-kiosk mt-preview-kiosk--loading" aria-busy="true"><div className="mt-preview-kiosk-header"><Skeleton lines={2} label="Loading Preview Kiosk" /><Skeleton lines={1} label="Loading preview actions" /></div><div className="mt-preview-kiosk-workspace"><section className="mt-preview-kiosk-panel"><Skeleton lines={8} label="Loading kiosk preview" /></section><aside className="mt-preview-kiosk-customize"><Skeleton lines={14} label="Loading customize rail" /></aside></div><Skeleton lines={2} label="Loading preview status" /></div>; }
-
-export function PreviewKioskPage({ business, products, categories, setup }: PreviewKioskProps) {
-  const raw = kioskBusiness(business); const [context, setContext] = useState<PreviewContext>(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("previewContext") === "menu" ? "menu" : raw.kiosk_start_screen_enabled === false ? "menu" : "welcome"); const [runtimeKey, setRuntimeKey] = useState(0); const [fullScreen, setFullScreen] = useState(false); const [promotions, setPromotions] = useState<PromotionRecord[] | null>(null); const [promotionError, setPromotionError] = useState(false); const fullScreenButton = useRef<HTMLButtonElement>(null);
-  useEffect(() => { let cancelled = false; void dataApi.promotions(business.id).then((result) => { if (!cancelled) setPromotions(Array.isArray(result.promotions) ? result.promotions : []); }).catch(() => { if (!cancelled) setPromotionError(true); }); return () => { cancelled = true; }; }, [business.id]);
-  useEffect(() => { if (!fullScreen) { fullScreenButton.current?.focus(); return; } const escape = (event: KeyboardEvent) => { if (event.key === "Escape") setFullScreen(false); }; window.addEventListener("keydown", escape); return () => window.removeEventListener("keydown", escape); }, [fullScreen]);
-  const orientation = raw.kiosk_screen_orientation === "portrait" ? "portrait" : "landscape"; const previewData = useMemo<KioskExperienceData>(() => ({ business: raw, products, categories }), [raw, products, categories]); const rows = useMemo(() => buildRows(business, products, categories, promotions, promotionError, context), [business, products, categories, promotions, promotionError, context]); const attention = useMemo(() => buildAttention(products, categories, promotions, promotionError, context), [products, categories, promotions, promotionError, context]); const unpublished = setup?.unpublishedChanges || 0;
-  const restart = () => setRuntimeKey((value) => value + 1); const openFullScreen = () => { setFullScreen(true); }; const closeFullScreen = () => setFullScreen(false);
-  return <div className="mt-preview-kiosk"><header className="mt-preview-kiosk-header"><div><h1>Preview Kiosk</h1><p>See and test your kiosk before publishing.</p></div><div className="mt-preview-kiosk-header__actions">{unpublished > 0 && <Link className="mt-preview-kiosk-draft" href="/dashboard/kiosk-experience/publish">● {unpublished} unpublished change{unpublished === 1 ? "" : "s"} <span>Review changes</span></Link>}</div></header><div className="mt-preview-kiosk-workspace"><PreviewPanel business={business} previewData={previewData} orientation={orientation} context={context} onContext={setContext} runtimeKey={runtimeKey} onRestart={restart} onRefresh={restart} onFullScreen={openFullScreen} fullScreenButtonRef={fullScreenButton} fullScreen={fullScreen} /><CustomizeRail rows={rows} attention={attention} /></div><div className="mt-preview-kiosk-status"><span>{unpublished > 0 ? `● Previewing ${unpublished} unpublished change${unpublished === 1 ? "" : "s"}` : <><Check size={14} /> Preview matches published kiosk</>}</span>{unpublished > 0 && <Link href="/dashboard/kiosk-experience/publish">Publish Changes →</Link>}</div>{fullScreen && <FullScreenPreview business={business} previewData={previewData} orientation={orientation} context={context} runtimeKey={runtimeKey} onClose={closeFullScreen} onContext={setContext} />}</div>;
+export function PreviewKioskSkeleton() {
+  return <LoadingBlock rows={6} />;
 }
 
-function PreviewPanel({ business, previewData, orientation, context, onContext, runtimeKey, onRestart, onRefresh, onFullScreen, fullScreenButtonRef, fullScreen }: { business: Business; previewData: KioskExperienceData; orientation: "portrait" | "landscape"; context: PreviewContext; onContext: (context: PreviewContext) => void; runtimeKey: number; onRestart: () => void; onRefresh: () => void; onFullScreen: () => void; fullScreenButtonRef: RefObject<HTMLButtonElement | null>; fullScreen: boolean }) { const welcomeEnabled = kioskBusiness(business).kiosk_start_screen_enabled !== false; return <section className="mt-preview-kiosk-panel"><header className="mt-preview-kiosk-panel__header"><div><h2>Kiosk preview</h2><div className="mt-preview-kiosk-tabs" role="tablist" aria-label="Preview context"><button type="button" role="tab" aria-selected={context === "welcome"} className={context === "welcome" ? "is-selected" : ""} disabled={!welcomeEnabled} title={!welcomeEnabled ? "Welcome screen is turned off" : undefined} onClick={() => onContext("welcome")}>Welcome</button><button type="button" role="tab" aria-selected={context === "menu"} className={context === "menu" ? "is-selected" : ""} onClick={() => onContext("menu")}>Menu</button></div></div><span className="mt-preview-kiosk-orientation"><i /> {orientation[0].toUpperCase() + orientation.slice(1)}</span><button ref={fullScreenButtonRef} type="button" className="mt-preview-kiosk-fullscreen" onClick={onFullScreen}><Maximize2 size={15} /> Full screen</button></header><div className="mt-preview-kiosk-stage">{!fullScreen && <CanonicalRuntime business={business} previewData={previewData} orientation={orientation} context={context} runtimeKey={runtimeKey} />}</div><footer className="mt-preview-kiosk-panel__footer"><span><Info size={14} /> Preview mode</span><button type="button" onClick={onRestart}><RotateCcw size={14} /> Restart</button><button type="button" onClick={onRefresh}><RefreshCw size={14} /> Refresh</button></footer></section>; }
+export function PreviewKioskPage({ business, products, categories, setup }: PreviewKioskProps) {
+  const raw = kioskBusiness(business);
+  const [context, setContext] = useState<PreviewContext>(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("previewContext") === "menu" ? "menu" : raw.kiosk_start_screen_enabled === false ? "menu" : "welcome");
+  const [runtimeKey, setRuntimeKey] = useState(0);
+  const [fullScreen, setFullScreen] = useState(false);
+  const [promotions, setPromotions] = useState<PromotionRecord[] | null>(null);
+  const [promotionError, setPromotionError] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void dataApi.promotions(business.id).then((result) => { if (!cancelled) setPromotions(Array.isArray(result.promotions) ? result.promotions : []); }).catch(() => { if (!cancelled) setPromotionError(true); });
+    return () => { cancelled = true; };
+  }, [business.id]);
 
-function CanonicalRuntime({ business, previewData, orientation, context, runtimeKey }: { business: Business; previewData: KioskExperienceData; orientation: "portrait" | "landscape"; context: PreviewContext; runtimeKey: number }) { const stageRef = useRef<HTMLDivElement>(null); const [stage, setStage] = useState({ width: 0, height: 0 }); const canonical = orientation === "portrait" ? { width: 1080, height: 1920 } : { width: 1920, height: 1080 }; useEffect(() => { if (!stageRef.current) return; const update = () => setStage({ width: stageRef.current?.clientWidth || 0, height: stageRef.current?.clientHeight || 0 }); update(); const observer = new ResizeObserver(update); observer.observe(stageRef.current); return () => observer.disconnect(); }, []); const scale = stage.width && stage.height ? Math.min(stage.width / canonical.width, stage.height / canonical.height) : 0.25; return <div ref={stageRef} className="mt-preview-kiosk-stage__inner" data-canonical-width={canonical.width} data-canonical-height={canonical.height}><div className="mt-preview-kiosk-viewport" style={{ width: canonical.width * scale, height: canonical.height * scale }}><div style={{ width: canonical.width, height: canonical.height, transform: `scale(${scale})`, transformOrigin: "top left" }}><KioskRuntime key={`${runtimeKey}-${context}`} routeSlug={business.slug} operationalMode="preview" experienceData={previewData} contained forcedOrientation={orientation} initialView={context === "welcome" ? "start" : "menu"} /></div></div></div>; }
+  const orientation = raw.kiosk_screen_orientation === "portrait" ? "portrait" : "landscape";
+  const previewData = useMemo<KioskExperienceData>(() => ({ business: raw, products, categories }), [raw, products, categories]);
+  const rows = useMemo(() => buildRows(business, products, categories, promotions, promotionError, context), [business, products, categories, promotions, promotionError, context]);
+  const attention = useMemo(() => buildAttention(products, categories, promotionError, context), [products, categories, promotionError, context]);
+  const unpublished = setup?.unpublishedChanges || 0;
+  const welcomeEnabled = raw.kiosk_start_screen_enabled !== false;
 
-function FullScreenPreview({ business, previewData, orientation, context, runtimeKey, onClose, onContext }: { business: Business; previewData: KioskExperienceData; orientation: "portrait" | "landscape"; context: PreviewContext; runtimeKey: number; onClose: () => void; onContext: (context: PreviewContext) => void }) { const welcomeEnabled = kioskBusiness(business).kiosk_start_screen_enabled !== false; const exitRef = useRef<HTMLButtonElement>(null); useEffect(() => { exitRef.current?.focus(); }, []); return <div className="mt-preview-kiosk-fullscreen-overlay" role="dialog" aria-modal="true" aria-label="Full-screen kiosk preview"><header><button ref={exitRef} type="button" onClick={onClose}><X size={17} /> Exit preview</button><span>● Preview mode</span><div className="mt-preview-kiosk-tabs" role="tablist" aria-label="Preview context"><button type="button" role="tab" aria-selected={context === "welcome"} disabled={!welcomeEnabled} onClick={() => onContext("welcome")}>Welcome</button><button type="button" role="tab" aria-selected={context === "menu"} onClick={() => onContext("menu")}>Menu</button></div><Minimize2 size={16} aria-hidden="true" /></header><div className="mt-preview-kiosk-fullscreen-stage"><CanonicalRuntime business={business} previewData={previewData} orientation={orientation} context={context} runtimeKey={runtimeKey} /></div></div>; }
+  const panel = (
+    <VStack gap={4}>
+      <Text type="label">Customize</Text>
+      {attention.length > 0 && (
+        <VStack gap={2} aria-label="Needs attention">
+          {attention.slice(0, 3).map((item) => <NoticeBanner key={item.title} tone="warning" title={item.title} description={item.detail} action={<Button label={item.label} variant="ghost" href={item.href} />} />)}
+        </VStack>
+      )}
+      <VStack gap={3}>
+        {rows.map((row) => (
+          <HStack key={row.title} gap={2} vAlign="center" hAlign="between">
+            <VStack gap={0}>
+              <Text type="body" weight="semibold">{row.title}</Text>
+              <Text type="supporting" color="secondary">{row.summary}</Text>
+            </VStack>
+            <Button label={row.label} variant="ghost" size="sm" href={row.href} />
+          </HStack>
+        ))}
+      </VStack>
+    </VStack>
+  );
 
-function CustomizeRail({ rows, attention }: { rows: RailRow[]; attention: { title: string; detail: string; href: string; label: string }[] }) { return <aside className="mt-preview-kiosk-customize"><h2>Customize</h2>{attention.length > 0 && <section className="mt-preview-kiosk-attention" aria-label="Needs attention"><strong>Needs attention</strong>{attention.slice(0, 3).map((item) => <div key={item.title}><span><b>{item.title}</b><small>{item.detail}</small></span><Link href={item.href} aria-label={`${item.label} ${item.title}`}>Fix →</Link></div>)}</section>}<div className="mt-preview-kiosk-rail-rows">{rows.map((row) => <div className="mt-preview-kiosk-rail-row" key={row.title}><span><b>{row.title}</b><small>{row.summary}</small></span><Link href={row.href} aria-label={row.label}>Edit →</Link></div>)}</div></aside>; }
+  return (
+    <DashboardPageWithPanel panel={panel} width={1240} panelWidth={360}>
+      <PageHeader
+        eyebrow="Kiosk & Menu"
+        title="Preview kiosk"
+        description="See and test your kiosk before publishing."
+        actions={<Button label="Full screen" variant="secondary" icon={<Maximize2 size={15} aria-hidden="true" />} onClick={() => setFullScreen(true)} />}
+      >
+        {unpublished > 0 && <NoticeBanner tone="warning" title={`${unpublished} unpublished change${unpublished === 1 ? "" : "s"}`} action={<Button label="Review changes" variant="ghost" href="/dashboard/kiosk-experience/publish" />} />}
+      </PageHeader>
+      <Panel
+        title="Kiosk preview"
+        actions={<>
+          <SegmentedControl value={context} onChange={(value) => setContext(value as PreviewContext)} label="Preview context">
+            <SegmentedControlItem value="welcome" label="Welcome" isDisabled={!welcomeEnabled} />
+            <SegmentedControlItem value="menu" label="Menu" />
+          </SegmentedControl>
+          <StatusBadge tone="info">{orientation[0].toUpperCase() + orientation.slice(1)}</StatusBadge>
+        </>}
+      >
+        <KioskDevice orientation={orientation} label="Kiosk preview">
+          <KioskRuntime key={`${runtimeKey}-${context}`} routeSlug={business.slug} operationalMode="preview" experienceData={previewData} contained forcedOrientation={orientation} initialView={context === "welcome" ? "start" : "menu"} />
+        </KioskDevice>
+        <HStack gap={2} hAlign="between" vAlign="center" wrap="wrap">
+          <Text type="supporting" color="secondary">Preview mode</Text>
+          <HStack gap={2}>
+            <Button label="Restart preview" variant="ghost" size="sm" icon={<RotateCcw size={14} aria-hidden="true" />} onClick={() => setRuntimeKey((value) => value + 1)} />
+          </HStack>
+        </HStack>
+      </Panel>
+      <Dialog isOpen={fullScreen} onOpenChange={setFullScreen} variant="fullscreen" purpose="info" padding={4}>
+        <VStack gap={4}>
+          <Heading level={2}>Full-screen kiosk preview</Heading>
+          <HStack gap={3} vAlign="center" hAlign="between" wrap="wrap">
+            <Button label="Exit full screen" variant="secondary" icon={<X size={16} aria-hidden="true" />} onClick={() => setFullScreen(false)} />
+            <SegmentedControl value={context} onChange={(value) => setContext(value as PreviewContext)} label="Preview context">
+              <SegmentedControlItem value="welcome" label="Welcome" isDisabled={!welcomeEnabled} />
+              <SegmentedControlItem value="menu" label="Menu" />
+            </SegmentedControl>
+            <StatusBadge tone="info">Preview mode</StatusBadge>
+          </HStack>
+          <ScaledStage width={orientation === "portrait" ? 1080 : 1920} height={orientation === "portrait" ? 1920 : 1080} label="Full-screen kiosk preview">
+            <KioskRuntime key={`full-${runtimeKey}-${context}`} routeSlug={business.slug} operationalMode="preview" experienceData={previewData} contained forcedOrientation={orientation} initialView={context === "welcome" ? "start" : "menu"} />
+          </ScaledStage>
+        </VStack>
+      </Dialog>
+      {unpublished > 0 ? null : <HStack gap={2} vAlign="center"><Check size={14} aria-hidden="true" /><Text type="supporting" color="secondary">Preview matches published kiosk</Text></HStack>}
+      {promotionError && <DetailRow label="Promotions">Could not load promotion status.</DetailRow>}
+    </DashboardPageWithPanel>
+  );
+}
 
-function buildRows(business: Business, products: Product[], categories: Category[], promotions: PromotionRecord[] | null, promotionError: boolean, context: PreviewContext): RailRow[] { const raw = kioskBusiness(business); const settings = (raw.kiosk_start_screen_settings || {}) as Record<string, unknown>; const selection = parseKioskThemeSelection(raw.kiosk_theme); const available = products.filter((product) => product.is_available).length; const activePromotions = promotions?.filter((promotion) => promotion.status === "active").length; const scheduledPromotions = promotions?.filter((promotion) => promotion.status === "scheduled").length; return [{ title: "Welcome screen", summary: raw.kiosk_start_screen_enabled === false ? "Disabled" : `${raw.offer_image_path ? "Enabled · Background image" : "Enabled · Theme background"}`, href: editHref("/dashboard/kiosk-experience/welcome-screen", context), label: "Edit Welcome Screen" }, { title: "Kiosk layout", summary: `${raw.kiosk_screen_orientation === "portrait" ? "Portrait" : "Landscape"} · ${readableTemplate(selection.templateId)}`, href: editHref("/dashboard/kiosk-experience/screens", context), label: "Edit Kiosk Layout" }, { title: "Branding", summary: `${raw.logo_path ? "Logo" : "Business name"} · ${settings.brand_type_scale === "spacious" ? "Spacious" : settings.brand_type_scale === "compact" ? "Compact" : "Balanced"} type`, href: editHref("/dashboard/kiosk-experience/branding", context), label: "Edit Branding" }, { title: "Menu", summary: `${products.length} items · ${categories.length} categories`, href: editHref("/dashboard/kiosk-experience/menu", context), label: "Edit Menu" }, { title: "Availability", summary: `${available} available · ${products.length - available} unavailable`, href: editHref("/dashboard/kiosk-experience/availability", context), label: "Edit Availability" }, { title: "Promotions", summary: promotionError ? "Couldn’t load status" : promotions === null ? "Loading status…" : activePromotions || scheduledPromotions ? `${activePromotions || 0} active · ${scheduledPromotions || 0} scheduled` : "No active promotions", href: editHref("/dashboard/kiosk-experience/promotions", context), label: "Edit Promotions" }]; }
 
-function buildAttention(products: Product[], categories: Category[], promotions: PromotionRecord[] | null, promotionError: boolean, context: PreviewContext) { const issues: { title: string; detail: string; href: string; label: string }[] = []; const missingImages = products.filter((product) => !product.primary_image_path).length; if (!products.length) issues.push({ title: "Menu is empty", detail: "Add menu items before publishing.", href: editHref("/dashboard/kiosk-experience/menu", context), label: "Add items in Manage Menu" }); else if (missingImages) issues.push({ title: "Menu images missing", detail: `${missingImages} item${missingImages === 1 ? " is" : "s are"} missing an image.`, href: editHref("/dashboard/kiosk-experience/menu", context), label: "Fix menu images" }); if (categories.some((category) => category.is_active && !products.some((product) => product.category_id === category.id && product.is_available))) issues.push({ title: "Empty category", detail: "An active category has no available items.", href: editHref("/dashboard/kiosk-experience/availability", context), label: "Review category availability" }); if (promotionError) issues.push({ title: "Promotion status unavailable", detail: "Couldn’t load promotion status.", href: editHref("/dashboard/kiosk-experience/promotions", context), label: "Review promotions" }); return issues; }
+function buildRows(business: Business, products: Product[], categories: Category[], promotions: PromotionRecord[] | null, promotionError: boolean, context: PreviewContext): RailRow[] {
+  const raw = kioskBusiness(business);
+  const settings = (raw.kiosk_start_screen_settings || {}) as Record<string, unknown>;
+  const selection = parseKioskThemeSelection(raw.kiosk_theme);
+  const available = products.filter((product) => product.is_available).length;
+  const activePromotions = promotions?.filter((promotion) => promotion.status === "active").length;
+  const scheduledPromotions = promotions?.filter((promotion) => promotion.status === "scheduled").length;
+  return [
+    { title: "Welcome screen", summary: raw.kiosk_start_screen_enabled === false ? "Disabled" : raw.offer_image_path ? "Enabled · Background image" : "Enabled · Theme background", href: editHref("/dashboard/kiosk-experience/welcome-screen", context), label: "Edit Welcome Screen" },
+    { title: "Kiosk layout", summary: `${raw.kiosk_screen_orientation === "portrait" ? "Portrait" : "Landscape"} · ${readableTemplate(selection.templateId)}`, href: editHref("/dashboard/kiosk-experience/screens", context), label: "Edit Kiosk Layout" },
+    { title: "Branding", summary: `${raw.logo_path ? "Logo" : "Business name"} · ${settings.brand_type_scale === "spacious" ? "Spacious" : settings.brand_type_scale === "compact" ? "Compact" : "Balanced"} type`, href: editHref("/dashboard/kiosk-experience/branding", context), label: "Edit Branding" },
+    { title: "Menu", summary: `${products.length} items · ${categories.length} categories`, href: editHref("/dashboard/kiosk-experience/menu", context), label: "Edit Menu" },
+    { title: "Availability", summary: `${available} available · ${products.length - available} unavailable`, href: editHref("/dashboard/kiosk-experience/availability", context), label: "Edit Availability" },
+    { title: "Promotions", summary: promotionError ? "Couldn’t load status" : promotions === null ? "Loading status…" : activePromotions || scheduledPromotions ? `${activePromotions || 0} active · ${scheduledPromotions || 0} scheduled` : "No active promotions", href: editHref("/dashboard/kiosk-experience/promotions", context), label: "Edit Promotions" },
+  ];
+}
+
+function buildAttention(products: Product[], categories: Category[], promotionError: boolean, context: PreviewContext): Attention[] {
+  const issues: Attention[] = [];
+  const missingImages = products.filter((product) => !product.primary_image_path).length;
+  if (!products.length) issues.push({ title: "Menu is empty", detail: "Add menu items before publishing.", href: editHref("/dashboard/kiosk-experience/menu", context), label: "Add items" });
+  else if (missingImages) issues.push({ title: "Menu images missing", detail: `${missingImages} item${missingImages === 1 ? " is" : "s are"} missing an image.`, href: editHref("/dashboard/kiosk-experience/menu", context), label: "Fix images" });
+  if (categories.some((category) => category.is_active && !products.some((product) => product.category_id === category.id && product.is_available))) issues.push({ title: "Empty category", detail: "An active category has no available items.", href: editHref("/dashboard/kiosk-experience/availability", context), label: "Review availability" });
+  if (promotionError) issues.push({ title: "Promotion status unavailable", detail: "Couldn’t load promotion status.", href: editHref("/dashboard/kiosk-experience/promotions", context), label: "Review promotions" });
+  return issues;
+}

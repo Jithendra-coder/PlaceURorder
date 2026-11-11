@@ -134,3 +134,19 @@ def test_concurrent_calls_share_one_protected_bucket(limiter):
 
 def test_process_local_limitation_is_documented():
     assert "process-local" in rate_limit_service.__doc__.lower()
+
+
+def test_configured_production_redis_failure_fails_closed(monkeypatch, limiter):
+    limiter.environment = "production"
+    limiter.redis_url = "redis://rate-limiter.example.test"
+
+    def unavailable(*_args):
+        raise HTTPException(status_code=503, detail="Rate-limit enforcement is unavailable.")
+
+    monkeypatch.setattr(rate_limit_service, "_assert_shared_bucket", unavailable)
+
+    with pytest.raises(HTTPException) as error:
+        assert_rate_limit(request(), RateLimitRule("login", 5, 60))
+
+    assert error.value.status_code == 503
+    assert rate_limit_service._BUCKETS == {}

@@ -13,16 +13,22 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@astryxdesign/core": "^0.7.13",
+    "@astryxdesign/theme-neutral": "^0.7.13",
+    "@stylexjs/stylex": "^0.19.1",
     "framer-motion": "^12.40.0",
     "lucide-react": "^1.7.0",
     "next": "^16.4.1",
+    "qrcode": "1.5.4",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
   "devDependencies": {
+    "@astryxdesign/cli": "^0.7.13",
     "@playwright/test": "^1.62.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^20",
+    "@types/qrcode": "1.5.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

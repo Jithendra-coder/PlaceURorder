@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { AppShell } from "@/components/layout/AppShell";
+import { AstryxDashboardProviders } from "@/components/dashboard/AstryxDashboardProviders";
 import { BusinessProvider } from "@/components/layout/BusinessProvider";
 import { ProtectedRouteGate } from "@/components/layout/ProtectedRouteGate";
 import type { Metadata } from "next";
@@ -10,5 +11,5 @@ export const metadata: Metadata = {
 };
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
-  return <BusinessProvider><ProtectedRouteGate area="dashboard"><AppShell>{children}</AppShell></ProtectedRouteGate></BusinessProvider>;
+  return <BusinessProvider><AstryxDashboardProviders><AppShell><ProtectedRouteGate area="dashboard">{children}</ProtectedRouteGate></AppShell></AstryxDashboardProviders></BusinessProvider>;
 }

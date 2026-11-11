@@ -657,6 +657,35 @@ export type KioskMenu = {
   products: Product[];
 };
 
+/** Public, non-sensitive view of a store's online (QR) ordering. */
+export type QrStoreStatus = {
+  name: string;
+  slug: string;
+  currency_symbol: string;
+  tax_percent: number;
+  qr_ordering_enabled: boolean;
+  is_open: boolean;
+  order_modes: Array<"dine_in" | "takeaway">;
+  require_customer_name: boolean;
+  require_customer_phone: boolean;
+  allow_customer_notes: boolean;
+  store_url: string;
+};
+
+export type OwnerStoreOrdering = QrStoreStatus & { business_id: string };
+
+export type QrOrderOption = { group_id: string; group_name: string; option_id: string; name: string; price_delta: number };
+
+export type QrOrderPayload = {
+  order_type: "dine_in" | "takeaway";
+  table_label?: string;
+  customer_name?: string;
+  customer_phone?: string;
+  notes?: string;
+  payment_method: "pay_at_counter";
+  items: Array<{ product_id: string; quantity: number; customizations: QrOrderOption[] }>;
+};
+
 export type StaffMember = {
   id: string;
   business_id: string;

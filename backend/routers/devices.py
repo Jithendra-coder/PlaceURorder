@@ -6,8 +6,9 @@ from fastapi import APIRouter, Cookie, Depends, Header, Path, Query, Request, Re
 from config import Settings, get_settings
 
 from database import DbClient, get_db_client
-from deps import require_user_id
+from deps import require_user_id, legacy_device_token_guard
 from schemas import (
+    DeviceTokenExchange,
     ApiResponse,
     CounterOrderComplete,
     CounterOverrideRequest,
@@ -40,6 +41,7 @@ DeviceToken = Annotated[str, Path(min_length=20, max_length=160, pattern=r"^[A-Z
 PAIRING_REQUEST_LIMIT = RateLimitRule("device:pairing-request", 12, 60)
 PAIRING_STATUS_LIMIT = RateLimitRule("device:pairing-status", 60, 60)
 PAIRING_CLAIM_LIMIT = RateLimitRule("device:pairing-claim", 12, 60)
+DEVICE_CODE_GLOBAL_LIMIT = RateLimitRule("device:code-global", 600, 60)
 ACTIVATE_LIMIT = RateLimitRule("device:activate", 12, 60)
 SESSION_EXCHANGE_LIMIT = RateLimitRule("device:live-session-exchange", 30, 60)
 SESSION_CONTEXT_LIMIT = RateLimitRule("device:live-session-context", 120, 60)
@@ -182,6 +184,7 @@ def get_device_pairing_status(
     client: DbClient = Depends(get_db_client),
 ):
     assert_rate_limit(request, PAIRING_STATUS_LIMIT, identity_parts=[pairing_code])
+    assert_rate_limit(request, DEVICE_CODE_GLOBAL_LIMIT, identity_parts=["device-code"])
     return device_service.get_pairing_status(client, pairing_code, polling_secret=polling_secret)
 
 
@@ -195,6 +198,7 @@ def claim_device_pairing(
     client: DbClient = Depends(get_db_client),
 ):
     assert_rate_limit(request, PAIRING_CLAIM_LIMIT, identity_parts=[pairing_code])
+    assert_rate_limit(request, DEVICE_CODE_GLOBAL_LIMIT, identity_parts=["device-code"])
     session = device_service.claim_pairing_request(client, pairing_code, payload)
     _set_device_session_cookie(response, session["device"], settings)
     return ApiResponse(message="Device paired.", data=session)
@@ -209,12 +213,13 @@ def activate_device(
     client: DbClient = Depends(get_db_client),
 ):
     assert_rate_limit(request, ACTIVATE_LIMIT, identity_parts=[payload.activation_code])
+    assert_rate_limit(request, DEVICE_CODE_GLOBAL_LIMIT, identity_parts=["device-code"])
     session = device_service.activate_device(client, payload)
     _set_device_session_cookie(response, session["device"], settings)
     return ApiResponse(message="Device activated.", data=session)
 
 
-@router.post("/devices/live/{device_token}/session", response_model=ApiResponse)
+@router.post("/devices/live/{device_token}/session", response_model=ApiResponse, dependencies=[Depends(legacy_device_token_guard)])
 def exchange_live_device_session(
     device_token: DeviceToken,
     payload: DeviceSessionExchange,
@@ -225,6 +230,21 @@ def exchange_live_device_session(
 ):
     assert_rate_limit(request, SESSION_EXCHANGE_LIMIT, identity_parts=[device_token, payload.expected_type])
     _business, device, context = device_service.exchange_device_token_for_session(client, device_token, expected_type=payload.expected_type)
+    _set_device_session_cookie(response, device, settings)
+    return ApiResponse(message="Device session started.", data=context)
+
+
+@router.post("/devices/live/session/exchange", response_model=ApiResponse)
+def exchange_device_token_for_session(
+    payload: DeviceTokenExchange,
+    request: Request,
+    response: Response,
+    settings: Settings = Depends(get_settings),
+    client: DbClient = Depends(get_db_client),
+):
+    # The token travels in the request body, never in the URL, so it stays out of access logs.
+    assert_rate_limit(request, SESSION_EXCHANGE_LIMIT, identity_parts=[payload.device_token, payload.expected_type])
+    _business, device, context = device_service.exchange_device_token_for_session(client, payload.device_token, expected_type=payload.expected_type)
     _set_device_session_cookie(response, device, settings)
     return ApiResponse(message="Device session started.", data=context)
 
@@ -260,7 +280,7 @@ def live_device_session_heartbeat(
     return ApiResponse(message="Device heartbeat recorded.", data=device)
 
 
-@router.get("/devices/live/{device_token}")
+@router.get("/devices/live/{device_token}", dependencies=[Depends(legacy_device_token_guard)])
 def live_device_context(
     device_token: DeviceToken,
     request: Request,
@@ -270,7 +290,7 @@ def live_device_context(
     return device_service.live_device_context(client, device_token)
 
 
-@router.post("/devices/live/{device_token}/heartbeat", response_model=ApiResponse)
+@router.post("/devices/live/{device_token}/heartbeat", response_model=ApiResponse, dependencies=[Depends(legacy_device_token_guard)])
 def live_device_heartbeat(
     device_token: DeviceToken,
     payload: DeviceHeartbeat,
@@ -390,7 +410,7 @@ def live_counter_session_complete_order(
     return ApiResponse(message="Order handed over.", data=order)
 
 
-@router.get("/counter/live/{device_token}/payments")
+@router.get("/counter/live/{device_token}/payments", dependencies=[Depends(legacy_device_token_guard)])
 def live_counter_payments(
     device_token: DeviceToken,
     request: Request,
@@ -400,7 +420,7 @@ def live_counter_payments(
     return device_service.list_counter_payments_for_device(client, device_token)
 
 
-@router.patch("/counter/live/{device_token}/payments/{payment_id}/counter-paid", response_model=ApiResponse)
+@router.patch("/counter/live/{device_token}/payments/{payment_id}/counter-paid", response_model=ApiResponse, dependencies=[Depends(legacy_device_token_guard)])
 def live_counter_mark_payment_paid(
     device_token: DeviceToken,
     payment_id: UUID,
@@ -413,7 +433,7 @@ def live_counter_mark_payment_paid(
     return ApiResponse(message="Counter payment marked paid.", data=payment)
 
 
-@router.patch("/counter/live/{device_token}/orders/{order_id}/complete", response_model=ApiResponse)
+@router.patch("/counter/live/{device_token}/orders/{order_id}/complete", response_model=ApiResponse, dependencies=[Depends(legacy_device_token_guard)])
 def live_counter_complete_order(
     device_token: DeviceToken,
     order_id: UUID,
@@ -523,7 +543,7 @@ def live_kitchen_session_preferences_update(payload: KitchenPreferenceUpdate, de
     return ApiResponse(message="Kitchen preferences updated.", data=kitchen_service.preferences(client, device_session, payload))
 
 
-@router.get("/kitchen/live/{device_token}/orders")
+@router.get("/kitchen/live/{device_token}/orders", dependencies=[Depends(legacy_device_token_guard)])
 def live_kitchen_orders(
     device_token: DeviceToken,
     request: Request,
@@ -536,7 +556,7 @@ def live_kitchen_orders(
     return device_service.list_kitchen_orders_for_device(client, device_token, status_filter=status, start=start, end=end)
 
 
-@router.patch("/kitchen/live/{device_token}/orders/{order_id}/status", response_model=ApiResponse)
+@router.patch("/kitchen/live/{device_token}/orders/{order_id}/status", response_model=ApiResponse, dependencies=[Depends(legacy_device_token_guard)])
 def live_kitchen_update_order_status(
     device_token: DeviceToken,
     order_id: UUID,

@@ -667,6 +667,8 @@ SETUP_COMPATIBILITY_SQL = [
     )
     """,
     "alter table orders add column if not exists idempotency_key text",
+    "alter table orders add column if not exists idempotency_fingerprint text",
+    "alter table orders alter column public_token set default upper(substr(replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''), 1, 16))",
 ]
 
 INDEX_COMPATIBILITY_SQL = [

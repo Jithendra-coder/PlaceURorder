@@ -1,23 +1,26 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
+import { Phone } from "lucide-react";
+import { Button } from "@astryxdesign/core/Button";
+import { Grid } from "@astryxdesign/core/Grid";
+import { HStack, VStack } from "@astryxdesign/core/Stack";
 import {
   AuthDivider,
-  AuthField,
   AuthFooter,
-  AuthInput,
+  AuthLink,
+  AuthNotice,
   AuthPasswordField,
-  AuthPrimaryButton,
   AuthProviderButton,
   AuthShell,
-  AuthStatus,
+  AuthSubmit,
+  AuthTextField,
   GoogleIcon,
-  PhoneIcon,
 } from "@/components/AuthShell";
 import { postLoginDestination, rememberPostLoginReturnPath, takePostLoginReturnPath } from "@/lib/protected-routing";
 import { AuthService } from "@/services/auth";
+import { DEV_DEMO_EMAIL, DEV_DEMO_PASSWORD } from "@/lib/dev-demo";
 
 export default function SignInPage() {
   const router = useRouter();
@@ -27,7 +30,7 @@ export default function SignInPage() {
   const [error, setError] = useState("");
   const valid = identifier.trim().length > 0 && password.length > 0;
 
-  const submit = async (event: React.FormEvent) => {
+  const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!valid || busy) return;
     setBusy(true);
@@ -58,27 +61,36 @@ export default function SignInPage() {
   };
 
   return (
-    <AuthShell title="Welcome Back" description="Sign in to continue to your account">
-      <AuthStatus>{error}</AuthStatus>
-      <form onSubmit={submit} className="mt-auth-form">
-        <AuthField id="identifier" label="Email or Phone">
-          <AuthInput id="identifier" name="identifier" placeholder="Enter your email or phone" value={identifier} onChange={(event) => setIdentifier(event.target.value)} disabled={busy} autoComplete="username" required />
-        </AuthField>
-        <div className="mt-auth-field">
-          <div className="mt-auth-field__header">
-            <label htmlFor="password" className="mt-auth-field__label">Password</label>
-            <Link href="/auth/forgot-password" className="mt-auth-forgot">Forgot password?</Link>
-          </div>
-          <AuthPasswordField id="password" name="password" value={password} onChange={(event) => setPassword(event.target.value)} disabled={busy} autoComplete="current-password" required />
-        </div>
-        <div className="mt-auth-action"><AuthPrimaryButton type="submit" disabled={!valid} busy={busy}>Sign In</AuthPrimaryButton></div>
+    <AuthShell title="Welcome back" description="Sign in to manage your menu, kiosks and orders.">
+      <form onSubmit={submit} noValidate>
+        <VStack gap={5}>
+          <AuthNotice message={error} />
+
+          <VStack gap={4}>
+            <AuthTextField id="identifier" name="identifier" label="Email or phone" helper="Use the email address or phone number on your account." autoComplete="username" value={identifier} onChange={setIdentifier} disabled={busy} required />
+            <VStack gap={2}>
+              <AuthPasswordField id="password" name="password" label="Password" autoComplete="current-password" value={password} onChange={setPassword} disabled={busy} required />
+              <HStack gap={2} hAlign="end">
+                <AuthLink href="/auth/forgot-password" label="Forgot password?" />
+              </HStack>
+            </VStack>
+          </VStack>
+
+          {process.env.NODE_ENV !== "production" && (
+            <Button label="Fill demo account" variant="ghost" size="sm" width="100%" onClick={() => { setIdentifier(DEV_DEMO_EMAIL); setPassword(DEV_DEMO_PASSWORD); }} />
+          )}
+          <AuthSubmit label="Sign in" disabled={!valid} busy={busy} />
+
+          <AuthDivider />
+
+          <Grid columns={2} gap={3}>
+            <AuthProviderButton label="Google" icon={<GoogleIcon />} disabled={busy} onClick={() => void startGoogleSignIn()} />
+            <AuthProviderButton label="Phone" icon={<Phone size={18} aria-hidden="true" />} disabled={busy} onClick={() => router.push(`/auth/phone${window.location.search}`)} />
+          </Grid>
+
+          <AuthFooter text="Don’t have an account?" linkText="Create one" href="/auth/sign-up" />
+        </VStack>
       </form>
-      <AuthDivider />
-      <div className="mt-auth-providers">
-        <AuthProviderButton icon={<GoogleIcon />} onClick={() => void startGoogleSignIn()} disabled={busy}>Google</AuthProviderButton>
-        <AuthProviderButton icon={<PhoneIcon />} onClick={() => router.push(`/auth/phone${window.location.search}`)} disabled={busy}>Phone</AuthProviderButton>
-      </div>
-      <AuthFooter text="Don't have an account?" linkText="Sign up" href="/auth/sign-up" />
     </AuthShell>
   );
 }

@@ -1,12 +1,13 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Cookie, Header, Path, Query, Request, Response
+from fastapi import APIRouter, Cookie, Depends, Header, Path, Query, Request, Response
 from uuid import UUID
 
 from config import get_settings
+from deps import legacy_device_token_guard
 from database import db_context
-from schemas import ApiResponse, DeviceHeartbeat, KioskExperienceTestOrderCreate, KioskMenu, KioskTestOrderCreate, KioskTestSessionExchange, OrderCreate, OwnerPinVerify
-from services import device_service, kiosk_config_service, kiosk_service, order_service, pin_service, setup_service, test_session_service
+from schemas import ApiResponse, DeviceHeartbeat, KioskExperienceTestOrderCreate, KioskMenu, KioskTestOrderCreate, KioskTestSessionExchange, OrderCreate, OwnerPinVerify, StoreOrderingStatus
+from services import device_service, kiosk_config_service, kiosk_service, order_service, pin_service, qr_service, setup_service, test_session_service
 from services.rate_limit_service import RateLimitRule, assert_rate_limit
 
 router = APIRouter(prefix="/kiosk", tags=["kiosk"])
@@ -17,6 +18,7 @@ LIVE_SESSION_PIN_LIMIT = RateLimitRule("kiosk:live-session-owner-pin", 8, 60)
 LIVE_ORDER_LIMIT = RateLimitRule("kiosk:live-order", 30, 60)
 LIVE_PIN_LIMIT = RateLimitRule("kiosk:live-owner-pin", 8, 60)
 PUBLIC_ORDER_LIMIT = RateLimitRule("kiosk:public-order", 20, 60)
+TEST_SESSION_EXCHANGE_LIMIT = RateLimitRule("kiosk:test-session-exchange", 120, 60)
 PUBLIC_MENU_LIMIT = RateLimitRule("kiosk:public-menu", 120, 60)
 OWNER_PIN_LIMIT = RateLimitRule("kiosk:owner-pin", 8, 60)
 TEST_SESSION_LIMIT = RateLimitRule("kiosk:test-session", 30, 60)
@@ -38,7 +40,8 @@ def get_kiosk(business_slug: BusinessSlug, request: Request, location_id: UUID |
 
 
 @router.post("/test/session/exchange")
-def exchange_test_session(payload: KioskTestSessionExchange, response: Response):
+def exchange_test_session(payload: KioskTestSessionExchange, request: Request, response: Response):
+    assert_rate_limit(request, TEST_SESSION_EXCHANGE_LIMIT, identity_parts=["test-session-exchange"])
     with db_context() as client:
         session = test_session_service.exchange(client, payload.token)
     settings = get_settings()
@@ -178,14 +181,14 @@ def verify_live_device_session_owner_pin(
     return {**result, "device_id": device["id"], "unlock_expires_in_seconds": 30}
 
 
-@router.get("/live/{device_token}/menu", response_model=KioskMenu)
+@router.get("/live/{device_token}/menu", response_model=KioskMenu, dependencies=[Depends(legacy_device_token_guard)])
 def get_live_device_menu(device_token: DeviceToken):
     with db_context() as client:
         business, _device = device_service.business_for_device_token(client, device_token)
         return kiosk_service.get_kiosk_payload(client, business["slug"])
 
 
-@router.post("/live/{device_token}/orders", response_model=ApiResponse)
+@router.post("/live/{device_token}/orders", response_model=ApiResponse, dependencies=[Depends(legacy_device_token_guard)])
 def create_live_device_order(
     device_token: DeviceToken,
     payload: OrderCreate,
@@ -204,14 +207,14 @@ def create_live_device_order(
     return ApiResponse(message="Order placed.", data=order)
 
 
-@router.post("/live/{device_token}/heartbeat", response_model=ApiResponse)
+@router.post("/live/{device_token}/heartbeat", response_model=ApiResponse, dependencies=[Depends(legacy_device_token_guard)])
 def live_device_heartbeat(device_token: DeviceToken, payload: DeviceHeartbeat):
     with db_context() as client:
         device = device_service.heartbeat_for_token(client, device_token, payload, expected_type="kiosk")
     return ApiResponse(message="Device heartbeat recorded.", data=device)
 
 
-@router.post("/live/{device_token}/owner-pin/verify")
+@router.post("/live/{device_token}/owner-pin/verify", dependencies=[Depends(legacy_device_token_guard)])
 def verify_live_device_owner_pin(device_token: DeviceToken, payload: OwnerPinVerify, request: Request):
     assert_rate_limit(request, LIVE_PIN_LIMIT, identity_parts=[device_token])
     with db_context() as client:
@@ -242,6 +245,26 @@ def create_order(
         raise HTTPException(status_code=409, detail="Preview/test checkout cannot create production orders.")
     with db_context() as client:
         order = order_service.create_kiosk_order(client, business_slug, payload, request_mode=x_menutap_mode, source="public_slug", idempotency_key=x_idempotency_key)
+    return ApiResponse(message="Order placed.", data=order)
+
+
+@router.get("/{business_slug}/store", response_model=StoreOrderingStatus)
+def get_store_ordering(business_slug: BusinessSlug, request: Request):
+    assert_rate_limit(request, PUBLIC_MENU_LIMIT, identity_parts=[business_slug])
+    with db_context() as client:
+        return qr_service.store_ordering_status(client, business_slug)
+
+
+@router.post("/{business_slug}/qr-orders", response_model=ApiResponse)
+def create_qr_order(
+    business_slug: BusinessSlug,
+    payload: OrderCreate,
+    request: Request,
+    x_idempotency_key: str | None = Header(default=None, min_length=8, max_length=128, pattern=r"^[A-Za-z0-9._:-]+$"),
+):
+    assert_rate_limit(request, PUBLIC_ORDER_LIMIT, identity_parts=[business_slug])
+    with db_context() as client:
+        order = order_service.create_kiosk_order(client, business_slug, payload, request_mode=None, source="qr_order", idempotency_key=x_idempotency_key)
     return ApiResponse(message="Order placed.", data=order)
 
 

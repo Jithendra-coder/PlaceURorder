@@ -1,11 +1,17 @@
+import hashlib
+import hmac
+import json
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import HTTPException
 
+from config import get_settings
 from database import DbClient
+from money import round_money
 from schemas import OrderCreate, OrderStatus, OrderStatusUpdate
 from services import availability_service, cache_service, payment_service, setup_service
 from services.business_service import KITCHEN_ROLES, assert_business_access, get_business_by_slug
@@ -137,13 +143,13 @@ def _modifier_catalog(client: DbClient, business_id: UUID, product_ids: list[str
     return catalog
 
 
-def _normalize_customizations(product: dict, customizations: list[dict], catalog: dict[str, dict]) -> tuple[list[dict], float]:
+def _normalize_customizations(product: dict, customizations: list[dict], catalog: dict[str, dict]) -> tuple[list[dict], Decimal]:
     product_catalog = catalog.get(product["id"]) or {"groups": {}, "options": {}}
     groups = product_catalog["groups"]
     options = product_catalog["options"]
     selected_by_group: dict[str, int] = defaultdict(int)
     normalized: list[dict] = []
-    total_delta = 0.0
+    total_delta = Decimal("0")
 
     for entry in customizations or []:
         option_id = str(entry.get("option_id") or "")
@@ -160,7 +166,7 @@ def _normalize_customizations(product: dict, customizations: list[dict], catalog
         max_select = int(group.get("max_select") or 0)
         if max_select and selected_by_group[group_id] > max_select:
             raise HTTPException(status_code=409, detail=f"Too many selections for {group.get('group_name', 'an add-on')}.")
-        total_delta += float(option["price_delta"] or 0)
+        total_delta += Decimal(str(option["price_delta"] or 0))
         normalized.append(
             {
                 "group_id": group_id,
@@ -179,16 +185,16 @@ def _normalize_customizations(product: dict, customizations: list[dict], catalog
     return normalized, total_delta
 
 
-def _active_product_price(product: dict) -> float:
-    price = float(product.get("price") or 0)
+def _active_product_price(product: dict) -> Decimal:
+    price = round_money(product.get("price"))
     discount_type = product.get("discount_type") or "none"
-    discount_value = float(product.get("discount_value") or 0)
+    discount_value = Decimal(str(product.get("discount_value") or 0))
     if discount_type == "none" or discount_value <= 0 or not _discount_is_active(product):
         return price
     if discount_type == "percentage":
-        return round(max(price - (price * min(discount_value, 100) / 100), 0), 2)
+        return round_money(max(price - (price * min(discount_value, 100) / 100), Decimal("0")))
     if discount_type == "fixed":
-        return round(max(price - discount_value, 0), 2)
+        return round_money(max(price - discount_value, Decimal("0")))
     return price
 
 
@@ -215,6 +221,17 @@ def _to_datetime(value):
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
+def _request_fingerprint(business_id: UUID, source: str, payload: OrderCreate) -> str:
+    """Keyed digest of the whole request, so an idempotency key can only ever return the order it created."""
+    canonical = json.dumps(
+        {"business_id": str(business_id), "source": source, "payload": payload.model_dump(mode="json")},
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+    return hmac.new(get_settings().jwt_secret.encode("utf-8"), canonical.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
 def create_kiosk_order(
     client: DbClient,
     business_slug: str,
@@ -227,17 +244,23 @@ def create_kiosk_order(
         raise HTTPException(status_code=409, detail="Preview/test checkout cannot create production orders.")
     business = get_business_by_slug(client, business_slug)
     business_id = UUID(business["id"])
+    fingerprint = _request_fingerprint(business_id, source, payload)
     if idempotency_key:
         client.execute_one(
             "select pg_advisory_xact_lock(hashtextextended(%(key)s, 0)) as locked",
             {"key": f"{business_id}:{idempotency_key}"},
         )
         existing = client.fetch_one(
-            "select id from orders where business_id = %(business_id)s and idempotency_key = %(key)s limit 1",
+            "select id, idempotency_fingerprint from orders where business_id = %(business_id)s and idempotency_key = %(key)s limit 1",
             {"business_id": str(business_id), "key": idempotency_key},
         )
         if existing:
-            return get_order(client, UUID(existing["id"]), business_id)
+            # A key replayed with a different request must never hand back someone else's order.
+            if not hmac.compare_digest(str(existing.get("idempotency_fingerprint") or ""), fingerprint):
+                raise HTTPException(status_code=409, detail="This request key was already used for a different order.")
+            order = get_order(client, UUID(existing["id"]), business_id)
+            order["payment"] = payment_service.checkout_for_order(client, order)
+            return order
     configuration = setup_service.live_configuration(client, business)
     live_business = {**business, **configuration["business"], "is_active": business.get("is_active")}
     if not live_business.get("is_active", True):
@@ -255,6 +278,18 @@ def create_kiosk_order(
             raise HTTPException(status_code=409, detail="Public online ordering is not enabled for this business. Use an enrolled kiosk device.")
         if not online_payment:
             raise HTTPException(status_code=409, detail="Public online ordering requires an online payment method.")
+
+    if source == "qr_order":
+        # The owner QR switch is operational, so it is read from the live business row, not the published snapshot.
+        if (business.get("kiosk_order_settings") or {}).get("qr_ordering_enabled") is not True:
+            raise HTTPException(status_code=409, detail="QR ordering is not enabled for this store.")
+        settings = live_business.get("kiosk_order_settings") or {}
+        if payment_method not in payment_service.COUNTER_METHODS:
+            raise HTTPException(status_code=409, detail="QR orders are paid at the counter when collected.")
+        if payload.order_type.value == "dine_in" and not (payload.table_label or "").strip():
+            raise HTTPException(status_code=422, detail="Add a table number for dine-in orders.")
+        if settings.get("require_customer_name") and not (payload.customer_name or "").strip():
+            raise HTTPException(status_code=422, detail="Customer name is required.")
 
     product_ids = [str(item.product_id) for item in payload.items]
     requested_quantities: dict[str, int] = defaultdict(int)
@@ -292,8 +327,8 @@ def create_kiosk_order(
             raise HTTPException(status_code=409, detail=f"{product['name']} does not have enough stock.")
 
     line_items = []
-    subtotal = 0.0
-    discount_amount = 0.0
+    subtotal = Decimal("0")
+    discount_amount = Decimal("0")
     for item in payload.items:
         product = products[str(item.product_id)]
         normalized_customizations, customization_delta = _normalize_customizations(
@@ -301,11 +336,11 @@ def create_kiosk_order(
             item.customizations,
             modifier_catalog,
         )
-        original_unit_price = float(product.get("price") or 0) + customization_delta
-        unit_price = _active_product_price(product) + customization_delta
-        total_price = round(unit_price * item.quantity, 2)
+        original_unit_price = round_money(Decimal(str(product.get("price") or 0)) + customization_delta)
+        unit_price = round_money(_active_product_price(product) + customization_delta)
+        total_price = round_money(unit_price * item.quantity)
         subtotal += total_price
-        discount_amount += round(max(original_unit_price - unit_price, 0) * item.quantity, 2)
+        discount_amount += round_money(max(original_unit_price - unit_price, Decimal("0")) * item.quantity)
         line_items.append(
             {
                 "business_id": str(business_id),
@@ -320,9 +355,9 @@ def create_kiosk_order(
             }
         )
 
-    tax_rate = float(live_business.get("tax_percent") or 0)
-    tax_amount = round(subtotal * tax_rate / 100, 2)
-    total_amount = round(subtotal + tax_amount, 2)
+    tax_rate = Decimal(str(live_business.get("tax_percent") or 0))
+    tax_amount = round_money(subtotal * tax_rate / 100)
+    total_amount = round_money(subtotal + tax_amount)
     order_date = _business_order_date(live_business)
     order_number = _next_order_number(client, business_id, order_date)
     location_id = None
@@ -345,13 +380,14 @@ def create_kiosk_order(
         "customer_phone": payload.customer_phone,
         "subtotal": subtotal,
         "tax_amount": tax_amount,
-        "discount_amount": round(discount_amount, 2),
+        "discount_amount": round_money(discount_amount),
         "total_amount": total_amount,
         "payment_status": "pending" if online_payment else "pay_at_counter_pending",
         "payment_method": payment_method,
         "notes": payload.notes,
         "idempotency_key": idempotency_key,
-        "source": "counter" if source == "counter_entry" else "kiosk",
+        "idempotency_fingerprint": fingerprint,
+        "source": {"counter_entry": "counter", "qr_order": "qr"}.get(source, "kiosk"),
     }
     order_response = client.table("orders").insert(order_payload).execute()
     if not order_response.data:
@@ -504,7 +540,11 @@ def update_order_status(client: DbClient, user_id: UUID, order_id: UUID, payload
     return get_order(client, order_id, payload.business_id)
 
 
-def _business_is_open(business: dict) -> bool:
+def store_is_open(business: dict) -> bool:
+    return _business_is_open(business)
+
+
+def _business_is_open(business: dict, now: datetime | None = None) -> bool:
     schedule = business.get("store_schedule") or {}
     if schedule.get("emergency_closed"):
         return False
@@ -514,7 +554,7 @@ def _business_is_open(business: dict) -> bool:
     except ZoneInfoNotFoundError:
         tz = timezone.utc
 
-    now = datetime.now(tz)
+    now = now.astimezone(tz) if now and now.tzinfo else (now.replace(tzinfo=tz) if now else datetime.now(tz))
     if schedule and schedule.get("enabled", True):
         override = next(
             (
@@ -529,12 +569,28 @@ def _business_is_open(business: dict) -> bool:
             if day_schedule.get("closed"):
                 return False
             slots = day_schedule.get("slots") or []
-            if not slots:
-                return False
-            return any(
+            if any(
                 _time_is_within_slot(now.time(), slot.get("open"), slot.get("close"))
                 for slot in slots
+            ):
+                return True
+        else:
+            slots = []
+
+        if not override:
+            previous_date = now.date() - timedelta(days=1)
+            previous_override = next(
+                (entry for entry in schedule.get("overrides", []) if entry.get("date") == previous_date.isoformat()),
+                None,
             )
+            previous_schedule = previous_override or (schedule.get("weekly") or {}).get(previous_date.strftime("%A").lower())
+            if previous_schedule and not previous_schedule.get("closed") and any(
+                _time_is_overnight_tail(now.time(), slot.get("open"), slot.get("close"))
+                for slot in previous_schedule.get("slots") or []
+            ):
+                return True
+        if day_schedule:
+            return False
 
     opening = business.get("opening_time")
     closing = business.get("closing_time")
@@ -560,7 +616,13 @@ def _time_is_within_slot(now_time, opening, closing) -> bool:
         return True
     if open_time < close_time:
         return open_time <= now_time < close_time
-    return now_time >= open_time or now_time < close_time
+    return now_time >= open_time
+
+
+def _time_is_overnight_tail(now_time, opening, closing) -> bool:
+    open_time = _parse_time(opening)
+    close_time = _parse_time(closing)
+    return open_time is not None and close_time is not None and open_time > close_time and now_time < close_time
 
 
 def _product_time_available(product: dict, business: dict) -> bool:

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AuthShell, AuthStatus } from "@/components/AuthShell";
+import { AuthNotice, AuthShell } from "@/components/AuthShell";
 import { postLoginDestination, takePostLoginReturnPath } from "@/lib/protected-routing";
 import { api } from "@/services/api";
 import { AuthService } from "@/services/auth";
@@ -29,13 +29,13 @@ export default function AuthCallbackPage() {
       const status = await api.onboardingStatus();
       router.replace(postLoginDestination(status.next_route, takePostLoginReturnPath()));
     })().catch((cause: unknown) => {
-        setError(cause instanceof Error ? cause.message : "Google sign-in could not be completed.");
-      });
+      setError(cause instanceof Error ? cause.message : "Google sign-in could not be completed.");
+    });
   }, [router]);
 
   return (
     <AuthShell title={error ? "Sign-in unsuccessful" : "Signing you in"} description={error ? "Try signing in again." : "Securing your account and loading your workspace."}>
-      <AuthStatus>{error}</AuthStatus>
+      <AuthNotice message={error} />
     </AuthShell>
   );
 }

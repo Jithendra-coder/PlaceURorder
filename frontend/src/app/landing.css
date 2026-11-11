@@ -38,8 +38,8 @@
 /* ═══════════════════════════════════════════════════
    RESET & REFINED BASE
    ═══════════════════════════════════════════════════ */
-*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-html {
+:where(#landing-page-root) *, :where(#landing-page-root) *::before, :where(#landing-page-root) *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html:has(#landing-page-root) {
   scroll-behavior: smooth;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -61,12 +61,12 @@ html {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(15, 23, 42, 0.35);
 }
-* {
+:where(#landing-page-root) * {
   scrollbar-width: thin;
   scrollbar-color: rgba(15, 23, 42, 0.18) transparent;
 }
 
-body {
+body:has(#landing-page-root) {
   font-family: var(--font-body);
   color: var(--mt-text-primary);
   background-color: #FFFFFF;
@@ -77,12 +77,12 @@ body {
   font-weight: 400;
   overflow-x: hidden;
 }
-body:has(#landing-page-root) { overflow: visible; }
-img { max-width: 100%; display: block; }
-a { text-decoration: none; color: inherit; }
-button { cursor: pointer; border: none; background: none; font-family: inherit; }
+body:has(#landing-page-root) { overflow: visible; margin: 0; }
+:where(#landing-page-root) img { max-width: 100%; display: block; }
+:where(#landing-page-root) a { text-decoration: none; color: inherit; }
+:where(#landing-page-root) button { cursor: pointer; border: none; background: none; font-family: inherit; }
 
-button:focus-visible, a:focus-visible, input:focus-visible {
+:where(#landing-page-root) :is(button, a, input):focus-visible {
   outline: 2px solid var(--mt-blue);
   outline-offset: 2px;
 }
@@ -1899,7 +1899,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   }
 }
 
-html { max-width: 100%; overflow-x: clip; }
+html:has(#landing-page-root) { max-width: 100%; overflow-x: clip; }
 
 .nav-menu-toggle {
   display: none;

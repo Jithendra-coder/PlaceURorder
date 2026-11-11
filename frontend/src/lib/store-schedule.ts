@@ -18,6 +18,8 @@ export type StoreAvailability = {
   shortMessage: string;
 };
 
+type StoreAvailabilityBusiness = Pick<Business, "id" | "is_active" | "timezone" | "opening_time" | "closing_time" | "store_schedule">;
+
 const DAY_INDEX: Record<string, StoreDayKey> = {
   Mon: "monday", Tue: "tuesday", Wed: "wednesday", Thu: "thursday", Fri: "friday", Sat: "saturday", Sun: "sunday",
 };
@@ -56,7 +58,7 @@ export function normalizeStoreSchedule(business: Pick<Business, "opening_time" |
   };
 }
 
-export function getStoreAvailability(business: Business, now = new Date()): StoreAvailability {
+export function getStoreAvailability(business: StoreAvailabilityBusiness, now = new Date()): StoreAvailability {
   if (business?.id && operatingStatusCache.has(business.id)) {
     return operatingStatusCache.get(business.id)!;
   }
@@ -74,7 +76,7 @@ export function getStoreAvailability(business: Business, now = new Date()): Stor
   const daySchedule = override ?? schedule.weekly[clock.day];
   if (!schedule.enabled) return legacyAvailability(business, clock.minutes);
 
-  if (daySchedule.closed || daySchedule.slots.length === 0) {
+  if (daySchedule.closed) {
     return {
       isOpen: false,
       title: override?.label ? `${override.label}: closed` : "Store closed",
@@ -86,6 +88,27 @@ export function getStoreAvailability(business: Business, now = new Date()): Stor
   const activeSlot = daySchedule.slots.find((slot) => isWithinSlot(clock.minutes, slot));
   if (activeSlot) {
     return { isOpen: true, title: "Open now", message: `Open until ${formatClock(activeSlot.close)}.`, shortMessage: `Open until ${formatClock(activeSlot.close)}` };
+  }
+
+  if (!override) {
+    const [year, month, date] = clock.date.split("-").map(Number);
+    const previousDate = new Date(Date.UTC(year, month - 1, date - 1)).toISOString().slice(0, 10);
+    const previousDay = STORE_DAY_KEYS[(STORE_DAY_KEYS.indexOf(clock.day) + STORE_DAY_KEYS.length - 1) % STORE_DAY_KEYS.length];
+    const previousOverride = schedule.overrides.find((entry) => entry.date === previousDate);
+    const previousSchedule = previousOverride ?? schedule.weekly[previousDay];
+    const overnightTail = !previousSchedule.closed && previousSchedule.slots.find((slot) => isOvernightTail(clock.minutes, slot));
+    if (overnightTail) {
+      return { isOpen: true, title: "Open now", message: `Open until ${formatClock(overnightTail.close)}.`, shortMessage: `Open until ${formatClock(overnightTail.close)}` };
+    }
+  }
+
+  if (daySchedule.slots.length === 0) {
+    return {
+      isOpen: false,
+      title: override?.label ? `${override.label}: closed` : "Store closed",
+      message: nextOpeningMessage(schedule, clock.day),
+      shortMessage: "Closed today",
+    };
   }
 
   const nextToday = daySchedule.slots.find((slot) => clock.minutes < toMinutes(slot.open));
@@ -121,12 +144,12 @@ function zonedClock(now: Date, timezone: string) {
   };
 }
 
-function legacyAvailability(business: Business, minutes: number): StoreAvailability {
+function legacyAvailability(business: Pick<Business, "opening_time" | "closing_time">, minutes: number): StoreAvailability {
   if (!business.opening_time || !business.closing_time) {
     return { isOpen: true, title: "Open now", message: "Ready for orders.", shortMessage: "Ready for orders" };
   }
   const slot = { open: business.opening_time.slice(0, 5), close: business.closing_time.slice(0, 5) };
-  return isWithinSlot(minutes, slot)
+  return isWithinSlot(minutes, slot) || isOvernightTail(minutes, slot)
     ? { isOpen: true, title: "Open now", message: `Open until ${formatClock(slot.close)}.`, shortMessage: `Open until ${formatClock(slot.close)}` }
     : { isOpen: false, title: "Store closed", message: `Ordering opens at ${formatClock(slot.open)}.`, shortMessage: `Opens at ${formatClock(slot.open)}` };
 }
@@ -134,7 +157,11 @@ function legacyAvailability(business: Business, minutes: number): StoreAvailabil
 function isWithinSlot(minutes: number, slot: StoreTimeSlot) {
   const open = toMinutes(slot.open);
   const close = toMinutes(slot.close);
-  return open === close ? true : open < close ? minutes >= open && minutes < close : minutes >= open || minutes < close;
+  return open === close ? true : open < close ? minutes >= open && minutes < close : minutes >= open;
+}
+
+function isOvernightTail(minutes: number, slot: StoreTimeSlot) {
+  return toMinutes(slot.open) > toMinutes(slot.close) && minutes < toMinutes(slot.close);
 }
 
 function nextOpeningMessage(schedule: NormalizedStoreSchedule, currentDay: StoreDayKey) {

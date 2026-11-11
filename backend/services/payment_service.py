@@ -15,6 +15,7 @@ from psycopg.types.json import Jsonb
 
 from config import get_settings
 from database import DbClient
+from money import to_minor_units
 from schemas import (
     CounterOrderComplete,
     CounterPaymentMarkPaid,
@@ -305,6 +306,29 @@ def create_payment_for_order(client: DbClient, business: dict, order: dict, meth
         "checkout_url": checkout.get("checkout_url"),
         "qr": checkout.get("qr"),
         "provider": provider,
+    }
+
+
+def checkout_for_order(client: DbClient, order: dict) -> dict | None:
+    response = (
+        client.table("payments")
+        .select("*")
+        .eq("business_id", str(order["business_id"]))
+        .eq("order_id", str(order["id"]))
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if not response.data:
+        return None
+    payment = response.data[0]
+    raw_payload = payment.get("raw_payload") or {}
+    pending = payment.get("status") == PaymentStatus.PENDING.value
+    return {
+        "payment": _checkout_payment_record(payment),
+        "checkout_url": raw_payload.get("checkout_url") if pending else None,
+        "qr": raw_payload.get("paytm_qr") if pending and payment.get("provider") == "paytm" else None,
+        "provider": payment.get("provider"),
     }
 
 
@@ -735,6 +759,7 @@ def _create_online_checkout(client: DbClient, business: dict, order: dict, payme
             {
                 "checkout_session_id": checkout.get("id"),
                 "url_created": bool(checkout.get("url")),
+                "checkout_url": checkout.get("url"),
             },
             provider_order_id=checkout.get("id"),
             payment_intent_id=checkout.get("payment_intent"),
@@ -757,7 +782,7 @@ def _create_online_checkout(client: DbClient, business: dict, order: dict, payme
         UUID(payment["id"]),
         UUID(order["business_id"]),
         PaymentStatus.PENDING.value,
-        {"payment_link_id": checkout.get("id")},
+        {"payment_link_id": checkout.get("id"), "checkout_url": checkout.get("short_url")},
         provider_order_id=checkout.get("id"),
     )
     return {"payment": updated, "checkout_url": checkout.get("short_url")}
@@ -1459,7 +1484,7 @@ def _verify_stripe_signature(payload: bytes, signature: str | None, secret: str)
 
 
 def _minor_amount(value: Any) -> int:
-    return int(round(float(value or 0) * 100))
+    return to_minor_units(value)
 
 
 def _provider_payment_id(provider: str | None, payload: dict) -> str | None:

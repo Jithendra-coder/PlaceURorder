@@ -1,6 +1,7 @@
 "use client";
 
 import type { AuthSession, AuthUser } from "@/lib/types";
+import { clearDevDemoSession } from "@/lib/dev-demo";
 
 const TOKEN_KEY = "menutap.access_token";
 const USER_KEY = "menutap.user";
@@ -62,6 +63,7 @@ export const auth = {
     }
   },
   clear() {
+    clearDevDemoSession();
     const storage = getSessionStorage();
     storage?.removeItem(TOKEN_KEY);
     storage?.removeItem(USER_KEY);

@@ -1,4 +1,6 @@
 import { api } from "@/services/api";
+import { auth as sessionAuth } from "@/lib/auth";
+import { DEV_DEMO_EMAIL, DEV_DEMO_USER_ID, activateDevDemoSession, isDevDemoCredentials } from "@/lib/dev-demo";
 
 export type AuthUser = {
   id: string;
@@ -13,6 +15,13 @@ function withOnboarding(user: Omit<AuthUser, "onboardingComplete">, complete: bo
 
 export const AuthService = {
   async signIn(identifier: string, password: string): Promise<{ user: AuthUser; nextRoute: string }> {
+    if (isDevDemoCredentials(identifier, password)) {
+      activateDevDemoSession();
+      const demoStatus = await api.onboardingStatus();
+      const demoUser = { id: DEV_DEMO_USER_ID, email: DEV_DEMO_EMAIL, full_name: "Demo Owner", is_active: true };
+      sessionAuth.setUser(demoUser);
+      return { user: withOnboarding(demoUser, demoStatus.onboarding_completed), nextRoute: demoStatus.next_route };
+    }
     const session = await api.login(identifier, password);
     const status = await api.onboardingStatus();
     return { user: withOnboarding(session.user, status.onboarding_completed), nextRoute: status.next_route };

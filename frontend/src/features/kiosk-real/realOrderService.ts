@@ -11,7 +11,8 @@ export function placeRealKioskOrder(
     notes?: string;
     payment_method?: string;
     items: { product_id: string; quantity: number; notes?: string; customizations?: unknown[] }[];
-  }
+  },
+  idempotencyKey: string
 ) {
-  return api.placeKioskOrder(slug, payload);
+  return api.placeKioskOrder(slug, payload, idempotencyKey);
 }

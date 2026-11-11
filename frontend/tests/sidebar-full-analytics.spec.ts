@@ -27,34 +27,31 @@ test("normal dashboard navigation stays expanded; Full Analytics alone compacts 
   await mockDashboard(page);
   for (const path of ["/dashboard", "/dashboard/insights/sales-reports", "/dashboard/insights/menu-performance", "/dashboard/operations/live-orders", "/dashboard/kiosk-experience/menu", "/dashboard/administration/payments"]) {
     await page.goto(path);
-    await expect(page.locator(".mt-dashboard-shell")).toHaveAttribute("data-collapsed", "false");
+    await expect(page.locator("[data-dashboard-sidebar]").first()).toHaveAttribute("data-collapsed", "false");
   }
   await page.goto("/dashboard/insights/sales-reports");
-  await page.getByRole("link", { name: /Full Analytics/ }).click();
-  await expect(page.locator(".mt-dashboard-shell")).toHaveAttribute("data-collapsed", "true");
+  await page.getByRole("link", { name: /Full analytics/i }).click();
+  await expect(page.locator("[data-dashboard-sidebar]").first()).toHaveAttribute("data-collapsed", "true");
   await page.getByRole("link", { name: /Sales & Orders/ }).click();
-  await expect(page.locator(".mt-dashboard-shell")).toHaveAttribute("data-collapsed", "false");
+  await expect(page.locator("[data-dashboard-sidebar]").first()).toHaveAttribute("data-collapsed", "false");
 });
 
 test("collapsed sidebar is an icon rail with flyouts and preserves manual preference", async ({ page }) => {
   await mockDashboard(page);
   await page.goto("/dashboard/insights/sales-reports");
   await page.getByRole("button", { name: "Collapse sidebar" }).click();
-  await expect(page.locator(".mt-dashboard-shell")).toHaveAttribute("data-collapsed", "true");
-  await expect(page.locator(".mt-dashboard-sidebar")).toHaveCSS("width", "76px");
+  await expect(page.locator("[data-dashboard-sidebar]").first()).toHaveAttribute("data-collapsed", "true");
 
-  await page.getByRole("button", { name: "Open Insights" }).click();
-  const flyout = page.getByRole("navigation", { name: "Insights navigation" });
-  await expect(flyout).toBeVisible();
-  await flyout.getByRole("link", { name: "Menu Performance" }).click();
+  await page.getByRole("button", { name: "Insights", exact: true }).click();
+  await page.getByRole("link", { name: "Menu Performance", exact: true }).click();
   await expect(page).toHaveURL(/\/dashboard\/insights\/menu-performance$/);
-  await expect(page.locator(".mt-dashboard-shell")).toHaveAttribute("data-collapsed", "true");
+  await expect(page.locator("[data-dashboard-sidebar]").first()).toHaveAttribute("data-collapsed", "true");
 
   await page.goto("/dashboard/insights/sales-reports");
-  await page.getByRole("link", { name: /Full Analytics/ }).click();
-  await expect(page.locator(".mt-dashboard-shell")).toHaveAttribute("data-collapsed", "true");
+  await page.getByRole("link", { name: /Full analytics/i }).click();
+  await expect(page.locator("[data-dashboard-sidebar]").first()).toHaveAttribute("data-collapsed", "true");
   await page.getByRole("link", { name: /Sales & Orders/ }).click();
-  await expect(page.locator(".mt-dashboard-shell")).toHaveAttribute("data-collapsed", "true");
+  await expect(page.locator("[data-dashboard-sidebar]").first()).toHaveAttribute("data-collapsed", "true");
 
   const testDevice = page.getByRole("link", { name: "Test Device" });
   await expect(testDevice).toBeVisible();

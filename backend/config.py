@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     payment_expiry_cron_secret: str | None = None
     payment_expiry_minutes: int = 30
     device_session_days: int = 30
+    # Legacy routes that carry a long-lived device token in the URL path. Off unless a client genuinely needs them.
+    legacy_device_token_routes: bool = False
 
     upload_root: str = str(Path(__file__).resolve().parent / "uploads")
     public_base_url: str = "http://localhost:8000"
@@ -105,6 +107,8 @@ class Settings(BaseSettings):
             raise ValueError("DATABASE_URL must point to a production PostgreSQL instance.")
         if self.allow_dev_auth_bypass:
             raise ValueError("ALLOW_DEV_AUTH_BYPASS must be false in production.")
+        if "localhost" in self.frontend_base_url or "127.0.0.1" in self.frontend_base_url or not self.frontend_base_url.startswith("https://"):
+            raise ValueError("FRONTEND_BASE_URL must be the public https app URL in production; customer QR links are built from it.")
         if not self.cors_origins or any(origin == "*" for origin in self.cors_origins):
             raise ValueError("ALLOWED_ORIGINS must contain explicit production browser origins.")
         if (
@@ -113,6 +117,10 @@ class Settings(BaseSettings):
             or len(self.payment_expiry_cron_secret) < 24
         ):
             raise ValueError("PAYMENT_EXPIRY_CRON_SECRET must be set to a strong secret in production.")
+        if not self.redis_url:
+            raise ValueError("REDIS_URL must be set in production so rate limits are shared across instances.")
+        if self.legacy_device_token_routes:
+            raise ValueError("LEGACY_DEVICE_TOKEN_ROUTES must be false in production.")
         if self.dev_expose_reset_links:
             raise ValueError("DEV_EXPOSE_RESET_LINKS must be false in production.")
         return self

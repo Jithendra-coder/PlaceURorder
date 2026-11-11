@@ -1,12 +1,21 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Cookie, Query
+from fastapi import APIRouter, Cookie, Depends, Query, Request
 
 from schemas import ApiResponse, TestRuntimeAvailabilityUpdate, TestRuntimeItemProgress, TestRuntimeKitchenAction, TestRuntimeOrderCreate, TestRuntimeOrderStatusUpdate, TestRuntimeReworkRequest
 from services import test_runtime_service, test_session_service
+from services.rate_limit_service import RateLimitRule, assert_rate_limit
 
 
-router = APIRouter(prefix="/test/runtime", tags=["test-runtime"])
+TEST_RUNTIME_LIMIT = RateLimitRule("test-runtime:session", 600, 60)
+
+
+def _test_runtime_rate_limit(request: Request, test_session: str | None = Cookie(default=None, alias=test_session_service.TEST_SESSION_COOKIE_NAME)) -> None:
+    # Anonymous requests are limited per IP only, so one unauthenticated client cannot exhaust a shared bucket.
+    assert_rate_limit(request, TEST_RUNTIME_LIMIT, identity_parts=[test_session] if test_session else [])
+
+
+router = APIRouter(prefix="/test/runtime", tags=["test-runtime"], dependencies=[Depends(_test_runtime_rate_limit)])
 
 
 @router.post("/{app_type}/orders", response_model=ApiResponse)

@@ -1,12 +1,17 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
-import { AuthField, AuthPasswordField, AuthPrimaryButton, AuthShell, AuthStatus } from "@/components/AuthShell";
+import { Suspense, useEffect, useState, type FormEvent } from "react";
+import { VStack } from "@astryxdesign/core/Stack";
+import { AuthNotice, AuthPasswordField, AuthShell, AuthSubmit } from "@/components/AuthShell";
 import { AuthService } from "@/services/auth";
 
 export default function ResetPasswordPage() {
-  return <Suspense fallback={<AuthShell title="Choose a new password" description="Loading your secure reset form." />}><ResetPasswordForm /></Suspense>;
+  return (
+    <Suspense fallback={<AuthShell title="Choose a new password" description="Loading your secure reset form." />}>
+      <ResetPasswordForm />
+    </Suspense>
+  );
 }
 
 function ResetPasswordForm() {
@@ -28,9 +33,10 @@ function ResetPasswordForm() {
     return () => window.clearTimeout(timer);
   }, []);
   const passwordValid = password.length >= 8 && /[A-Z]/.test(password) && /\d/.test(password);
+  const mismatch = Boolean(confirm && confirm !== password);
   const valid = Boolean(token) && passwordValid && password === confirm;
 
-  const submit = async (event: React.FormEvent) => {
+  const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!valid || busy) return;
     setBusy(true);
@@ -46,11 +52,15 @@ function ResetPasswordForm() {
 
   return (
     <AuthShell title="Choose a new password" description="Use at least 8 characters, one uppercase letter, and one number.">
-      <AuthStatus>{error || (!token ? "This reset link is invalid." : "")}</AuthStatus>
-      <form onSubmit={submit} className="mt-auth-form">
-        <AuthField id="password" label="New password" helper="Use at least 8 characters, including one uppercase letter and one number."><AuthPasswordField id="password" value={password} onChange={(event) => setPassword(event.target.value)} disabled={busy} autoComplete="new-password" required /></AuthField>
-        <AuthField id="confirm" label="Confirm new password" error={confirm && confirm !== password ? "The passwords do not match." : undefined}><AuthPasswordField id="confirm" value={confirm} onChange={(event) => setConfirm(event.target.value)} disabled={busy} invalid={Boolean(confirm && confirm !== password)} autoComplete="new-password" required /></AuthField>
-        <div className="mt-auth-action"><AuthPrimaryButton type="submit" disabled={!valid} busy={busy}>Reset Password</AuthPrimaryButton></div>
+      <form onSubmit={submit} noValidate>
+        <VStack gap={5}>
+          <AuthNotice message={error || (!token ? "This reset link is invalid." : "")} />
+          <VStack gap={4}>
+            <AuthPasswordField id="password" name="password" label="New password" helper="Use at least 8 characters, including one uppercase letter and one number." autoComplete="new-password" value={password} onChange={setPassword} disabled={busy} required />
+            <AuthPasswordField id="confirm" name="confirm" label="Confirm new password" error={mismatch ? "The passwords do not match." : undefined} autoComplete="new-password" value={confirm} onChange={setConfirm} disabled={busy} required />
+          </VStack>
+          <AuthSubmit label="Reset password" disabled={!valid} busy={busy} />
+        </VStack>
       </form>
     </AuthShell>
   );

@@ -1,6 +1,11 @@
 import type { Metadata } from "next";
 import { Geist, Inter, Plus_Jakarta_Sans, Source_Sans_3 } from "next/font/google";
 import "./globals.css";
+// Astryx styles load once, here, so every route paints with them from the first frame. Per-layout imports let a
+// client-side navigation (for example landing to sign-in) paint before the stylesheet arrived.
+import "@astryxdesign/core/astryx.css";
+import "@astryxdesign/theme-neutral/theme.css";
+import "@astryxdesign/theme-neutral/fonts.css";
 
 const inter = Inter({ subsets: ["latin"], display: "swap", variable: "--font-inter" });
 const geist = Geist({ subsets: ["latin"], display: "swap", variable: "--font-geist" });

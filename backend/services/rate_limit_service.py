@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import hmac
 import ipaddress
-import logging
 import math
 import threading
 import time
@@ -19,8 +18,6 @@ from redis import Redis
 from redis.exceptions import RedisError
 
 from config import get_settings
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -67,14 +64,9 @@ def assert_rate_limit(
     if identity:
         keys.append(_identity_bucket_key(rule.scope, identity, settings.jwt_secret))
     if getattr(settings, "environment", "local").lower() in {"prod", "production"} and settings.redis_url:
-        try:
-            for key in keys:
-                _assert_shared_bucket(key, rule, window_seconds, settings.redis_url)
-            return
-        except HTTPException as exc:
-            if exc.status_code == status.HTTP_429_TOO_MANY_REQUESTS:
-                raise
-            logger.warning("Redis rate limit unavailable (%s); falling back to local memory store.", exc.detail)
+        for key in keys:
+            _assert_shared_bucket(key, rule, window_seconds, settings.redis_url)
+        return
     with _LOCK:
         _cleanup_inactive(now)
         for key in keys:

@@ -6,7 +6,6 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 from psycopg import OperationalError
 
 from config import get_settings
@@ -62,7 +61,6 @@ app.include_router(media.router, prefix=settings.api_prefix)
 app.include_router(promotions.router, prefix=settings.api_prefix)
 app.include_router(qr_codes.router, prefix=settings.api_prefix)
 app.include_router(versions.router, prefix=settings.api_prefix)
-app.mount("/uploads", StaticFiles(directory=settings.upload_root), name="uploads")
 
 logger = logging.getLogger(__name__)
 MAX_REQUEST_BYTES = 8 * 1024 * 1024
@@ -121,20 +119,17 @@ async def add_security_headers(request, call_next):
     response.headers.setdefault("Referrer-Policy", "no-referrer")
     response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
     response.headers.setdefault("X-Request-ID", request.state.request_id)
+    if not request.url.path.startswith(("/docs", "/redoc", "/openapi")):
+        response.headers.setdefault("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'; base-uri 'none'")
+        response.headers.setdefault("Cache-Control", "no-store")
+    if settings.environment.strip().lower() in {"prod", "production"}:
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
     return response
 
 
 @app.get("/")
 def health():
-    return {
-        "status": "online",
-        "service": settings.app_name,
-        "version": "2.0.0",
-        "environment": settings.environment,
-        "database_configured": bool(settings.database_url),
-        "docs": None if settings.environment.lower() in {"prod", "production"} else "/docs",
-        "api_prefix": settings.api_prefix,
-    }
+    return {"status": "online", "service": settings.app_name}
 
 
 @app.get("/health")
@@ -152,7 +147,6 @@ def deep_health(response: Response):
     return {
         "status": "ok" if db_ok else "database_unavailable",
         "database": "connected" if db_ok else "not_verified",
-        "payment_expiry_configured": bool(settings.payment_expiry_cron_secret),
     }
 
 
@@ -160,4 +154,4 @@ if __name__ == "__main__":
     import uvicorn
 
     port = int(os.getenv("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
+    uvicorn.run("main:app", host="127.0.0.1", port=port, reload=os.getenv("UVICORN_RELOAD") == "1")

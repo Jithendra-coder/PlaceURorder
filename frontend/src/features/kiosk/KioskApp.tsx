@@ -226,6 +226,7 @@ export function KioskRuntime({
   );
   useEffect(() => {
     if (!experienceData) return;
+    if (!experienceData.business?.id || !Array.isArray(experienceData.categories) || !Array.isArray(experienceData.products)) return;
     const task = window.setTimeout(() => {
       setBusiness(experienceData.business);
       setCategories(experienceData.categories);
@@ -264,6 +265,7 @@ export function KioskRuntime({
   const [viewportOrientation, setViewportOrientation] = useState<KioskScreenOrientation>(forcedOrientation ?? "landscape");
   const idleTimerRef = useRef<number | null>(null);
   const ownerUnlockedUntilRef = useRef(0);
+  const orderSubmissionRef = useRef<{ fingerprint: string; key: string } | null>(null);
 
   const emitKioskEvent = useCallback((event: string, payload?: Record<string, unknown>) => {
     onKioskEvent?.(event, payload);
@@ -299,6 +301,9 @@ export function KioskRuntime({
         ? await loadDraftKioskMenu(draftBusinessId, locationId)
         : operationalMode === "test" ? await api.testKioskSessionMenu()
         : isLiveDeviceRoute ? await api.liveKioskSessionMenu() : await loadRealKioskMenu(slug, locationId);
+      if (!menu?.business?.id || !Array.isArray(menu.categories) || !Array.isArray(menu.products)) {
+        throw new Error("The kiosk menu response is incomplete. Please try again.");
+      }
       setBusiness(menu.business);
       setCategories(menu.categories);
       setProducts(menu.products);
@@ -804,6 +809,12 @@ export function KioskRuntime({
       if (operationalMode === "preview") {
         throw new Error("Preview mode cannot place orders. Launch Test Kiosk to complete checkout.");
       }
+      const fingerprint = JSON.stringify(orderPayload);
+      const previousRequest = orderSubmissionRef.current;
+      const idempotencyKey = previousRequest?.fingerprint === fingerprint
+        ? previousRequest.key
+        : crypto.randomUUID();
+      orderSubmissionRef.current = { fingerprint, key: idempotencyKey };
       const created: Order = operationalMode === "test"
         ? isTemporaryExperience
           ? await api.completeKioskTestExperience({
@@ -854,8 +865,9 @@ export function KioskRuntime({
             })),
           }).then((response) => testOrder(response, business!.id))
         : isLiveDeviceRoute
-          ? await api.placeLiveKioskSessionOrder(orderPayload)
-          : await placeRealKioskOrder(slug, orderPayload);
+          ? await api.placeLiveKioskSessionOrder(orderPayload, idempotencyKey)
+          : await placeRealKioskOrder(slug, orderPayload, idempotencyKey);
+      orderSubmissionRef.current = null;
       const checkoutUrl = created.payment?.checkout_url;
       const createdPayment = created.payment?.payment;
       if (created.payment?.provider === "paytm" && createdPayment?.id) {

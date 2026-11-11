@@ -1,8 +1,10 @@
+from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
 from fastapi import HTTPException
 
+from schemas import OrderCreate
 from services import business_service, order_service, test_session_service
 
 
@@ -52,8 +54,9 @@ def test_cookie_session_activity_touch_is_throttled():
 
 
 class ReplayClient:
-    def __init__(self):
+    def __init__(self, fingerprint):
         self.locked = False
+        self.fingerprint = fingerprint
 
     def execute_one(self, sql, _params):
         assert "pg_advisory_xact_lock" in sql
@@ -63,18 +66,64 @@ class ReplayClient:
         assert self.locked
         assert "idempotency_key" in sql
         assert params["key"] == "submission-123"
-        return {"id": "00000000-0000-0000-0000-000000000099"}
+        return {"id": "00000000-0000-0000-0000-000000000099", "idempotency_fingerprint": self.fingerprint}
 
 
 def test_idempotent_order_replay_returns_existing_order_before_repricing(monkeypatch):
-    client = ReplayClient()
+    payload = OrderCreate(order_type="takeaway", items=[{"product_id": "00000000-0000-0000-0000-0000000000aa", "quantity": 1}])
+    client = ReplayClient(order_service._request_fingerprint(BUSINESS_ID, "hardware_kiosk", payload))
     existing = {"id": "00000000-0000-0000-0000-000000000099", "total_amount": 42}
     monkeypatch.setattr(order_service, "get_business_by_slug", lambda *_args: {"id": str(BUSINESS_ID)})
     monkeypatch.setattr(order_service, "get_order", lambda *_args: existing)
+    monkeypatch.setattr(order_service.payment_service, "checkout_for_order", lambda *_args: None)
     monkeypatch.setattr(order_service.setup_service, "live_configuration", lambda *_args: pytest.fail("replay must not rebuild the order"))
 
-    result = order_service.create_kiosk_order(client, "demo", object(), idempotency_key="submission-123")
+    result = order_service.create_kiosk_order(client, "demo", payload, idempotency_key="submission-123")
     assert result == existing
+
+
+@pytest.mark.parametrize(
+    "status,expected_url",
+    [("pending", "https://checkout.example/session"), ("paid", None), ("failed", None)],
+)
+def test_order_replay_only_returns_a_live_checkout_url(status, expected_url):
+    payment = {
+        "id": "payment-1",
+        "business_id": str(BUSINESS_ID),
+        "order_id": "order-1",
+        "provider": "stripe",
+        "provider_reference": "status-token",
+        "status": status,
+        "raw_payload": {"checkout_url": "https://checkout.example/session"},
+    }
+
+    class Query:
+        def select(self, *_args):
+            return self
+
+        def eq(self, *_args):
+            return self
+
+        def order(self, *_args, **_kwargs):
+            return self
+
+        def limit(self, *_args):
+            return self
+
+        def execute(self):
+            return SimpleNamespace(data=[payment])
+
+    class Client:
+        def table(self, table_name):
+            assert table_name == "payments"
+            return Query()
+
+    checkout = order_service.payment_service.checkout_for_order(
+        Client(), {"id": "order-1", "business_id": str(BUSINESS_ID)}
+    )
+
+    assert checkout["checkout_url"] == expected_url
+    assert "raw_payload" not in checkout["payment"]
 
 
 def test_canonical_layout_and_welcome_fields_update_legacy_readers():

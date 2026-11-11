@@ -1,14 +1,83 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { Button } from "@astryxdesign/core/Button";
+import { VStack } from "@astryxdesign/core/Stack";
+import { Text } from "@astryxdesign/core/Text";
+import { TextInput } from "@astryxdesign/core/TextInput";
+import { DeviceCard, DeviceFrame } from "@/components/device/DeviceFrame";
+import { NoticeBanner } from "@/components/dashboard/kit";
 import { api } from "@/lib/api";
+
+// Codes are typed in case-insensitively; spaces and dashes are ignored so a code copied with its separators still works.
+const normalise = (value: string) => value.trim().toUpperCase().replace(/[\s-]/g, "");
+
+// The code decides what the device is. The server returns that type and the name it was created with.
+const typeLabels: Record<string, string> = { counter: "Counter", kitchen: "Kitchen", kiosk: "Kiosk" };
 
 export default function DeviceStartPage() {
   const router = useRouter();
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
+  const [paired, setPaired] = useState<{ name: string; type: string; launchPath: string } | null>(null);
   const [busy, setBusy] = useState(false);
-  const activate = async () => { setBusy(true); setError(""); try { const session = await api.activateDevice({ activation_code: code, device_name: "Counter device", user_agent: navigator.userAgent }); router.replace(session.session.launch_path || "/device"); } catch (err) { setError(err instanceof Error ? err.message : "Activation failed."); } finally { setBusy(false); } };
-  return <main className="counter-auth"><section><h1>Pair PlaceURorder Counter</h1><p>Enter the activation code created for this Counter device.</p><input aria-label="Activation code" value={code} onChange={(event) => setCode(event.target.value)} placeholder="Activation code" className="mt-4 min-h-11 w-full rounded border px-3" /><button className="mt-4" disabled={!code || busy} onClick={() => void activate()}>Activate Counter</button>{error && <p className="mt-3 text-red-700">{error}</p>}</section></main>;
+  const cleaned = normalise(code);
+  const valid = cleaned.length >= 6;
+
+  const activate = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!valid || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      // No device name is sent: the server keeps the name chosen when the code was generated.
+      const result = await api.activateDevice({ activation_code: cleaned, user_agent: navigator.userAgent });
+      const type = result.session.device_type;
+      const name = result.device?.display_name || result.device?.name || `${typeLabels[type] ?? "PlaceURorder"} device`;
+      const launchPath = result.session.launch_path || "/device";
+      setPaired({ name, type, launchPath });
+      window.setTimeout(() => router.replace(launchPath), 1200);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "This code could not be activated. Check it and try again.");
+      setBusy(false);
+    }
+  };
+
+  if (paired) {
+    return (
+      <DeviceFrame>
+        <DeviceCard title="Device paired" description={`${typeLabels[paired.type] ?? "PlaceURorder"} device connected.`}>
+          <VStack gap={4}>
+            <NoticeBanner tone="success" title={paired.name} description={`Opening the ${typeLabels[paired.type]?.toLowerCase() ?? ""} screen…`} role="status" />
+          </VStack>
+        </DeviceCard>
+      </DeviceFrame>
+    );
+  }
+
+  return (
+    <DeviceFrame>
+      <DeviceCard title="Pair this device" description="Enter the activation code. The code sets the device type, so a kitchen code pairs a kitchen.">
+        <form onSubmit={activate} noValidate>
+          <VStack gap={5}>
+            {error && <NoticeBanner tone="danger" title="Activation failed" description={error} role="alert" />}
+            <TextInput
+              id="activation-code"
+              label="Activation code"
+              description="Generate it in PlaceURorder under Operations, Devices, Add Devices."
+              placeholder="Enter the code"
+              value={code}
+              onChange={setCode}
+              autoComplete="off"
+              isDisabled={busy}
+              width="100%"
+            />
+            <Button label="Pair device" type="submit" variant="primary" width="100%" isLoading={busy} isDisabled={!valid || busy} />
+            <Text type="supporting" color="secondary">If a code no longer works, it has probably expired. Create a new one from the dashboard.</Text>
+          </VStack>
+        </form>
+      </DeviceCard>
+    </DeviceFrame>
+  );
 }

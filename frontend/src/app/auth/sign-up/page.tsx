@@ -1,16 +1,19 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Button } from "@astryxdesign/core/Button";
+import { HStack, VStack } from "@astryxdesign/core/Stack";
+import { Text } from "@astryxdesign/core/Text";
 import {
-  AuthField,
-  AuthInput,
+  AuthLink,
+  AuthLinks,
+  AuthNotice,
   AuthOtpInput,
   AuthPasswordField,
-  AuthPrimaryButton,
   AuthShell,
-  AuthStatus,
+  AuthSubmit,
+  AuthTextField,
 } from "@/components/AuthShell";
 import { AuthService } from "@/services/auth";
 
@@ -19,7 +22,7 @@ type Step = "email" | "verify" | "password" | "created";
 export default function SignUpPage() {
   const router = useRouter();
   const [step, setStep] = useState<Step>("email");
-  const [email, setEmail] = useState(() => typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("email") || "");
+  const [email, setEmail] = useState(() => (typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("email") || ""));
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [code, setCode] = useState("");
@@ -29,6 +32,7 @@ export default function SignUpPage() {
   const [cooldown, setCooldown] = useState(30);
   const actionInFlight = useRef(false);
   const passwordValid = password.length >= 8 && /[A-Z]/.test(password) && /\d/.test(password);
+  const mismatch = Boolean(confirm && confirm !== password);
 
   useEffect(() => {
     if (step !== "verify") return;
@@ -73,7 +77,7 @@ export default function SignUpPage() {
     };
   }, []);
 
-  const requestCode = async (event?: React.FormEvent) => {
+  const requestCode = async (event?: FormEvent) => {
     event?.preventDefault();
     if (busy || actionInFlight.current || !email.trim()) return;
     actionInFlight.current = true;
@@ -109,7 +113,7 @@ export default function SignUpPage() {
     }
   };
 
-  const complete = async (event: React.FormEvent) => {
+  const complete = async (event: FormEvent) => {
     event.preventDefault();
     if (busy || actionInFlight.current || !passwordValid || password !== confirm) return;
     actionInFlight.current = true;
@@ -148,50 +152,60 @@ export default function SignUpPage() {
 
   return (
     <AuthShell title="Create your account" description="We’ll email you a six-digit code to verify your address and choose a password.">
-      <AuthStatus>{error}</AuthStatus>
-      <AuthStatus tone="success">{step === "created" ? "Account created successfully." : ""}</AuthStatus>
+      <VStack gap={5}>
+        <AuthNotice message={error} />
+        <AuthNotice tone="success" message={step === "created" ? "Account created successfully." : ""} />
 
-      {step === "email" && (
-        <form onSubmit={requestCode} className="mt-auth-form">
-          <AuthField id="email" label="Email"><AuthInput id="email" name="email" type="email" placeholder="Enter your email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} disabled={busy} required /></AuthField>
-          <div className="mt-auth-action"><AuthPrimaryButton type="submit" disabled={!email.trim()} busy={busy}>Send verification code</AuthPrimaryButton></div>
-        </form>
-      )}
+        {step === "email" && (
+          <form onSubmit={requestCode} noValidate>
+            <VStack gap={5}>
+              <AuthTextField id="email" name="email" type="email" label="Email" placeholder="Enter your email" autoComplete="email" value={email} onChange={setEmail} disabled={busy} required />
+              <AuthSubmit label="Send verification code" disabled={!email.trim()} busy={busy} />
+            </VStack>
+          </form>
+        )}
 
-      {step === "verify" && (
-        <form onSubmit={(event) => { event.preventDefault(); void verify(); }} className="mt-auth-otp-stage">
-          <div className="mt-auth-field mt-auth-otp-email">
-            <div className="mt-auth-field__header"><label htmlFor="verified-email" className="mt-auth-field__label">Email</label><button type="button" className="mt-auth-change" onClick={() => setStep("email")}>Change</button></div>
-            <AuthInput id="verified-email" value={email} disabled />
-          </div>
-          <p className="mt-auth-code-support">Enter the six-digit code from your email. After verification, you’ll choose your password.</p>
-          <AuthOtpInput value={code} onChange={setCode} onComplete={(value) => void verify(value)} disabled={busy} />
-          <div className="mt-auth-otp-timer">
-            <p className={expiresIn ? "" : "mt-auth-otp-expired"}>{expiresIn ? `Code expires in ${timerText}` : "Code has expired. Request a new code to continue."}</p>
-            <button type="button" className="mt-auth-otp-resend" onClick={() => void resend()} disabled={busy || cooldown > 0}>
-              {cooldown > 0 ? `Resend code in ${cooldown}s` : "Resend code"}
-            </button>
-          </div>
-          <div className="mt-auth-otp-action"><AuthPrimaryButton type="submit" busy={busy}>Verify code</AuthPrimaryButton></div>
-        </form>
-      )}
+        {step === "verify" && (
+          <form onSubmit={(event) => { event.preventDefault(); void verify(); }} noValidate>
+            <VStack gap={5}>
+              <HStack gap={2} vAlign="end">
+                <AuthTextField id="verified-email" label="Email" value={email} onChange={() => {}} disabled />
+                <Button label="Change" variant="ghost" size="sm" onClick={() => setStep("email")} />
+              </HStack>
+              <Text type="body" color="secondary">Enter the six-digit code from your email. After verification, you’ll choose your password.</Text>
+              <AuthOtpInput value={code} onChange={setCode} onComplete={(value) => void verify(value)} disabled={busy} />
+              <HStack gap={2} hAlign="between" vAlign="center" wrap="wrap">
+                <Text type="supporting" color={expiresIn ? "secondary" : "primary"}>
+                  {expiresIn ? `Code expires in ${timerText}` : "Code has expired. Request a new code to continue."}
+                </Text>
+                <Button label={cooldown > 0 ? `Resend code in ${cooldown}s` : "Resend code"} variant="ghost" size="sm" isDisabled={busy || cooldown > 0} onClick={() => void resend()} />
+              </HStack>
+              <AuthSubmit label="Verify code" busy={busy} />
+            </VStack>
+          </form>
+        )}
 
-      {step === "password" && (
-        <form onSubmit={complete} className="mt-auth-form">
-          <AuthField id="verified-email" label="Verified email"><AuthInput id="verified-email" value={email} disabled /></AuthField>
-          <AuthField id="password" label="Password" helper="Use at least 8 characters, including one uppercase letter and one number."><AuthPasswordField id="password" name="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} disabled={busy} required /></AuthField>
-          <AuthField id="confirm" label="Confirm password" error={confirm && confirm !== password ? "The passwords do not match." : undefined}><AuthPasswordField id="confirm" name="confirm" autoComplete="new-password" value={confirm} onChange={(event) => setConfirm(event.target.value)} disabled={busy} invalid={Boolean(confirm && confirm !== password)} required /></AuthField>
-          <div className="mt-auth-action"><AuthPrimaryButton type="submit" disabled={!passwordValid || password !== confirm} busy={busy}>Create Account</AuthPrimaryButton></div>
-        </form>
-      )}
+        {step === "password" && (
+          <form onSubmit={complete} noValidate>
+            <VStack gap={5}>
+              <AuthTextField id="verified-email" label="Verified email" value={email} onChange={() => {}} disabled />
+              <VStack gap={4}>
+                <AuthPasswordField id="password" name="password" label="Password" helper="Use at least 8 characters, including one uppercase letter and one number." autoComplete="new-password" value={password} onChange={setPassword} disabled={busy} required />
+                <AuthPasswordField id="confirm" name="confirm" label="Confirm password" error={mismatch ? "The passwords do not match." : undefined} autoComplete="new-password" value={confirm} onChange={setConfirm} disabled={busy} required />
+              </VStack>
+              <AuthSubmit label="Create account" disabled={!passwordValid || password !== confirm} busy={busy} />
+            </VStack>
+          </form>
+        )}
 
-      {step === "created" && <AuthPrimaryButton type="button" onClick={() => router.replace("/setup/business-type")}>Continue to Business Onboarding</AuthPrimaryButton>}
+        {step === "created" && <AuthSubmit label="Continue to business setup" type="button" onClick={() => router.replace("/setup/business-type")} />}
 
-      {step === "email" && (
-        <div className="mt-auth-route-links">
-          <Link href="/auth/sign-in">Back to sign in</Link>
-        </div>
-      )}
+        {step === "email" && (
+          <AuthLinks>
+            <AuthLink href="/auth/sign-in" label="Back to sign in" />
+          </AuthLinks>
+        )}
+      </VStack>
     </AuthShell>
   );
 }

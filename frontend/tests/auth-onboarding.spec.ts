@@ -79,14 +79,14 @@ test("sign-in error stays readable and the full form is reachable in a short vie
   await page.locator("#password").fill("test-only-not-a-credential");
   await page.getByRole("button", { name: "Sign In" }).click();
 
-  await expect(page.locator(".mt-auth-status--error")).toHaveText("The service is temporarily unavailable. Please try again shortly.");
+  await expect(page.getByText("The service is temporarily unavailable. Please try again shortly.")).toBeVisible();
 
-  const card = page.locator(".mt-auth-card");
+  const card = page.getByRole("heading", { name: "Welcome back" });
   await expect(card).toBeVisible();
   expect((await card.boundingBox())?.y).toBeGreaterThanOrEqual(0);
-  await expect(page.locator('label[for="identifier"]')).toBeInViewport();
+  await expect(page.getByLabel("Email or phone")).toBeInViewport();
 
-  const signUp = page.getByRole("link", { name: "Sign up" });
+  const signUp = page.getByRole("link", { name: "Create one" });
   await signUp.scrollIntoViewIfNeeded();
   await expect(signUp).toBeInViewport();
 });
@@ -98,6 +98,7 @@ test("onboarding uses the shared logo upload and keeps ambient motion behind the
   await page.goto("/setup/business-details");
 
   await expect(page.getByRole("heading", { name: "Business Details" })).toBeVisible();
+  expect(await page.locator(".mt-logo-upload__card").evaluate((card) => getComputedStyle(card).borderTopStyle)).toBe("solid");
   await expect(page.locator('[data-component="noir-ambient-background"]')).toBeVisible();
   await expect(page.getByText("Logo Shape", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Brand Accent Color", { exact: true })).toHaveCount(0);
@@ -154,11 +155,21 @@ test("onboarding flow stays consistent from business setup through Test Kiosk", 
   await page.route("**/api/kiosk/test/session/exchange", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ session: { id: "session-1", business_id: "business-1", expires_at: new Date(Date.now() + 60_000).toISOString() } }) }));
 
   const captureResponsive = async (name: string) => {
-    await page.setViewportSize({ width: 1280, height: 900 });
-    await page.screenshot({ path: `../qa-artifacts/ui-audit/after/onboarding-polish/${name}-desktop.png`, fullPage: true, style: "nextjs-portal { display: none !important; }" });
-    await page.setViewportSize({ width: 390, height: 844 });
-    expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false);
-    await page.screenshot({ path: `../qa-artifacts/ui-audit/after/onboarding-polish/${name}-mobile.png`, fullPage: true, style: "nextjs-portal { display: none !important; }" });
+    for (const [size, width, height] of [["desktop", 1280, 900], ["tablet", 768, 1024], ["mobile", 390, 844]] as const) {
+      await page.setViewportSize({ width, height });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false);
+      if (name === "kiosk-layout" && size === "tablet") {
+        const grid = await page.locator(".mt-kiosk-layout-grid").boundingBox();
+        const lastCard = await page.locator(".mt-kiosk-layout-card").last().boundingBox();
+        expect(grid && lastCard && Math.abs(lastCard.x + lastCard.width / 2 - grid.x - grid.width / 2)).toBeLessThan(1);
+      }
+      if (name === "welcome-screen") {
+        const grid = await page.locator(".mt-welcome-selection-grid").boundingBox();
+        const card = await page.locator(".mt-welcome-selection-card").boundingBox();
+        expect(grid && card && Math.abs(card.x + card.width / 2 - grid.x - grid.width / 2)).toBeLessThan(1);
+      }
+      await page.screenshot({ path: `../qa-artifacts/ui-audit/after/onboarding-polish/${name}-${size}.png`, fullPage: true, style: "nextjs-portal { display: none !important; }" });
+    }
   };
 
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -175,7 +186,7 @@ test("onboarding flow stays consistent from business setup through Test Kiosk", 
   const selectedType = page.locator('.mt-business-type-option[aria-checked="true"]');
   await expect(selectedType).toBeVisible();
   await page.locator(".mt-business-type-option img").evaluateAll((images) => Promise.all(images.map((image) => (image as HTMLImageElement).decode())));
-  expect(await selectedType.evaluate((option) => getComputedStyle(option).borderTopColor)).toBe("rgb(52, 64, 84)");
+  expect(await selectedType.evaluate((option) => getComputedStyle(option).borderTopColor)).toBe("rgb(152, 162, 179)");
   expect(await page.locator(".mt-business-type-continue").evaluate((button) => getComputedStyle(button).backgroundColor)).toBe("rgb(52, 64, 84)");
   await expect(page.locator(".mt-onboarding-topbar__logo img")).toHaveCount(0);
   await expect(page.locator(".mt-onboarding-topbar__logo")).toContainText("PlaceURorder");
@@ -196,7 +207,7 @@ test("onboarding flow stays consistent from business setup through Test Kiosk", 
   for (let index = 0; index < 4; index += 1) await menuItems.nth(index).click();
   const selectedMenuItems = page.locator('.mt-menu-selection-card[aria-pressed="true"]');
   await expect(selectedMenuItems).toHaveCount(4);
-  expect(await selectedMenuItems.first().evaluate((card) => getComputedStyle(card).borderTopColor)).toBe("rgb(52, 64, 84)");
+  expect(await selectedMenuItems.first().evaluate((card) => getComputedStyle(card).borderTopColor)).toBe("rgb(152, 162, 179)");
   await expect(page.locator(".mt-onboarding-topbar__continue")).toBeEnabled();
   await captureResponsive("menu-items");
 
@@ -205,6 +216,7 @@ test("onboarding flow stays consistent from business setup through Test Kiosk", 
   await expect(page).toHaveURL(/\/setup\/kiosk-layout$/);
   const frames = page.locator(".mt-virtual-kiosk-frame__viewport");
   await expect(frames).toHaveCount(3);
+  expect(await page.locator('.mt-kiosk-layout-card[data-selected="true"]').evaluate((card) => getComputedStyle(card).borderTopColor)).toBe("rgb(152, 162, 179)");
   expect(await frames.first().evaluate((frame) => getComputedStyle(frame).boxShadow)).toContain("rgb(208, 213, 221)");
   await captureResponsive("kiosk-layout");
   expect(await page.locator(".mt-kiosk-layout-card__preview").first().evaluate((preview) => preview.getBoundingClientRect().height)).toBeLessThanOrEqual(440);
@@ -214,6 +226,7 @@ test("onboarding flow stays consistent from business setup through Test Kiosk", 
   await expect(page).toHaveURL(/\/setup\/welcome-screen$/);
   const welcomeFrame = page.locator(".mt-virtual-kiosk-frame__viewport");
   await expect(welcomeFrame).toBeVisible();
+  expect(await page.locator('.mt-welcome-selection-card[data-selected="true"]').evaluate((card) => getComputedStyle(card).borderTopColor)).toBe("rgb(152, 162, 179)");
   expect(await welcomeFrame.evaluate((frame) => getComputedStyle(frame).boxShadow)).toContain("rgb(208, 213, 221)");
   await captureResponsive("welcome-screen");
 
@@ -300,7 +313,7 @@ test("a slow completed-status lookup never redirects to setup", async ({ page })
   await expect(page.getByRole("status", { name: "Loading workspace" })).toBeVisible();
   await expect(page).toHaveURL(/\/dashboard$/);
   releaseStatus?.();
-  await expect(page.locator(".mt-dashboard-shell")).toBeVisible();
+  await expect(page.locator("[data-dashboard-sidebar]").first()).toBeVisible();
   await expect(page).toHaveURL(/\/dashboard$/);
 });
 
@@ -328,10 +341,10 @@ test("completed setup Test Kiosk redirects to the dashboard-native test dialog",
   await page.route("**/api/kiosk/test/session/exchange", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ session: { id: "session-1", business_id: "business-1", expires_at: new Date(Date.now() + 60_000).toISOString() } }) }));
   await page.goto("/setup/test-kiosk");
   await expect(page).toHaveURL(/\/dashboard\/kiosk-experience\/publish\?test=1$/);
-  await expect(page.getByRole("heading", { name: "Test saved kiosk draft" })).toBeVisible();
+  await expect(page.getByText("Test saved kiosk draft", { exact: true })).toBeVisible();
   await page.reload();
   await expect(page).toHaveURL(/\/dashboard\/kiosk-experience\/publish\?test=1$/);
-  await expect(page.getByRole("heading", { name: "Test saved kiosk draft" })).toBeVisible();
+  await expect(page.getByText("Test saved kiosk draft", { exact: true })).toBeVisible();
 });
 
 test("a completed owner can open and refresh Preview Kiosk directly", async ({ page }) => {

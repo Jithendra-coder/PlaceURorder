@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Loader2, MonitorSmartphone } from "lucide-react";
+import { Button } from "@astryxdesign/core/Button";
+import { VStack } from "@astryxdesign/core/Stack";
+import { DeviceCard, DeviceFrame, DeviceLoading } from "@/components/device/DeviceFrame";
+import { NoticeBanner } from "@/components/dashboard/kit";
 import { api } from "@/lib/api";
 import type { LiveDeviceContext } from "@/lib/types";
 
@@ -42,30 +45,18 @@ export function LiveDeviceBootstrap({ deviceToken, expectedType }: { deviceToken
 
   if (error) {
     return (
-      <main className="grid min-h-screen place-items-center bg-[#F7F8FB] px-5 text-[#0F172A]">
-        <section className="w-full max-w-md rounded-lg border border-rose-200 bg-white p-6 text-center shadow-[0_18px_60px_rgba(15,23,42,0.10)]">
-          <AlertTriangle className="mx-auto text-rose-600" size={32} />
-          <h1 className="mt-4 text-2xl font-black">Device link unavailable</h1>
-          <p className="mt-2 text-sm font-bold leading-6 text-[#64748B]">{error}</p>
-          <button type="button" onClick={() => router.replace("/device/start")} className="mt-5 min-h-11 rounded bg-[#111827] px-5 text-sm font-black text-white">
-            Pair this device
-          </button>
-        </section>
-      </main>
+      <DeviceFrame>
+        <DeviceCard title="Device link unavailable" description="This link can no longer open the device.">
+          <VStack gap={4}>
+            <NoticeBanner tone="danger" title="The link did not connect" description={error} role="alert" />
+            <Button label="Pair this device" variant="primary" width="100%" onClick={() => router.replace("/device/start")} />
+          </VStack>
+        </DeviceCard>
+      </DeviceFrame>
     );
   }
 
-  return (
-    <main className="grid min-h-screen place-items-center bg-[#F7F8FB] text-[#0F172A]">
-      <div className="flex items-center gap-3 text-sm font-black text-[#64748B]">
-        <span className="grid h-10 w-10 place-items-center rounded bg-white shadow-sm">
-          <MonitorSmartphone size={18} />
-        </span>
-        <Loader2 className="animate-spin" size={18} />
-        Securing device session
-      </div>
-    </main>
-  );
+  return <DeviceLoading message="Securing device session" />;
 }
 
 export function saveDeviceSnapshot(context: LiveDeviceContext) {

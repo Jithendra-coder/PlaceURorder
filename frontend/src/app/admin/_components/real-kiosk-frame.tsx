@@ -2,6 +2,10 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { Maximize2 } from "lucide-react";
+import { Button } from "@astryxdesign/core/Button";
+import { Layout, LayoutContent } from "@astryxdesign/core/Layout";
+import { HStack, VStack } from "@astryxdesign/core/Stack";
+import { Text } from "@astryxdesign/core/Text";
 import type { KioskScreenOrientation } from "@/lib/types";
 
 export type KioskFrameEvent = {
@@ -68,14 +72,20 @@ export function RealKioskFrame({ slug, businessId, locationId, orientation, mode
   }, [mode, onKioskEvent, onLoad, sessionId, slug]);
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between gap-3 text-xs font-semibold text-[var(--color-text-muted)]">
-        <span>{width} × {height} · {Math.round(scale * 100)}%</span>
-        <button type="button" onClick={() => void containerRef.current?.requestFullscreen()} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--color-border)] bg-white px-3 font-semibold text-[var(--color-text-primary)] transition hover:bg-[var(--color-surface-hover)] active:bg-slate-100 focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"><Maximize2 size={14} aria-hidden="true" /> Fullscreen</button>
-      </div>
-      <div ref={containerRef} className="relative mx-auto overflow-hidden rounded-xl border border-[var(--color-border)] bg-slate-100 shadow-sm" style={{ aspectRatio: `${width} / ${height}`, maxWidth: orientation === "portrait" ? (compact ? 236 : 405) : (compact ? 747 : 1280) }}>
-        <iframe ref={iframeRef} key={`${mode}-${locationId || "all"}-${sessionKey}`} title={`${mode === "test" ? "Test" : "Preview"} kiosk`} src={`/kiosk/${encodeURIComponent(slug)}?mode=${mode}&embedded=1&session=${encodeURIComponent(sessionId)}${businessId ? `&business=${encodeURIComponent(businessId)}` : ""}${locationId ? `&location=${encodeURIComponent(locationId)}` : ""}`} className="absolute left-0 top-0 border-0 bg-white" style={{ width, height, transform: `scale(${scale})`, transformOrigin: "top left" }} />
-      </div>
-    </div>
+    <VStack gap={3} hAlign="center">
+      <HStack gap={3} vAlign="center" hAlign="between" wrap="wrap">
+        <Text type="supporting" color="secondary">{`${orientation === "portrait" ? "Portrait" : "Landscape"} · ${Math.round(scale * 100)}%`}</Text>
+        <Button label="Fullscreen" variant="ghost" size="sm" icon={<Maximize2 size={14} aria-hidden="true" />} onClick={() => void containerRef.current?.requestFullscreen()} />
+      </HStack>
+      <Layout height="auto" style={{ margin: 0, width: "100%", maxWidth: orientation === "portrait" ? (compact ? 252 : 420) : (compact ? 780 : 1280), padding: orientation === "portrait" ? 10 : 8, background: "var(--color-text-primary)", borderRadius: "var(--radius-container)", boxShadow: "var(--shadow-med)" }}>
+        <LayoutContent padding={0}>
+          <Layout ref={containerRef} height="auto" style={{ position: "relative", width: "100%", aspectRatio: `${width} / ${height}`, overflow: "hidden", borderRadius: "var(--radius-element)", background: "var(--color-background-surface)" }}>
+            <LayoutContent padding={0}>
+              <iframe ref={iframeRef} key={`${mode}-${locationId || "all"}-${sessionKey}`} title={`${mode === "test" ? "Test" : "Preview"} kiosk`} src={`/kiosk/${encodeURIComponent(slug)}?mode=${mode}&embedded=1&session=${encodeURIComponent(sessionId)}${businessId ? `&business=${encodeURIComponent(businessId)}` : ""}${locationId ? `&location=${encodeURIComponent(locationId)}` : ""}`} style={{ position: "absolute", left: 0, top: 0, width, height, border: 0, background: "var(--color-background-surface)", transform: `scale(${scale})`, transformOrigin: "top left" }} />
+            </LayoutContent>
+          </Layout>
+        </LayoutContent>
+      </Layout>
+    </VStack>
   );
 }

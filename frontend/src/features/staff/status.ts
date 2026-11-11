@@ -22,3 +22,12 @@ export function elapsedLabel(value?: string | null, now = Date.now()): string {
   const seconds = elapsed % 60;
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
+
+/** Where an order came from: customers on the QR link, the kiosk, or the counter. */
+export function orderSourceLabel(source?: string | null): string {
+  if (source === "qr") return "Online (QR)";
+  if (source === "counter") return "Counter";
+  return "Kiosk";
+}
+
+export const isOnlineOrder = (source?: string | null) => source === "qr";

@@ -8,6 +8,12 @@ from database import DbClient, get_db_client
 from services.auth_service import SESSION_COOKIE_NAME, assert_session_active, decode_access_token, get_user
 
 
+def legacy_device_token_guard(settings: Settings = Depends(get_settings)) -> None:
+    """Token-in-path device routes are disabled unless explicitly enabled. Tokens in URLs leak into logs and proxies."""
+    if not settings.legacy_device_token_routes:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found.")
+
+
 def _bearer_token(authorization: str | None) -> str | None:
     if not authorization:
         return None

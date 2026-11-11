@@ -75,7 +75,9 @@ The repository keeps the web app, API, and database migration history in separat
 │   ├── requirements.txt        # Backend dependencies
 │   ├── README.md               # Backend setup and API notes
 │   └── webhook_worker.py       # Queued webhook delivery worker
-├── docs/legal/                 # Privacy notice and terms drafts
+├── docs/
+│   ├── AI_POLICY_DOCKER_PLAN.md # Product, AI, and deployment plan
+│   └── legal/                   # Privacy notice and terms drafts
 ├── frontend/
 │   ├── public/                 # Static assets
 │   ├── scripts/                # Frontend quality checks
@@ -235,6 +237,17 @@ cd backend
 pytest
 ```
 
+### Live order and payment integration test
+Use a dedicated disposable PostgreSQL database, never a production `DATABASE_URL`. From `backend` in PowerShell, run:
+
+```powershell
+$env:RUN_LIVE_DB_TESTS = "1"
+python -m pytest tests/test_live_kiosk_workflow.py -q
+Remove-Item Env:RUN_LIVE_DB_TESTS
+```
+
+The test exercises the real order transaction and Stripe request/webhook handlers against PostgreSQL while simulating Stripe's HTTP responses; it does not contact Stripe or charge a card.
+
 ---
 
 ## Security & Best Practices
@@ -248,4 +261,4 @@ pytest
 
 ## License
 
-This repository currently has no tracked `LICENSE` file, so its reuse and redistribution terms are not explicitly stated. Add a license before relying on those permissions.
+This project is licensed under the [MIT License](LICENSE).

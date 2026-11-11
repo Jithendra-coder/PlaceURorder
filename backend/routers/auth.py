@@ -38,6 +38,7 @@ SIGNUP_COMPLETE_LIMIT = RateLimitRule("auth:signup-complete", 5, 60)
 VERIFY_EMAIL_LIMIT = RateLimitRule("auth:verify-email", 8, 60)
 RESEND_VERIFICATION_LIMIT = RateLimitRule("auth:resend-verification", 5, 60)
 LOGIN_LIMIT = RateLimitRule("auth:login", 8, 60)
+REFRESH_LIMIT = RateLimitRule("auth:refresh", 30, 60)
 FORGOT_PASSWORD_LIMIT = RateLimitRule("auth:forgot-password", 5, 60)
 RESET_PASSWORD_LIMIT = RateLimitRule("auth:reset-password", 5, 60)
 REAUTHENTICATE_LIMIT = RateLimitRule("auth:reauthenticate", 10, 60)
@@ -226,6 +227,11 @@ def refresh(
     client: DbClient = Depends(get_db_client),
     settings: Settings = Depends(get_settings),
 ):
+    refresh_cookie = request.cookies.get(auth_service.SESSION_REFRESH_COOKIE_NAME)
+    # Only a request that presents a refresh cookie is limited: an anonymous call cannot brute-force anything and
+    # counting it would throttle every client that shares an address (cafes, offices).
+    if refresh_cookie:
+        assert_rate_limit(request, REFRESH_LIMIT, identity_parts=[refresh_cookie])
     session = auth_service.refresh_session(
         client,
         request.cookies.get(auth_service.SESSION_COOKIE_NAME),

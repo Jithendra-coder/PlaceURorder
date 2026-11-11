@@ -679,6 +679,28 @@ def _validate_unique_values(values: list[Any] | None, field_name: str) -> None:
         raise ValueError(f"{field_name} cannot contain duplicates.")
 
 
+class StoreOrderingStatus(BaseModel):
+    name: str
+    slug: str
+    currency_symbol: str = ""
+    tax_percent: float = 0
+    qr_ordering_enabled: bool
+    is_open: bool
+    order_modes: List[str]
+    require_customer_name: bool
+    require_customer_phone: bool
+    allow_customer_notes: bool
+    store_url: str
+
+
+class OwnerStoreOrdering(StoreOrderingStatus):
+    business_id: UUID
+
+
+class QrOrderingToggle(BaseModel):
+    enabled: bool
+
+
 class QrCodeCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=120)
     destination_type: Literal["main_menu", "category", "item", "deal", "table", "takeaway"]
@@ -1170,6 +1192,13 @@ class DeviceActivate(BaseModel):
 
 
 class DeviceSessionExchange(BaseModel):
+    expected_type: Optional[Literal["kiosk", "kitchen", "counter"]] = None
+
+
+class DeviceTokenExchange(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    device_token: str = Field(..., min_length=20, max_length=160, pattern=r"^[A-Za-z0-9_-]+$")
     expected_type: Optional[Literal["kiosk", "kitchen", "counter"]] = None
 
 

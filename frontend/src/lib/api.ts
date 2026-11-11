@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { devUserIdHeader } from "@/lib/dev-demo";
 import type {
   AuthSession,
   AuthUser,
@@ -14,6 +15,9 @@ import type {
   DashboardStats,
   HomeActivation,
   KioskMenu,
+  OwnerStoreOrdering,
+  QrOrderPayload,
+  QrStoreStatus,
   KioskSetupOverview,
   KioskSetupStep,
   KioskTestOrderPayload,
@@ -127,6 +131,8 @@ async function performApiRequest<T>(
   const { auth: useAuth = true, timeoutMs, ...fetchOptions } = options;
   const headers = new Headers(options.headers);
   const isForm = options.body instanceof FormData;
+  const devUserId = devUserIdHeader();
+  if (devUserId && !headers.has("x-user-id")) headers.set("x-user-id", devUserId);
 
   if (!isForm && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
@@ -746,10 +752,10 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   exchangeLiveDeviceToken: (deviceToken: string, expectedType?: "kiosk" | "kitchen" | "counter") =>
-    apiData<LiveDeviceContext>(`/devices/live/${encodeURIComponent(deviceToken)}/session`, {
+    apiData<LiveDeviceContext>("/devices/live/session/exchange", {
       method: "POST",
       auth: false,
-      body: JSON.stringify({ expected_type: expectedType }),
+      body: JSON.stringify({ device_token: deviceToken, expected_type: expectedType }),
     }),
   liveDeviceSessionContext: (expectedType?: "kiosk" | "kitchen" | "counter") => {
     const query = expectedType ? `?expected_type=${encodeURIComponent(expectedType)}` : "";
@@ -826,6 +832,12 @@ export const api = {
     }),
   kioskMenu: (slug: string, locationId?: string | null) =>
     apiRequest<KioskMenu>(`/kiosk/${slug}/menu${locationId ? `?location_id=${encodeURIComponent(locationId)}` : ""}`, { auth: false }),
+  qrStoreStatus: (slug: string) => apiRequest<QrStoreStatus>(`/kiosk/${slug}/store`, { auth: false }),
+  qrOrder: (slug: string, payload: QrOrderPayload, idempotencyKey: string) =>
+    apiData<Order>(`/kiosk/${slug}/qr-orders`, { method: "POST", auth: false, headers: { "X-Idempotency-Key": idempotencyKey }, body: JSON.stringify(payload) }),
+  ownerStoreOrdering: (businessId: string) => apiRequest<OwnerStoreOrdering>(`/businesses/${businessId}/qr-codes/store-ordering`),
+  setStoreOrdering: (businessId: string, enabled: boolean) =>
+    apiRequest<OwnerStoreOrdering>(`/businesses/${businessId}/qr-codes/store-ordering`, { method: "PUT", body: JSON.stringify({ enabled }) }),
   liveKioskSessionMenu: () =>
     apiRequest<KioskMenu>("/kiosk/live/session/menu", { auth: false }),
   kioskHeartbeat: (slug: string, payload: { device_id: string; name?: string; device_type?: string; metadata?: Record<string, unknown> }) =>
@@ -894,11 +906,13 @@ export const api = {
       notes?: string;
       payment_method?: string;
       items: { product_id: string; quantity: number; notes?: string; customizations?: unknown[] }[];
-    }
+    },
+    idempotencyKey: string
   ) =>
     apiData<Order>(`/kiosk/${slug}/orders`, {
       method: "POST",
       auth: false,
+      headers: { "X-Idempotency-Key": idempotencyKey },
       body: JSON.stringify(payload),
     }),
   placeLiveKioskSessionOrder: (
@@ -910,11 +924,13 @@ export const api = {
       notes?: string;
       payment_method?: string;
       items: { product_id: string; quantity: number; notes?: string; customizations?: unknown[] }[];
-    }
+    },
+    idempotencyKey: string
   ) =>
     apiData<Order>("/kiosk/live/session/orders", {
       method: "POST",
       auth: false,
+      headers: { "X-Idempotency-Key": idempotencyKey },
       body: JSON.stringify(payload),
     }),
 };

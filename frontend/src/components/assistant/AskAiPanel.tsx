@@ -1,9 +1,24 @@
 "use client";
 
-import Link from "next/link";
-import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
-import { ArrowUpRight, Bot, LoaderCircle, Send, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { ArrowUpRight, Bot, Send } from "lucide-react";
+import { Badge } from "@astryxdesign/core/Badge";
+import { Button } from "@astryxdesign/core/Button";
+import { Card } from "@astryxdesign/core/Card";
+import { Divider } from "@astryxdesign/core/Divider";
+import { Drawer } from "@astryxdesign/core/Drawer";
+import { Grid } from "@astryxdesign/core/Grid";
+import { IconButton } from "@astryxdesign/core/IconButton";
+import { Layout, LayoutContent } from "@astryxdesign/core/Layout";
+import { Spinner } from "@astryxdesign/core/Spinner";
+import { HStack, VStack } from "@astryxdesign/core/Stack";
+import { Heading, Text } from "@astryxdesign/core/Text";
+import { TextArea } from "@astryxdesign/core/TextArea";
+import { NoticeBanner } from "@/components/dashboard/kit";
 import { api } from "@/services/api";
+
+// Ask AI: a logo-only floating trigger in the corner. Opening it reveals the assistant in an end-side drawer,
+// so nothing else on the page is covered until the owner asks for it.
 
 const suggestions = [
   "How can I grow my menu sales?",
@@ -16,17 +31,13 @@ type AskResponse = Awaited<ReturnType<typeof api.askAssistant>>;
 
 export function AskAiPanel({ businessId }: { businessId: string | null }) {
   const [open, setOpen] = useState(false);
-  const [draftQuestion, setDraftQuestion] = useState<{ businessId: string | null; text: string }>({ businessId: null, text: "" });
+  const [draft, setDraft] = useState<{ businessId: string | null; text: string }>({ businessId: null, text: "" });
   const [asked, setAsked] = useState<{ businessId: string; question: string; result: AskResponse | null } | null>(null);
   const [error, setError] = useState<{ businessId: string; message: string } | null>(null);
   const [activeRequest, setActiveRequest] = useState<{ id: number; businessId: string } | null>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const dialogRef = useRef<HTMLDialogElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const dismissedOutsideRef = useRef(false);
   const requestController = useRef<AbortController | null>(null);
   const requestId = useRef(0);
-  const question = draftQuestion.businessId === businessId ? draftQuestion.text : "";
+  const question = draft.businessId === businessId ? draft.text : "";
   const loading = activeRequest?.businessId === businessId;
   const visibleAsked = asked?.businessId === businessId ? asked : null;
   const visibleError = error?.businessId === businessId ? error.message : "";
@@ -37,53 +48,23 @@ export function AskAiPanel({ businessId }: { businessId: string | null }) {
     setActiveRequest(null);
     setAsked(null);
     setError(null);
-    setDraftQuestion({ businessId: null, text: "" });
+    setDraft({ businessId: null, text: "" });
     setOpen(false);
   }, []);
 
+  // A different business never inherits the previous conversation or an in-flight request.
   useEffect(() => {
     requestController.current?.abort();
     requestController.current = null;
     return () => requestController.current?.abort();
   }, [businessId]);
 
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    if (open && !dialog.open) {
-      dialog.show();
-      textareaRef.current?.focus();
-    } else if (!open && dialog.open) {
-      dialog.close();
-    }
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const closeOutside = (event: globalThis.PointerEvent) => {
-      const target = event.target;
-      if (target instanceof Node && !dialogRef.current?.contains(target) && !triggerRef.current?.contains(target)) {
-        dismissedOutsideRef.current = true;
-        close();
-      }
-    };
-    document.addEventListener("pointerdown", closeOutside);
-    return () => document.removeEventListener("pointerdown", closeOutside);
-  }, [close, open]);
-
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    textarea.style.height = "auto";
-    textarea.style.height = `${textarea.scrollHeight}px`;
-  }, [question]);
-
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const prompt = question.trim();
     if (!businessId || prompt.length < 3 || loading) return;
     setAsked({ businessId, question: prompt, result: null });
-    setDraftQuestion({ businessId, text: "" });
+    setDraft({ businessId, text: "" });
     setError(null);
     const controller = new AbortController();
     const activeId = ++requestId.current;
@@ -94,101 +75,171 @@ export function AskAiPanel({ businessId }: { businessId: string | null }) {
       if (requestController.current === controller) setAsked({ businessId, question: prompt, result });
     } catch {
       if (!controller.signal.aborted) {
-        setDraftQuestion({ businessId, text: prompt });
+        setDraft({ businessId, text: prompt });
         setError({ businessId, message: "Couldn't retrieve your business data. Please try again." });
       }
     } finally {
       if (requestController.current === controller) requestController.current = null;
-      setActiveRequest((current) => current?.id === activeId ? null : current);
+      setActiveRequest((current) => (current?.id === activeId ? null : current));
     }
   }
 
   function show() {
     setAsked(null);
     setError(null);
-    setDraftQuestion({ businessId, text: "" });
+    setDraft({ businessId, text: "" });
     setOpen(true);
-  }
-
-  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-      event.preventDefault();
-      event.currentTarget.form?.requestSubmit();
-    }
   }
 
   return (
     <>
-      <button ref={triggerRef} type="button" className="mt-ai-trigger" onClick={() => open ? close() : show()} disabled={!businessId} aria-label="Ask AI" aria-haspopup="dialog" aria-controls="mt-ai-dialog" aria-expanded={open}>
-        <Bot size={18} aria-hidden="true" />
-        <span>Ask AI</span>
-      </button>
-      <dialog
-        ref={dialogRef}
-        id="mt-ai-dialog"
-        className="mt-ai-dialog"
-        aria-labelledby="mt-ai-title"
-        onCancel={(event) => { event.preventDefault(); close(); }}
-        onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); close(); } }}
-        onClose={() => {
-          if (dismissedOutsideRef.current) dismissedOutsideRef.current = false;
-          else triggerRef.current?.focus();
-        }}
-      >
-        <header className="mt-ai-header">
-          <div className="mt-ai-heading">
-            <span className="mt-ai-mark"><Bot size={20} aria-hidden="true" /></span>
-            <span><h2 id="mt-ai-title">Ask AI</h2><p>Ask about your menu, growth, orders, sales, and setup</p></span>
-          </div>
-          <button type="button" className="mt-ai-close" onClick={close} aria-label="Close Ask AI"><X size={19} /></button>
-        </header>
-        <div className="mt-ai-main">
-          <div className="mt-ai-body" aria-live="polite" aria-busy={loading}>
-            {visibleAsked ? <section className="mt-ai-conversation">
-              <p className="mt-ai-question">{visibleAsked.question}</p>
-              {loading ? <p className="mt-ai-loading"><LoaderCircle size={17} className="mt-ai-spinner" /> Looking up current business data…</p> : visibleError ? <p className="mt-ai-error" role="alert">{visibleError}</p> : visibleAsked.result && <>
-                <article className="mt-ai-answer-card">
-                  <header className="mt-ai-answer-heading"><Bot size={17} aria-hidden="true" /><strong>MenuTap assistant</strong><span>{visibleAsked.result.sources.length ? "Source-backed" : "No source matched"}</span></header>
-                  <p className="mt-ai-answer">{visibleAsked.result.text}</p>
-                  {visibleAsked.result.results.length > 0 && <div className="mt-ai-result-grid">
-                    {visibleAsked.result.results.map((result, index) => <article className="mt-ai-result-card" key={`${result.title}-${index}`}>
-                      <div className="mt-ai-result-title"><h3>{result.title}</h3>{result.value && <strong>{result.value}</strong>}</div>
-                      {result.fields.length > 0 && <dl>{result.fields.map((field) => <div key={field.label}><dt>{field.label}</dt><dd>{field.value}</dd></div>)}</dl>}
-                    </article>)}
-                  </div>}
-                  <footer className="mt-ai-answer-meta">
-                    <span>Updated {new Date(visibleAsked.result.as_of).toLocaleString()}</span>
-                    {visibleAsked.result.has_more && <span>Showing a partial result</span>}
-                  </footer>
-                </article>
-                {visibleAsked.result.sources.length > 0 && <ul className="mt-ai-sources">
-                  {visibleAsked.result.sources.map((source, index) => {
-                    const href = source.href?.startsWith("/") ? source.href : null;
-                    return <li key={`${source.kind}-${source.title}-${index}`}>
-                      <span><strong>{source.title}</strong><small>{source.kind === "live" ? "Live business data" : source.kind === "policy" ? `Help guide · v${source.version ?? "current"}` : "Access note"}</small></span>
-                      {href && <Link href={href}>Open <ArrowUpRight size={14} aria-hidden="true" /></Link>}
-                      {source.excerpt && <p>{source.excerpt}</p>}
-                    </li>;
-                  })}
-                </ul>}
-              </>}
-            </section> : <div className="mt-ai-welcome">
-              <span className="mt-ai-welcome-icon"><Bot size={23} aria-hidden="true" /></span>
-              <h3>What can I help you find?</h3>
-              <p>Get source-backed help and menu insights from your business data.</p>
-              <div className="mt-ai-suggestions">{suggestions.map((suggestion) => <button type="button" key={suggestion} onClick={() => setDraftQuestion({ businessId, text: suggestion })}>{suggestion}</button>)}</div>
-              <p className="mt-ai-data-note">When Gemini is enabled, your question, relevant help text, and aggregated sales/item metrics may be sent to Google. Customer details are excluded.</p>
-            </div>}
-          </div>
-        </div>
-        <div className="mt-ai-composer">
-          <form className="mt-ai-form" onSubmit={submit}>
-            <label className="mt-ai-sr-only" htmlFor="mt-ai-question">Ask about PlaceURorder or your business</label>
-            <textarea ref={textareaRef} id="mt-ai-question" value={question} onChange={(event) => setDraftQuestion({ businessId, text: event.target.value })} onKeyDown={handleKeyDown} placeholder="Ask about your menu, orders, sales…" maxLength={1000} rows={1} disabled={loading || !businessId} />
-            <button type="submit" aria-label="Send question" disabled={loading || question.trim().length < 3 || !businessId}>{loading ? <LoaderCircle size={18} className="mt-ai-spinner" /> : <Send size={18} />}</button>
+      <Layout height="auto" style={{ position: "fixed", top: "auto", left: "auto", right: 24, bottom: 24, height: "auto", minHeight: 0, width: "auto", zIndex: 40 }}>
+        <LayoutContent padding={0}>
+          <IconButton
+            label="Ask AI"
+            icon={<Bot size={20} aria-hidden="true" />}
+            variant="primary"
+            size="lg"
+            elevation="med"
+            isDisabled={!businessId}
+            onClick={() => (open ? close() : show())}
+          />
+        </LayoutContent>
+      </Layout>
+
+      <Drawer isOpen={open} onOpenChange={(next) => { if (!next) close(); }} label="Ask AI" side="end" width={460} padding={5}>
+        <VStack gap={5}>
+          <HStack gap={3} vAlign="center">
+            <Bot size={22} aria-hidden="true" />
+            <VStack gap={1}>
+              <Heading level={2} weight="semibold">Ask AI</Heading>
+              <Text type="supporting" color="secondary">Ask about your menu, growth, orders, sales and setup.</Text>
+            </VStack>
+          </HStack>
+
+          <Divider />
+
+          {visibleError && <NoticeBanner tone="danger" title="We could not get that answer" description={visibleError} role="alert" />}
+
+          {visibleAsked ? (
+            <VStack gap={4}>
+              <Card padding={4} elevation="low">
+                <VStack gap={1}>
+                  <Text type="label" color="secondary">You asked</Text>
+                  <Text type="body" color="primary">{visibleAsked.question}</Text>
+                </VStack>
+              </Card>
+
+              {loading ? (
+                <HStack gap={2} vAlign="center">
+                  <Spinner />
+                  <Text type="supporting" color="secondary">Looking up current business data…</Text>
+                </HStack>
+              ) : visibleAsked.result && (
+                <VStack gap={3}>
+                  <Card padding={5} elevation="low">
+                    <VStack gap={3}>
+                      <HStack gap={2} vAlign="center" hAlign="between" wrap="wrap">
+                        <HStack gap={2} vAlign="center">
+                          <Bot size={18} aria-hidden="true" />
+                          <Text type="label">PlaceURorder assistant</Text>
+                        </HStack>
+                        <Badge variant={visibleAsked.result.sources.length ? "success" : "neutral"} label={visibleAsked.result.sources.length ? "Source-backed" : "No source matched"} />
+                      </HStack>
+                      <Text type="body" color="primary">{visibleAsked.result.text}</Text>
+                      {visibleAsked.result.results.length > 0 && (
+                        <Grid columns={{ minWidth: 180, repeat: "fit" }} gap={3}>
+                          {visibleAsked.result.results.map((result, index) => (
+                            <Card key={`${result.title}-${index}`} padding={3}>
+                              <VStack gap={2}>
+                                <HStack gap={2} vAlign="center" hAlign="between">
+                                  <Text type="label">{result.title}</Text>
+                                  {result.value && <Text type="label" color="primary">{result.value}</Text>}
+                                </HStack>
+                                {result.fields.map((field) => (
+                                  <HStack key={field.label} gap={2} vAlign="center" hAlign="between">
+                                    <Text type="supporting" color="secondary">{field.label}</Text>
+                                    <Text type="supporting" color="primary">{field.value}</Text>
+                                  </HStack>
+                                ))}
+                              </VStack>
+                            </Card>
+                          ))}
+                        </Grid>
+                      )}
+                      <Text type="supporting" color="secondary">
+                        {`Updated ${new Date(visibleAsked.result.as_of).toLocaleString()}${visibleAsked.result.has_more ? " · Showing a partial result" : ""}`}
+                      </Text>
+                    </VStack>
+                  </Card>
+
+                  {visibleAsked.result.sources.length > 0 && (
+                    <VStack gap={2}>
+                      {visibleAsked.result.sources.map((source, index) => {
+                        const href = source.href?.startsWith("/") ? source.href : null;
+                        return (
+                          <Card key={`${source.kind}-${source.title}-${index}`} padding={3}>
+                            <VStack gap={2}>
+                              <HStack gap={2} vAlign="center" hAlign="between">
+                                <VStack gap={0}>
+                                  <Text type="label">{source.title}</Text>
+                                  <Text type="supporting" color="secondary">
+                                    {source.kind === "live" ? "Live business data" : source.kind === "policy" ? `Help guide · v${source.version ?? "current"}` : "Access note"}
+                                  </Text>
+                                </VStack>
+                                {href && <Button label="Open" variant="ghost" size="sm" href={href} endContent={<ArrowUpRight size={14} aria-hidden="true" />} />}
+                              </HStack>
+                              {source.excerpt && <Text type="supporting" color="secondary">{source.excerpt}</Text>}
+                            </VStack>
+                          </Card>
+                        );
+                      })}
+                    </VStack>
+                  )}
+                </VStack>
+              )}
+            </VStack>
+          ) : (
+            <VStack gap={4}>
+              <Text type="body" color="secondary">Get source-backed help and menu insights from your business data.</Text>
+              <VStack gap={2}>
+                {suggestions.map((suggestion) => (
+                  <Button key={suggestion} label={suggestion} variant="secondary" size="sm" width="100%" onClick={() => setDraft({ businessId, text: suggestion })} />
+                ))}
+              </VStack>
+              <Text type="supporting" color="secondary">
+                When Gemini is enabled, your question, relevant help text, and aggregated sales or item metrics may be sent to Google. Customer details are excluded.
+              </Text>
+            </VStack>
+          )}
+
+          <Divider />
+
+          <form onSubmit={submit}>
+            <HStack gap={2} vAlign="end">
+              <TextArea
+                label="Ask about PlaceURorder or your business"
+                isLabelHidden
+                value={question}
+                onChange={(value) => setDraft({ businessId, text: value })}
+                placeholder="Ask about your menu, orders, sales…"
+                maxLength={1000}
+                rows={2}
+                isDisabled={loading || !businessId}
+                width="100%"
+              />
+              <IconButton
+                label="Send question"
+                type="submit"
+                variant="primary"
+                icon={<Send size={18} aria-hidden="true" />}
+                isLoading={loading}
+                isDisabled={loading || question.trim().length < 3 || !businessId}
+              />
+            </HStack>
           </form>
-        </div>
-      </dialog>
+        </VStack>
+      </Drawer>
     </>
   );
 }

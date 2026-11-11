@@ -1,14 +1,18 @@
 "use client";
 
-import Link from "next/link";
-import { Suspense, useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ChartCard, LineChart } from "@/components/charts/ChartPrimitives";
+import { Suspense, useEffect, useState, type ReactNode } from "react";
+import { Button } from "@astryxdesign/core/Button";
+import { Grid } from "@astryxdesign/core/Grid";
+import { Selector } from "@astryxdesign/core/Selector";
+import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
+import { Table } from "@astryxdesign/core/Table";
+import { Tab, TabList } from "@astryxdesign/core/TabList";
+import { VStack } from "@astryxdesign/core/Stack";
+import { Text } from "@astryxdesign/core/Text";
+import { DashboardPage, DetailDrawer, DetailRow, EmptyBlock, LoadingBlock, Metric, MetricGrid, NoticeBanner, PageHeader, Panel, StatusBadge, Toolbar, type Tone, useLiveRefresh } from "@/components/dashboard/kit";
+import { DailyBars, LineChart, RankedBars, SegmentedShare, type Series } from "@/components/dashboard/charts";
 import { useBusiness } from "@/components/layout/BusinessProvider";
-import { PageContainer, PageHeader, Tabs } from "@/components/layout/DashboardPrimitives";
-import { Button, Card, DataState, DataTable, FilterToolbar, MetricCard, Select, StatusPill } from "@/components/ui/DashboardUI";
-import { AutoRecoveringState } from "@/components/ui/AutoRecoveringState";
-import { InsightsSkeleton } from "@/components/ui/Skeletons";
 import { api } from "@/lib/api";
 import { formatCategoryName, formatCurrency, formatDateTime, formatOrderStatus, formatPaymentStatus } from "@/lib/formatters";
 import type { Category, DashboardStats, DeviceRecord, Order, Product } from "@/lib/types";
@@ -17,16 +21,30 @@ type Mode = "sales-reports" | "analytics" | "menu-performance" | "reports";
 type Reporting = { preset: "today" | "7d" | "30d"; start: string; end: string; comparison: "previous" | "none"; locationId: string | null };
 type PaymentAnalytics = Awaited<ReturnType<typeof api.payments>>;
 type Data = { stats: DashboardStats; previous: DashboardStats | null; orders: Order[]; products: Product[]; categories: Category[]; devices: DeviceRecord[] | null; payments: PaymentAnalytics | null };
-type Props = { data: Data; locations: Array<{ id: string; name: string }>; reporting: Reporting; onChange: (next: Partial<Reporting>) => void; errors: Record<string, string>; retry: () => void };
+type LocationOption = { id: string; name: string };
+type Props = { data: Data; locations: LocationOption[]; reporting: Reporting; onChange: (next: Partial<Reporting>) => void; errors: Record<string, string>; retry: () => void };
+type Measure = "sales" | "orders" | "aov";
 
-export function BusinessInsightsPage({ mode }: { mode: Mode }) { return <Suspense fallback={<PageContainer width="wide"><InsightsSkeleton /></PageContainer>}><Insights mode={mode} /></Suspense>; }
+const measureOptions: Array<{ value: Measure; label: string }> = [{ value: "sales", label: "Revenue" }, { value: "orders", label: "Orders" }, { value: "aov", label: "Average order value" }];
+
+export function BusinessInsightsPage({ mode }: { mode: Mode }) {
+  return <Suspense fallback={<DashboardPage><LoadingBlock rows={4} /></DashboardPage>}><Insights mode={mode} /></Suspense>;
+}
 
 function Insights({ mode }: { mode: Mode }) {
   const { business, loading: businessLoading, error: businessError, locations } = useBusiness();
-  const params = useSearchParams(); const router = useRouter(); const pathname = usePathname();
-  const reporting = useReporting(params); const [retryCount, setRetryCount] = useState(0); const [data, setData] = useState<Data | null>(null); const [errors, setErrors] = useState<Record<string, string>>({}); const [loading, setLoading] = useState(true); const [error, setError] = useState("");
+  const params = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const reporting = useReporting(params);
+  const [retryCount, setRetryCount] = useState(0);
+  const [data, setData] = useState<Data | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const fullAnalytics = mode === "analytics" && params.get("full") === "1";
   const { start, end, locationId, comparison } = reporting;
+
   useEffect(() => {
     if (!business?.id) return;
     let alive = true;
@@ -47,17 +65,43 @@ function Insights({ mode }: { mode: Mode }) {
     });
     return () => { alive = false; };
   }, [business?.id, comparison, end, fullAnalytics, locationId, mode, retryCount, start]);
-  const update = (next: Partial<Reporting>) => { const merged = { ...reporting, ...next }; const query = new URLSearchParams(params.toString()); query.set("preset", merged.preset); query.set("start", merged.start); query.set("end", merged.end); query.set("comparison", merged.comparison); if (merged.locationId) query.set("location_id", merged.locationId); else query.delete("location_id"); router.replace(`${pathname}?${query.toString()}`, { scroll: false }); };
-  if (businessLoading) return <PageContainer width="wide"><InsightsSkeleton /></PageContainer>;
-  if (businessError) return <PageContainer width="wide" style={{ padding: "40px 16px" }}><AutoRecoveringState title="Couldn't load Insights" description={businessError} onRetry={() => setRetryCount((value) => value + 1)} /></PageContainer>;
-  if (!business) return <PageContainer width="wide"><DataState kind="permission-denied" title="No business selected" description="Choose a business before opening Insights." action={<Link className="mt-card-link" href="/setup/business-details">Open setup</Link>} /></PageContainer>;
-  if (loading) return <PageContainer width="wide"><InsightsSkeleton /></PageContainer>;
-  if (error) return <PageContainer width="wide" style={{ padding: "40px 16px" }}><AutoRecoveringState title="Couldn't load Insights" description={error} onRetry={() => setRetryCount((value) => value + 1)} /></PageContainer>;
-  if (!data) return <PageContainer width="wide"><InsightsSkeleton /></PageContainer>;
-  const common = { data, locations: locations.map((item) => ({ id: item.id, name: item.name })), reporting, onChange: update, errors, retry: () => setRetryCount((value) => value + 1) };
-  if (mode === "sales-reports") return <PageContainer width="wide"><SalesOrdersLocked {...common} /></PageContainer>;
-  if (fullAnalytics) return <FullAnalytics {...common} />;
-  return <PageContainer width="wide" className="insights-reset-page"><PageHeader title={titleFor(mode)} subtitle={subtitleFor(mode)} meta={<span>{periodLabel(reporting)} · {reporting.locationId ? locations.find((item) => item.id === reporting.locationId)?.name : "All locations"}</span>} actions={<Button variant="secondary" onClick={() => downloadCsv(`${mode}.csv`, rowsFor(data))}>Export CSV</Button>} /><InsightsToolbar reporting={reporting} locations={common.locations} onChange={update} />{mode === "menu-performance" ? <MenuPerformance {...common} /> : mode === "reports" ? <Reports data={data} reporting={reporting} /> : <Trends {...common} />}</PageContainer>;
+
+  const update = (next: Partial<Reporting>) => {
+    const merged = { ...reporting, ...next };
+    const query = new URLSearchParams(params.toString());
+    query.set("preset", merged.preset);
+    query.set("start", merged.start);
+    query.set("end", merged.end);
+    query.set("comparison", merged.comparison);
+    if (merged.locationId) query.set("location_id", merged.locationId);
+    else query.delete("location_id");
+    router.replace(`${pathname}?${query.toString()}`, { scroll: false });
+  };
+  const retry = () => setRetryCount((value) => value + 1);
+  useLiveRefresh(retry, 60000);
+
+  if (businessLoading || (business && loading && !data)) return <DashboardPage><LoadingBlock rows={4} /></DashboardPage>;
+  if (businessError) return <DashboardPage><NoticeBanner tone="danger" title="Couldn't load Insights" description={businessError} action={<Button label="Try again" variant="secondary" onClick={retry} />} /></DashboardPage>;
+  if (!business) return <DashboardPage><NoticeBanner tone="warning" title="No business selected" description="Choose a business before opening Insights." action={<Button label="Open setup" variant="secondary" href="/setup/business-details" />} /></DashboardPage>;
+  if (error) return <DashboardPage><NoticeBanner tone="danger" title="Couldn't load Insights" description={error} action={<Button label="Try again" variant="secondary" onClick={retry} />} /></DashboardPage>;
+  if (!data) return <DashboardPage><LoadingBlock rows={4} /></DashboardPage>;
+
+  const common = { data, locations: locations.map((item) => ({ id: item.id, name: item.name })), reporting, onChange: update, errors, retry };
+  if (mode === "sales-reports") return <DashboardPage><SalesOrders {...common} /></DashboardPage>;
+  if (fullAnalytics) return <DashboardPage><FullAnalytics {...common} /></DashboardPage>;
+
+  return (
+    <DashboardPage>
+      <PageHeader
+        title={titleFor(mode)}
+        description={subtitleFor(mode)}
+        actions={<Button label="Export CSV" variant="secondary" onClick={() => downloadCsv(`${mode}.csv`, rowsFor(data))} />}
+      >
+        <InsightsToolbar reporting={reporting} locations={common.locations} onChange={update} />
+      </PageHeader>
+      {mode === "menu-performance" ? <MenuPerformance {...common} /> : mode === "reports" ? <Reports data={data} reporting={reporting} /> : <Trends data={data} />}
+    </DashboardPage>
+  );
 }
 
 async function loadInsightsData(businessId: string, reporting: Pick<Reporting, "start" | "end" | "locationId" | "comparison">, mode: Mode, fullAnalytics: boolean) {
@@ -75,15 +119,7 @@ async function loadInsightsData(businessId: string, reporting: Pick<Reporting, "
       const fallback = await api.dashboard(businessId, reporting);
       return {
         errors: {},
-        data: {
-          stats: fallback,
-          previous: null,
-          orders: [],
-          products: [],
-          categories: [],
-          devices: null,
-          payments: null,
-        } satisfies Data,
+        data: { stats: fallback, previous: null, orders: [], products: [], categories: [], devices: null, payments: null } satisfies Data,
       };
     }
 
@@ -91,9 +127,13 @@ async function loadInsightsData(businessId: string, reporting: Pick<Reporting, "
     const stats = (payload.stats || {}) as DashboardStats;
     const previous = (payload.previous || null) as DashboardStats | null;
     const orders = (payload.recent_orders || []) as Order[];
+    const errors: Record<string, string> = {};
+    if (needsMenu && productsResult.status === "rejected") errors.products = "Menu items could not be loaded.";
+    if (needsMenu && categoriesResult.status === "rejected") errors.categories = "Categories could not be loaded.";
+    if (fullAnalytics && paymentsResult.status === "rejected") errors.payments = "Payment analytics could not be loaded.";
 
     return {
-      errors: {},
+      errors,
       data: {
         stats,
         previous,
@@ -109,43 +149,568 @@ async function loadInsightsData(businessId: string, reporting: Pick<Reporting, "
   }
 }
 
-function SalesOrdersLocked({ data, locations, reporting, onChange, errors, retry }: Props) {
-  const [metric, setMetric] = useState<"sales" | "orders" | "aov">("sales"); const [status, setStatus] = useState<string | null>(null); const completed = completedCount(data); const stats = data.stats; const rows = data.orders.filter((order) => !status || order.status === status).slice(0, 8); const range = (preset: Reporting["preset"]) => onChange({ preset, ...rangeFor(preset) });
-  const chart = stats.weekly_revenue.map((point) => ({ label: point.date.slice(5), value: metric === "orders" ? point.orders : metric === "aov" ? (point.orders ? point.revenue / point.orders : 0) : point.revenue }));
-  return <div className="mt-sales-orders-page"><PageHeader title="Sales & Orders" subtitle="Track completed sales, orders and customer activity." meta={<span>{locations.find((item) => item.id === reporting.locationId)?.name || "All locations"} · {periodLabel(reporting)} <button type="button" className="mt-sales-orders-refresh" onClick={retry}>↻ Refresh</button></span>} actions={<><Link className="mt-button mt-button--primary" href="/dashboard/insights/analytics?full=1">Full Analytics →</Link><Button variant="secondary" onClick={() => downloadCsv("sales-orders.csv", rowsFor(data))}>Export</Button></>} /><FilterToolbar className="mt-sales-orders-filters"><Select label="Date range" value={reporting.preset} onChange={(event) => range(event.target.value as Reporting["preset"])}><option value="today">Today</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option></Select><Select label="Location" value={reporting.locationId || "all"} onChange={(event) => onChange({ locationId: event.target.value === "all" ? null : event.target.value })}><option value="all">All locations</option>{locations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select><Select label="Compare" value={reporting.comparison} onChange={(event) => onChange({ comparison: event.target.value as Reporting["comparison"] })}><option value="previous">Compare previous period</option><option value="none">No comparison</option></Select></FilterToolbar>{completed === 0 ? <LockedSalesEmpty data={data} onChange={onChange} errors={errors} retry={retry} /> : <><div className="mt-sales-orders-kpis"><MetricCard title="Net Sales" value={formatCurrency(stats.period_net_sales ?? stats.net_sales_today)} /><MetricCard title="Completed Orders" value={completed} /><MetricCard title="Average Order Value" value={formatCurrency(stats.period_average_order_value ?? stats.average_order_value)} /></div><div className="mt-sales-orders-row mt-sales-orders-row--analysis"><ChartCard title="Revenue & Order Activity"><Tabs value={metric} tabs={[{ value: "sales", label: "Revenue" }, { value: "orders", label: "Orders" }, { value: "aov", label: "Average Order Value" }]} onChange={setMetric} label="Chart measure" /><LineChart values={chart} ariaLabel={`${metric} activity`} /></ChartCard><Card title="Period Summary"><SummaryRows rows={[["Gross sales", formatCurrency(stats.period_gross_sales ?? stats.gross_sales_today)], ["Discounts", formatCurrency(stats.period_discounts ?? stats.discounts_today)], ["Refunds", formatCurrency(stats.period_refunds ?? stats.refunds_today)], ["Net sales", formatCurrency(stats.period_net_sales ?? stats.net_sales_today)]]} /></Card></div><div className="mt-sales-orders-row mt-sales-orders-row--detail"><Card title="Key Insights"><DataState kind="info" title={stats.top_selling_item ? `${stats.top_selling_item.name} leads sales` : "No item insight available"} description={stats.top_selling_item ? `${stats.top_selling_item.quantity} units sold in this period.` : "Item-level sales were not returned."} /></Card><Card title="Recent Orders" description="Latest orders in the selected period.">{errors.orders ? <InlineError message={errors.orders} retry={retry} /> : rows.length ? <DataTable caption="Recent orders" rows={rows} rowKey={(order) => order.id} columns={[{ key: "order", header: "Order", cell: (order) => order.order_number ? `#${order.order_number}` : order.public_token || "Pending" }, { key: "time", header: "Time", cell: (order) => formatDateTime(order.placed_at) }, { key: "type", header: "Type", cell: (order) => readable(order.order_type) }, { key: "location", header: "Location", cell: (order) => locations.find((item) => item.id === order.location_id)?.name || "All locations" }, { key: "total", header: "Total", align: "end", cell: (order) => formatCurrency(order.total_amount) }, { key: "status", header: "Status", cell: (order) => <button type="button" className="mt-sales-orders-status" onClick={() => setStatus(order.status)}><StatusPill status={pill(order.status)}>{formatOrderStatus(order.status)}</StatusPill></button> }]} /> : <DataState kind="empty" title="No orders in this period" description="Try another period or clear the location filter." />}</Card></div></>}</div>;
+function SalesOrders({ data, locations, reporting, onChange, errors, retry }: Props) {
+  const [measure, setMeasure] = useState<Measure>("sales");
+  const [status, setStatus] = useState<string | null>(null);
+  const completed = completedCount(data);
+  const stats = data.stats;
+  const rows = data.orders.filter((order) => !status || order.status === status).slice(0, 8);
+  const trend = dailySeries(stats, measure, data.previous);
+
+  return (
+    <>
+      <PageHeader
+        eyebrow="Insights"
+        title="Sales & Orders"
+        description="Track completed sales, orders and customer activity."
+        actions={<><Button label="Export" variant="secondary" onClick={() => downloadCsv("sales-orders.csv", rowsFor(data))} /><Button label="Full analytics" variant="primary" href="/dashboard/insights/analytics?full=1" /></>}
+      >
+        <InsightsToolbar reporting={reporting} locations={locations} onChange={onChange} />
+      </PageHeader>
+      {completed === 0 ? <NoSalesYet data={data} onChange={onChange} /> : (
+        <>
+          <MetricGrid>
+            <Metric label="Net sales" value={formatCurrency(stats.period_net_sales ?? stats.net_sales_today)} hint={periodLabel(reporting)} />
+            <Metric label="Completed orders" value={completed} />
+            <Metric label="Average order value" value={formatCurrency(stats.period_average_order_value ?? stats.average_order_value)} />
+          </MetricGrid>
+          <Panel title="Revenue & order activity" actions={<MeasureSwitch value={measure} onChange={setMeasure} />}>
+            <LineChart series={trend} ariaLabel={`${measure} activity`} format={measureFormat(measure)} />
+          </Panel>
+          <Grid columns={{ minWidth: 320, repeat: "fit" }} gap={4}>
+            <Panel title="Period summary">
+              <SummaryRows rows={[
+                ["Gross sales", formatCurrency(stats.period_gross_sales ?? stats.gross_sales_today)],
+                ["Discounts", formatCurrency(stats.period_discounts ?? stats.discounts_today)],
+                ["Refunds", formatCurrency(stats.period_refunds ?? stats.refunds_today)],
+                ["Net sales", formatCurrency(stats.period_net_sales ?? stats.net_sales_today)],
+              ]} />
+            </Panel>
+            <Panel title="Key insight">
+              {stats.top_selling_item
+                ? <Text type="body">{stats.top_selling_item.name} leads sales: {stats.top_selling_item.quantity} units sold in this period.</Text>
+                : <Text type="body" color="secondary">Item-level sales were not returned for this period.</Text>}
+            </Panel>
+          </Grid>
+          <Panel title="Recent orders" description="Latest orders in the selected period.">
+            {errors.orders ? <InlineError message={errors.orders} retry={retry} /> : rows.length ? (
+              <Table
+                idKey="id"
+                data={rows as Array<Order & Record<string, unknown>>}
+                columns={[
+                  { key: "order", header: "Order", renderCell: (order: Order) => (order.order_number ? `#${order.order_number}` : order.public_token || "Pending") },
+                  { key: "time", header: "Time", renderCell: (order: Order) => formatDateTime(order.placed_at) },
+                  { key: "type", header: "Type", renderCell: (order: Order) => readable(order.order_type) },
+                  { key: "location", header: "Location", renderCell: (order: Order) => locations.find((item) => item.id === order.location_id)?.name || "All locations" },
+                  { key: "total", header: "Total", align: "end", renderCell: (order: Order) => formatCurrency(order.total_amount) },
+                  { key: "status", header: "Status", renderCell: (order: Order) => <Button label={`Show ${formatOrderStatus(order.status)} orders`} variant="ghost" size="sm" onClick={() => setStatus(order.status)}>{formatOrderStatus(order.status)}</Button> },
+                ]}
+              />
+            ) : <EmptyBlock title="No orders in this period" description="Try another period or clear the location filter." />}
+            {status && <Button label="Clear status filter" variant="ghost" size="sm" onClick={() => setStatus(null)} />}
+          </Panel>
+        </>
+      )}
+    </>
+  );
 }
 
-function LockedSalesEmpty({ data, onChange, errors, retry }: { data: Data; onChange: (next: Partial<Reporting>) => void; errors: Record<string, string>; retry: () => void }) { const previous = data.previous?.weekly_revenue || []; return <><div className="mt-sales-orders-kpis mt-sales-orders-kpis--compact"><button type="button" className="mt-sales-orders-no-period-kpi mt-sales-orders-no-period-kpi--blue"><span>Net Sales</span><strong>₹0</strong><small>No completed sales in this period</small><em>Previous period: {formatCurrency(data.previous?.period_net_sales ?? data.previous?.net_sales_today)}</em></button><button type="button" className="mt-sales-orders-no-period-kpi mt-sales-orders-no-period-kpi--green"><span>Completed Orders</span><strong>0</strong><small>No completed orders in this period</small><em>Previous period: {data.previous?.completed_orders ?? data.previous?.orders_past_7_days ?? "—"}</em></button><button type="button" className="mt-sales-orders-no-period-kpi mt-sales-orders-no-period-kpi--orange"><span>Average Order Value</span><strong>—</strong><small>Available after a completed order</small><em>Previous period: {formatCurrency(data.previous?.period_average_order_value ?? data.previous?.average_order_value)}</em></button></div><div className="mt-sales-orders-row mt-sales-orders-row--analysis"><Card className="mt-sales-orders-zero-chart" title="Revenue & Order Activity"><div className="mt-sales-orders-zero-chart-body"><svg viewBox="0 0 640 140" role="img" aria-label="No sales in the selected period"><line x1="24" x2="616" y1="116" y2="116" />{previous.map((point, index) => <circle key={point.date} cx={24 + index * (592 / Math.max(1, previous.length - 1))} cy={116 - point.revenue / Math.max(1, ...previous.map((item) => item.revenue)) * 80} r="3" />)}</svg><div className="mt-sales-orders-zero-message"><strong>No sales yet</strong><span>Sales and order activity will appear after your first completed order.</span></div><div className="mt-inline"><Button onClick={() => onChange({ preset: "30d", ...rangeFor("30d") })}>View last 30 days</Button><Link className="mt-button mt-button--secondary" href="/dashboard/operations/order-history">View order history</Link></div></div></Card><Card title="Last Active Period"><SummaryRows rows={[["Net sales", formatCurrency(data.previous?.period_net_sales ?? data.previous?.net_sales_today)], ["Completed orders", data.previous?.completed_orders ?? data.previous?.orders_past_7_days ?? "—"], ["Average order value", formatCurrency(data.previous?.period_average_order_value ?? data.previous?.average_order_value)]]} /></Card></div>{errors.previous ? <InlineError message={errors.previous} retry={retry} /> : null}</>; }
+function NoSalesYet({ data, onChange }: { data: Data; onChange: (next: Partial<Reporting>) => void }) {
+  return (
+    <>
+      <MetricGrid>
+        <Metric label="Net sales" value={formatCurrency(0)} hint="No completed sales in this period" />
+        <Metric label="Completed orders" value={0} hint="No completed orders in this period" />
+        <Metric label="Average order value" value="—" hint="Available after a completed order" />
+      </MetricGrid>
+      <Grid columns={{ minWidth: 320, repeat: "fit" }} gap={4}>
+        <Panel title="Revenue & order activity">
+          <EmptyBlock title="No sales yet" description="Sales and order activity will appear after your first completed order." action={<Button label="View last 30 days" variant="secondary" onClick={() => onChange({ preset: "30d", ...rangeFor("30d") })} />} />
+        </Panel>
+        <Panel title="Last active period">
+          <SummaryRows rows={[
+            ["Net sales", formatCurrency(data.previous?.period_net_sales ?? data.previous?.net_sales_today)],
+            ["Completed orders", data.previous?.completed_orders ?? data.previous?.orders_past_7_days ?? "—"],
+            ["Average order value", formatCurrency(data.previous?.period_average_order_value ?? data.previous?.average_order_value)],
+          ]} />
+          <Button label="View order history" variant="ghost" href="/dashboard/operations/order-history" />
+        </Panel>
+      </Grid>
+    </>
+  );
+}
 
-function FullAnalytics({ data, locations, reporting, onChange, errors, retry }: Props) { const [section, setSection] = useState("overview"); const nav = [["overview", "Overview"], ["revenue", "Revenue"], ["orders", "Orders"], ["channels", "Channels"], ["payments", "Payments"], ["locations", "Locations & Devices"], ["peak", "Peak Times"]]; return <div className="insights-reset-full"><aside className="insights-reset-full-nav"><Link href="/dashboard/insights/sales-reports">← Sales &amp; Orders</Link><h2>Full Analytics</h2><nav aria-label="Full Analytics sections">{nav.map(([id, label]) => <a key={id} className={section === id ? "is-active" : ""} href={`#${id}`} onClick={() => setSection(id)}>{label}</a>)}</nav></aside><main className="insights-reset-full-main"><PageHeader title="Full Analytics" subtitle="Investigate performance signals across the selected scope." /><InsightsToolbar reporting={reporting} locations={locations} onChange={onChange} />{section === "overview" && <Overview data={data} setSection={setSection} />}{section === "revenue" && <Revenue data={data} />}{section === "orders" && <Orders data={data} locations={locations} errors={errors} retry={retry} />}{section === "channels" && <Channels data={data} />}{section === "payments" && <Payments data={data} errors={errors} retry={retry} />}{section === "locations" && <Locations data={data} locations={locations} devices={data.devices} />}{section === "peak" && <Peak data={data} />}</main></div>; }
+function FullAnalytics({ data, locations, reporting, onChange, errors, retry }: Props) {
+  const [section, setSection] = useState<"overview" | "revenue" | "orders" | "channels" | "payments" | "locations" | "peak">("overview");
+  return (
+    <>
+      <PageHeader
+        eyebrow="Insights"
+        title="Full analytics"
+        description="Investigate performance signals across the selected scope."
+        actions={<Button label="Back to Sales & Orders" variant="ghost" href="/dashboard/insights/sales-reports" />}
+      >
+        <InsightsToolbar reporting={reporting} locations={locations} onChange={onChange} />
+      </PageHeader>
+      <TabList value={section} onChange={(value) => setSection(value as typeof section)} size="sm" layout="hug">
+        <Tab value="overview" label="Overview" />
+        <Tab value="revenue" label="Revenue" />
+        <Tab value="orders" label="Orders" />
+        <Tab value="channels" label="Channels" />
+        <Tab value="payments" label="Payments" />
+        <Tab value="locations" label="Locations & devices" />
+        <Tab value="peak" label="Peak times" />
+      </TabList>
+      {section === "overview" && <Overview data={data} setSection={(next) => setSection(next as typeof section)} />}
+      {section === "revenue" && <Revenue data={data} />}
+      {section === "orders" && <AnalyticsOrders data={data} locations={locations} errors={errors} retry={retry} />}
+      {section === "channels" && <Channels data={data} />}
+      {section === "payments" && <Payments data={data} errors={errors} retry={retry} />}
+      {section === "locations" && <Locations data={data} locations={locations} devices={data.devices} />}
+      {section === "peak" && <Peak data={data} />}
+    </>
+  );
+}
 
-function Overview({ data, setSection }: { data: Data; setSection: (section: string) => void }) { const [metric, setMetric] = useState<"sales" | "orders" | "aov">("sales"); const stats = data.stats; const values = stats.weekly_revenue.map((point) => ({ label: point.date.slice(5), value: metric === "orders" ? point.orders : metric === "aov" ? (point.orders ? point.revenue / point.orders : 0) : point.revenue })); const gross = stats.period_gross_sales ?? stats.gross_sales_today; const refunds = stats.period_refunds ?? stats.refunds_today; return <div className="insights-reset-content"><div className="insights-reset-kpis insights-reset-kpis--compact"><MetricCard title="Net Sales" value={formatCurrency(stats.period_net_sales ?? stats.net_sales_today)} /><MetricCard title="Orders" value={completedCount(data)} /><MetricCard title="Average Order Value" value={formatCurrency(stats.period_average_order_value ?? stats.average_order_value)} /><MetricCard title="Refund Rate" value={`${gross ? (refunds / gross * 100).toFixed(1) : "0.0"}%`} /></div><ChartCard title="Business Performance"><Tabs value={metric} tabs={[{ value: "sales", label: "Sales" }, { value: "orders", label: "Orders" }, { value: "aov", label: "Average Order Value" }]} onChange={setMetric} label="Business performance metric" /><LineChart values={values} ariaLabel={`${metric} performance`} /></ChartCard><div className="insights-reset-split"><Card title="Channel Mix"><SummaryRows rows={Object.entries(stats.order_type_summary || {}).map(([key, value]) => [readable(key), value])} /></Card><Card title="Payment Mix"><SummaryRows rows={Object.entries(stats.payment_method_summary || {}).map(([key, value]) => [formatPaymentStatus(key), value])} /></Card></div><div className="insights-reset-split"><Card title="Top location"><SummaryRows rows={[["Location", "Location detail not returned"], ["Orders", completedCount(data)]]} /><Button variant="tertiary" onClick={() => setSection("locations")}>View locations →</Button></Card><Card title="Busiest period"><SummaryRows rows={[["Period", busiest(data)], ["Orders", completedCount(data)]]} /><Button variant="tertiary" onClick={() => setSection("peak")}>View peak times →</Button></Card></div></div>; }
-function Revenue({ data }: { data: Data }) { const s = data.stats; return <div className="insights-reset-content"><div className="insights-reset-kpis insights-reset-kpis--compact">{[["Gross Sales", s.period_gross_sales ?? s.gross_sales_today], ["Discounts", s.period_discounts ?? s.discounts_today], ["Refunds", s.period_refunds ?? s.refunds_today], ["Net Sales", s.period_net_sales ?? s.net_sales_today]].map(([label, value]) => <MetricCard key={label} title={label} value={formatCurrency(Number(value))} />)}</div><ChartCard title="Revenue Trend"><LineChart values={s.weekly_revenue.map((point) => ({ label: point.date.slice(5), value: point.revenue }))} ariaLabel="Revenue trend" /></ChartCard><Card title="Revenue by period"><DataTable caption="Revenue by period" rows={s.weekly_revenue} rowKey={(row) => row.date} columns={[{ key: "period", header: "Period", cell: (row) => row.date }, { key: "gross", header: "Gross", align: "end", cell: (row) => formatCurrency(row.revenue) }, { key: "discounts", header: "Discounts", cell: () => "Not returned" }, { key: "refunds", header: "Refunds", cell: () => "Not returned" }, { key: "net", header: "Net", align: "end", cell: () => "Not returned" }]} /></Card></div>; }
-function Orders({ data, locations, errors, retry }: { data: Data; locations: Array<{ id: string; name: string }>; errors: Record<string, string>; retry: () => void }) { const rows = data.orders.slice(0, 20); return <div className="insights-reset-content"><div className="insights-reset-kpis insights-reset-kpis--compact"><MetricCard title="Completed" value={completedCount(data)} /><MetricCard title="Cancelled" value={data.orders.filter((order) => order.status === "cancelled").length} /><MetricCard title="Average Order Value" value={formatCurrency(data.stats.period_average_order_value ?? data.stats.average_order_value)} /></div><ChartCard title="Order Volume"><LineChart values={data.stats.weekly_revenue.map((point) => ({ label: point.date.slice(5), value: point.orders }))} ariaLabel="Order volume" /></ChartCard>{errors.orders ? <InlineError message={errors.orders} retry={retry} /> : <DataTable caption="Order analytics" rows={rows} rowKey={(order) => order.id} columns={[{ key: "order", header: "Order", cell: (order) => order.order_number || order.public_token || "Pending" }, { key: "date", header: "Date", cell: (order) => formatDateTime(order.placed_at) }, { key: "location", header: "Location", cell: (order) => locations.find((item) => item.id === order.location_id)?.name || "All locations" }, { key: "type", header: "Type", cell: (order) => readable(order.order_type) }, { key: "total", header: "Total", align: "end", cell: (order) => formatCurrency(order.total_amount) }, { key: "status", header: "Status", cell: (order) => <StatusPill status={pill(order.status)}>{formatOrderStatus(order.status)}</StatusPill> }]} />}</div>; }
-function Channels({ data }: { data: Data }) { const rows = Object.entries(data.stats.order_type_summary || {}).map(([channel, orders]) => ({ channel: readable(channel), orders })); return <div className="insights-reset-content"><Card title="Channel Performance">{rows.length ? <DataTable caption="Channel performance" rows={rows} rowKey={(row) => row.channel} columns={[{ key: "channel", header: "Channel", cell: (row) => row.channel }, { key: "orders", header: "Orders", align: "end", cell: (row) => row.orders }, { key: "sales", header: "Sales", cell: () => "Not returned" }, { key: "share", header: "Share", cell: () => "Not returned" }]} /> : <DataState kind="empty" title="No channel data for this period" />}</Card></div>; }
-function Payments({ data, errors, retry }: { data: Data; errors: Record<string, string>; retry: () => void }) { if (errors.payments) return <InlineError message={errors.payments} retry={retry} />; if (!data.payments) return <DataState kind="info" title="Payment analytics unavailable" description="The current endpoint did not return payment analytics." />; return <div className="insights-reset-content"><div className="insights-reset-kpis insights-reset-kpis--compact"><MetricCard title="Payment Volume" value={formatCurrency(data.payments.summary.total_collected)} /><MetricCard title="Paid Orders" value={data.payments.summary.paid_count} /><MetricCard title="Failed Orders" value={data.payments.summary.failed_count} /></div><Card title="Payment records"><DataTable caption="Payment records" rows={data.payments.payments.slice(0, 50)} rowKey={(row) => row.id} columns={[{ key: "provider", header: "Provider", cell: (row) => row.provider || "Not returned" }, { key: "method", header: "Method", cell: (row) => row.payment_method || "Not returned" }, { key: "amount", header: "Amount", align: "end", cell: (row) => formatCurrency(row.amount) }, { key: "status", header: "Status", cell: (row) => <StatusPill status={pill(row.status)}>{formatPaymentStatus(row.status)}</StatusPill> }]} /></Card></div>; }
-function Locations({ data, locations, devices }: { data: Data; locations: Array<{ id: string; name: string }>; devices: DeviceRecord[] | null }) { const rows = locations.map((location) => { const orders = data.orders.filter((order) => order.location_id === location.id && isCompleted(order)); return { id: location.id, location: location.name, orders: orders.length, sales: orders.reduce((sum, order) => sum + order.total_amount, 0) }; }).filter((row) => row.orders); return <div className="insights-reset-content"><Card title="Location Performance">{rows.length ? <DataTable caption="Location performance" rows={rows} rowKey={(row) => row.id} columns={[{ key: "location", header: "Location", cell: (row) => row.location }, { key: "sales", header: "Sales", align: "end", cell: (row) => formatCurrency(row.sales) }, { key: "orders", header: "Orders", align: "end", cell: (row) => row.orders }, { key: "aov", header: "Average Order", align: "end", cell: (row) => formatCurrency(row.orders ? row.sales / row.orders : 0) }]} /> : <DataState kind="empty" title="No location performance for this period" />}</Card><Card title="Device Performance">{devices?.length ? <DataTable caption="Device performance" rows={devices} rowKey={(row) => row.id} columns={[{ key: "device", header: "Device", cell: (row) => row.name || row.device_id }, { key: "type", header: "Type", cell: (row) => row.device_type }, { key: "orders", header: "Orders", cell: () => "Not returned" }, { key: "sales", header: "Sales", cell: () => "Not returned" }]} /> : <DataState kind="info" title="Device performance is not returned by the current analytics endpoint." />}</Card></div>; }
-function Peak({ data }: { data: Data }) { const hours = data.orders.filter(isCompleted).reduce((map, order) => { const hour = new Date(order.placed_at).getHours(); map.set(hour, (map.get(hour) || 0) + 1); return map; }, new Map<number, number>()); return hours.size ? <div className="insights-reset-content"><Card title="Peak Ordering Times"><DataTable caption="Peak ordering times" rows={Array.from(hours, ([hour, orders]) => ({ hour: `${hour}:00`, orders }))} rowKey={(row) => row.hour} columns={[{ key: "hour", header: "Hour", cell: (row) => row.hour }, { key: "orders", header: "Orders", align: "end", cell: (row) => row.orders }]} /></Card></div> : <DataState kind="info" title="Not enough order history for peak-time analysis" />; }
+function Overview({ data, setSection }: { data: Data; setSection: (section: string) => void }) {
+  const [measure, setMeasure] = useState<Measure>("sales");
+  const stats = data.stats;
+  const gross = stats.period_gross_sales ?? stats.gross_sales_today;
+  const refunds = stats.period_refunds ?? stats.refunds_today;
+  return (
+    <VStack gap={4}>
+      <MetricGrid>
+        <Metric label="Net sales" value={formatCurrency(stats.period_net_sales ?? stats.net_sales_today)} />
+        <Metric label="Orders" value={completedCount(data)} />
+        <Metric label="Average order value" value={formatCurrency(stats.period_average_order_value ?? stats.average_order_value)} />
+        <Metric label="Refund rate" value={`${gross ? (refunds / gross * 100).toFixed(1) : "0.0"}%`} />
+      </MetricGrid>
+      <Panel title="Business performance" actions={<MeasureSwitch value={measure} onChange={setMeasure} />}>
+        <LineChart series={dailySeries(stats, measure, data.previous)} ariaLabel={`${measure} performance`} format={measureFormat(measure)} />
+      </Panel>
+      <Grid columns={{ minWidth: 300, repeat: "fit" }} gap={4}>
+        <Panel title="Channel mix">
+          <SummaryRows rows={Object.entries(stats.order_type_summary || {}).map(([key, value]) => [readable(key), value])} />
+        </Panel>
+        <Panel title="Payment mix">
+          <SummaryRows rows={Object.entries(stats.payment_method_summary || {}).map(([key, value]) => [formatPaymentStatus(key), value])} />
+        </Panel>
+        <Panel title="Busiest period">
+          <SummaryRows rows={[["Period", busiest(data)], ["Orders", completedCount(data)]]} />
+          <Button label="View peak times" variant="ghost" onClick={() => setSection("peak")} />
+        </Panel>
+      </Grid>
+    </VStack>
+  );
+}
 
-function MenuPerformance({ data, errors, retry }: Props) { const [view, setView] = useState<"best" | "attention" | "all">("best"); const [selected, setSelected] = useState<Product | null>(null); const sales = new Map(data.stats.top_selling_items.map((item) => [item.name, item])); const rows = data.products.map((product) => ({ ...product, sold: sales.get(product.name)?.quantity || 0, sales: sales.get(product.name)?.revenue || 0, reason: !product.is_available ? "Unavailable" : !sales.has(product.name) ? "No completed sales" : "" })).filter((row) => view === "all" || view === "best" ? row.sold > 0 : Boolean(row.reason)).sort((a, b) => b.sales - a.sales); const total = rows.reduce((sum, row) => sum + row.sales, 0); const items = rows.reduce((sum, row) => sum + row.sold, 0); return <div className="insights-reset-content"><div className="insights-reset-kpis"><MetricCard title="Items Sold" value={items} /><MetricCard title="Menu Sales" value={formatCurrency(total)} /><MetricCard title="Average Item Value" value={formatCurrency(items ? total / items : 0)} /></div><div className="insights-reset-section-heading"><h2>Menu items</h2><Tabs value={view} tabs={[{ value: "best", label: "Best sellers" }, { value: "attention", label: "Needs attention" }, { value: "all", label: "All items" }]} onChange={setView} label="Menu performance view" /></div>{errors.products ? <InlineError message={errors.products} retry={retry} /> : rows.length ? <Card title="Item performance"><DataTable caption="Menu item performance" rows={rows} rowKey={(row) => row.id} columns={[{ key: "item", header: "Item", cell: (row) => <button type="button" className="insights-reset-table-link" onClick={() => setSelected(row)}>{row.name}</button> }, { key: "sold", header: "Sold", align: "end", cell: (row) => row.sold }, { key: "sales", header: "Sales", align: "end", cell: (row) => formatCurrency(row.sales) }, { key: "status", header: "Status", cell: (row) => row.reason ? <span className="insights-reset-attention">{row.reason}</span> : <StatusPill status="success">Healthy</StatusPill> }]} /></Card> : <DataState kind="empty" title={view === "attention" ? "No items need attention" : "No completed item sales"} />}{errors.categories ? <InlineError message={errors.categories} retry={retry} /> : <Card title="Category Performance"><DataTable caption="Category performance" rows={data.categories.map((category) => ({ category: formatCategoryName(category.name), items: data.products.filter((product) => product.category_id === category.id).length }))} rowKey={(row) => row.category} columns={[{ key: "category", header: "Category", cell: (row) => row.category }, { key: "items", header: "Items", align: "end", cell: (row) => row.items }]} emptyMessage="No category data returned." /></Card>}{selected && <div className="mt-overlay"><div className="mt-overlay__panel"><header><h2>{selected.name}</h2><Button variant="icon" onClick={() => setSelected(null)} aria-label="Close">×</Button></header><div className="mt-overlay__content"><SummaryRows rows={[["Price", formatCurrency(selected.price)], ["Availability", selected.is_available ? "Available" : "Unavailable"], ["Items sold", sales.get(selected.name)?.quantity || 0]]} /></div></div></div>}</div>; }
+function Revenue({ data }: { data: Data }) {
+  const s = data.stats;
+  return (
+    <VStack gap={4}>
+      <MetricGrid>
+        <Metric label="Gross sales" value={formatCurrency(s.period_gross_sales ?? s.gross_sales_today)} />
+        <Metric label="Discounts" value={formatCurrency(s.period_discounts ?? s.discounts_today)} />
+        <Metric label="Refunds" value={formatCurrency(s.period_refunds ?? s.refunds_today)} />
+        <Metric label="Net sales" value={formatCurrency(s.period_net_sales ?? s.net_sales_today)} />
+      </MetricGrid>
+      <Panel title="Revenue trend">
+        <LineChart series={dailySeries(s, "sales", data.previous)} ariaLabel="Revenue trend" format={measureFormat("sales")} />
+      </Panel>
+      <Panel title="Revenue by period">
+        <Table
+          idKey="date"
+          data={s.weekly_revenue as Array<(typeof s.weekly_revenue)[number] & Record<string, unknown>>}
+          columns={[
+            { key: "period", header: "Period", renderCell: (row: { date: string }) => row.date },
+            { key: "gross", header: "Revenue", align: "end", renderCell: (row: { revenue: number }) => formatCurrency(row.revenue) },
+          ]}
+        />
+      </Panel>
+    </VStack>
+  );
+}
 
-function Trends({ data }: Pick<Props, "data">) { const [metric, setMetric] = useState<"sales" | "orders" | "aov">("sales"); const values = data.stats.weekly_revenue.map((point) => ({ label: point.date.slice(5), value: metric === "orders" ? point.orders : metric === "aov" ? (point.orders ? point.revenue / point.orders : 0) : point.revenue })); return <div className="insights-reset-content"><ChartCard title="Business Trend" description="One meaningful measure across the selected period."><Tabs value={metric} tabs={[{ value: "sales", label: "Sales" }, { value: "orders", label: "Orders" }, { value: "aov", label: "Average Order Value" }]} onChange={setMetric} label="Trend metric" /><LineChart values={values} ariaLabel={`${metric} trend`} /></ChartCard><div className="insights-reset-split"><Card title="Peak Ordering Times"><SummaryRows rows={[["Completed orders", completedCount(data)], ["Busiest period", busiest(data)]]} /></Card><Card title="Order Type Trend"><SummaryRows rows={Object.entries(data.stats.order_type_summary || {}).map(([key, value]) => [readable(key), value])} /></Card><Card title="Completion Time Trend"><DataState kind="info" title="Completion trend unavailable" description="Prep and completion timestamps were not returned." /></Card><Card title="Trend Stories"><SummaryRows rows={data.stats.top_selling_item ? [["Top item", data.stats.top_selling_item.name]] : []} /></Card></div></div>; }
+function AnalyticsOrders({ data, locations, errors, retry }: { data: Data; locations: LocationOption[]; errors: Record<string, string>; retry: () => void }) {
+  const rows = data.orders.slice(0, 20);
+  return (
+    <VStack gap={4}>
+      <MetricGrid>
+        <Metric label="Completed" value={completedCount(data)} />
+        <Metric label="Cancelled" value={data.orders.filter((order) => order.status === "cancelled").length} />
+        <Metric label="Average order value" value={formatCurrency(data.stats.period_average_order_value ?? data.stats.average_order_value)} />
+      </MetricGrid>
+      <Panel title="Order volume">
+        <DailyBars values={sortedPoints(data.stats.weekly_revenue, (point) => point.orders)} ariaLabel="Order volume" format={measureFormat("orders")} />
+      </Panel>
+      <Panel title="Order analytics">
+        {errors.orders ? <InlineError message={errors.orders} retry={retry} /> : (
+          <Table
+            idKey="id"
+            data={rows as Array<Order & Record<string, unknown>>}
+            columns={[
+              { key: "order", header: "Order", renderCell: (order: Order) => order.order_number || order.public_token || "Pending" },
+              { key: "date", header: "Date", renderCell: (order: Order) => formatDateTime(order.placed_at) },
+              { key: "location", header: "Location", renderCell: (order: Order) => locations.find((item) => item.id === order.location_id)?.name || "All locations" },
+              { key: "type", header: "Type", renderCell: (order: Order) => readable(order.order_type) },
+              { key: "total", header: "Total", align: "end", renderCell: (order: Order) => formatCurrency(order.total_amount) },
+              { key: "status", header: "Status", renderCell: (order: Order) => <StatusBadge tone={pill(order.status)}>{formatOrderStatus(order.status)}</StatusBadge> },
+            ]}
+          />
+        )}
+      </Panel>
+    </VStack>
+  );
+}
 
-function Reports({ data, reporting }: { data: Data; reporting: Reporting }) { const [tab, setTab] = useState<"library" | "saved" | "exports">("library"); const [selected, setSelected] = useState<string | null>(null); const [saved, setSaved] = useState<string[]>([]); const templates = ["Sales Report", "Orders Report", "Payment Report", "Menu Performance", "Tax Summary", "Location Summary"]; return <div className="insights-reset-content"><Tabs value={tab} tabs={[{ value: "library", label: "Report Library" }, { value: "saved", label: "Saved Reports" }, { value: "exports", label: "Exports" }]} onChange={setTab} label="Reports sections" />{tab === "library" && <div className="insights-reset-report-grid">{templates.map((title) => <Card key={title} title={title} description="Structured records for the current reporting scope."><Button variant="secondary" onClick={() => setSelected(title)}>Run report →</Button></Card>)}</div>}{tab === "saved" && (saved.length ? <SummaryRows rows={saved.map((name) => [name, periodLabel(reporting)])} /> : <DataState kind="empty" title="No saved reports yet" description="Save a report configuration to run it again quickly." />)}{tab === "exports" && <DataState kind="empty" title="No exports yet" description="Generated files will appear after a real export." />}{selected && <div className="mt-overlay"><div className="mt-overlay__panel"><header><h2>Create {selected}</h2><Button variant="icon" onClick={() => setSelected(null)} aria-label="Close">×</Button></header><div className="mt-overlay__content"><p>Current period: {periodLabel(reporting)}</p><div className="mt-inline"><Button onClick={() => { downloadCsv(`${selected.toLowerCase().replaceAll(" ", "-")}.csv`, rowsFor(data)); setSaved((items) => items.includes(selected) ? items : [...items, selected]); setSelected(null); }}>Generate CSV</Button><Button variant="secondary" onClick={() => setSelected(null)}>Cancel</Button></div></div></div></div>}</div>; }
+function Channels({ data }: { data: Data }) {
+  const rows = Object.entries(data.stats.order_type_summary || {}).map(([channel, orders]) => ({ id: channel, channel: readable(channel), orders }));
+  return (
+    <Panel title="Channel performance">
+      {rows.length ? (
+        <Table
+          idKey="id"
+          data={rows as Array<(typeof rows)[number] & Record<string, unknown>>}
+          columns={[
+            { key: "channel", header: "Channel", renderCell: (row: { channel: string }) => row.channel },
+            { key: "orders", header: "Orders", align: "end", renderCell: (row: { orders: number }) => String(row.orders) },
+          ]}
+        />
+      ) : <EmptyBlock title="No channel data for this period" />}
+    </Panel>
+  );
+}
 
-function InsightsToolbar({ reporting, locations, onChange }: { reporting: Reporting; locations: Array<{ id: string; name: string }>; onChange: (next: Partial<Reporting>) => void }) { return <FilterToolbar><Select label="Date" value={reporting.preset} onChange={(event) => { const preset = event.target.value as Reporting["preset"]; onChange({ preset, ...rangeFor(preset) }); }}><option value="today">Today</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option></Select><Select label="Location" value={reporting.locationId || "all"} onChange={(event) => onChange({ locationId: event.target.value === "all" ? null : event.target.value })}><option value="all">All locations</option>{locations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select><Select label="Compare" value={reporting.comparison} onChange={(event) => onChange({ comparison: event.target.value as Reporting["comparison"] })}><option value="previous">Previous period</option><option value="none">No comparison</option></Select></FilterToolbar>; }
-function SummaryRows({ rows }: { rows: Array<[string, ReactNode]> }) { return rows.length ? <dl className="insights-reset-summary">{rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl> : <DataState kind="empty" title="No data for this period" />; }
-function InlineError({ message, retry }: { message: string; retry: () => void }) { return <DataState kind="recoverable-error" title={message} action={<Button variant="secondary" onClick={retry}>Retry</Button>} />; }
-function completedCount(data: Data) { return data.stats.completed_orders ?? data.orders.filter(isCompleted).length; }
-function isCompleted(order: Order) { return order.status === "completed" && !["failed", "cancelled", "expired", "unpaid", "pending", "pay_at_counter_pending"].includes(order.payment_status); }
-function pill(status: string) { return status === "completed" ? "success" : status === "cancelled" ? "danger" : status === "pending" ? "warning" : "info"; }
-function readable(value?: string | null) { return String(value || "Unknown").replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
-function busiest(data: Data) { const counts = new Map<number, number>(); data.orders.filter(isCompleted).forEach((order) => { const hour = new Date(order.placed_at).getHours(); counts.set(hour, (counts.get(hour) || 0) + 1); }); const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]; return top ? `${top[0]}:00` : "Not enough data"; }
-function rowsFor(data: Data) { return [["Net Sales", data.stats.period_net_sales ?? data.stats.net_sales_today], ["Completed Orders", completedCount(data)], ...data.orders.slice(0, 100).map((order) => [order.order_number || order.public_token || "Pending", order.placed_at, readable(order.order_type), formatOrderStatus(order.status), order.total_amount] as Array<string | number>)]; }
-function downloadCsv(name: string, rows: Array<Array<string | number>>) { if (typeof window === "undefined") return; const csv = rows.map((row) => row.map((value) => `"${String(value ?? "").replaceAll('"', '""')}"`).join(",")).join("\n"); const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); const link = document.createElement("a"); link.href = url; link.download = name; link.click(); URL.revokeObjectURL(url); }
-function titleFor(mode: Mode) { return mode === "sales-reports" ? "Sales & Orders" : mode === "menu-performance" ? "Menu Performance" : mode === "reports" ? "Reports" : "Trends"; }
-function subtitleFor(mode: Mode) { return mode === "sales-reports" ? "Understand sales and order activity for your business." : mode === "menu-performance" ? "Understand what's driving menu sales and where attention is needed." : mode === "reports" ? "Create, save and export structured business reports." : "Understand how demand and business patterns change over time."; }
-function useReporting(params: ReturnType<typeof useSearchParams>): Reporting { const preset = params.get("preset") === "today" || params.get("preset") === "30d" ? params.get("preset") as Reporting["preset"] : "7d"; const range = rangeFor(preset); return { preset, start: params.get("start") || range.start, end: params.get("end") || range.end, comparison: params.get("comparison") === "none" ? "none" : "previous", locationId: params.get("location_id") }; }
-function rangeFor(preset: Reporting["preset"]) { const end = isoDate(0); return preset === "today" ? { start: end, end } : preset === "30d" ? { start: isoDate(-29), end } : { start: isoDate(-6), end }; }
-function isoDate(offset: number) { const date = new Date(); date.setDate(date.getDate() + offset); return date.toISOString().slice(0, 10); }
-function periodLabel(reporting: Reporting) { return reporting.preset === "today" ? "Today" : reporting.preset === "30d" ? "Last 30 days" : "Last 7 days"; }
+function Payments({ data, errors, retry }: { data: Data; errors: Record<string, string>; retry: () => void }) {
+  if (errors.payments) return <InlineError message={errors.payments} retry={retry} />;
+  if (!data.payments) return <NoticeBanner tone="info" title="Payment analytics unavailable" description="The current endpoint did not return payment analytics." />;
+  return (
+    <VStack gap={4}>
+      <MetricGrid>
+        <Metric label="Payment volume" value={formatCurrency(data.payments.summary.total_collected)} />
+        <Metric label="Paid orders" value={data.payments.summary.paid_count} />
+        <Metric label="Failed orders" value={data.payments.summary.failed_count} />
+      </MetricGrid>
+      <Panel title="Payment records">
+        <Table
+          idKey="id"
+          data={data.payments.payments.slice(0, 50) as Array<(typeof data.payments.payments)[number] & Record<string, unknown>>}
+          columns={[
+            { key: "provider", header: "Provider", renderCell: (row: { provider?: string | null }) => row.provider || "Not returned" },
+            { key: "method", header: "Method", renderCell: (row: { payment_method?: string | null }) => row.payment_method || "Not returned" },
+            { key: "amount", header: "Amount", align: "end", renderCell: (row: { amount: number }) => formatCurrency(row.amount) },
+            { key: "status", header: "Status", renderCell: (row: { status: string }) => <StatusBadge tone={pill(row.status)}>{formatPaymentStatus(row.status)}</StatusBadge> },
+          ]}
+        />
+      </Panel>
+    </VStack>
+  );
+}
+
+function Locations({ data, locations, devices }: { data: Data; locations: LocationOption[]; devices: DeviceRecord[] | null }) {
+  const rows = locations.map((location) => {
+    const orders = data.orders.filter((order) => order.location_id === location.id && isCompleted(order));
+    return { id: location.id, location: location.name, orders: orders.length, sales: orders.reduce((sum, order) => sum + order.total_amount, 0) };
+  }).filter((row) => row.orders);
+  return (
+    <VStack gap={4}>
+      <Panel title="Location performance">
+        {rows.length ? (
+          <Table
+            idKey="id"
+            data={rows as Array<(typeof rows)[number] & Record<string, unknown>>}
+            columns={[
+              { key: "location", header: "Location", renderCell: (row: { location: string }) => row.location },
+              { key: "sales", header: "Sales", align: "end", renderCell: (row: { sales: number }) => formatCurrency(row.sales) },
+              { key: "orders", header: "Orders", align: "end", renderCell: (row: { orders: number }) => String(row.orders) },
+              { key: "aov", header: "Average order", align: "end", renderCell: (row: { sales: number; orders: number }) => formatCurrency(row.orders ? row.sales / row.orders : 0) },
+            ]}
+          />
+        ) : <EmptyBlock title="No location performance for this period" />}
+      </Panel>
+      <Panel title="Device performance">
+        {devices?.length ? (
+          <Table
+            idKey="id"
+            data={devices as Array<DeviceRecord & Record<string, unknown>>}
+            columns={[
+              { key: "device", header: "Device", renderCell: (row: DeviceRecord) => row.name || row.device_id },
+              { key: "type", header: "Type", renderCell: (row: DeviceRecord) => row.device_type },
+              { key: "status", header: "Status", renderCell: (row: DeviceRecord) => row.status },
+            ]}
+          />
+        ) : <NoticeBanner tone="info" title="Device performance is not returned by the current analytics endpoint." />}
+      </Panel>
+    </VStack>
+  );
+}
+
+function Peak({ data }: { data: Data }) {
+  const hours = data.orders.filter(isCompleted).reduce((map, order) => {
+    const hour = new Date(order.placed_at).getHours();
+    map.set(hour, (map.get(hour) || 0) + 1);
+    return map;
+  }, new Map<number, number>());
+  if (!hours.size) return <NoticeBanner tone="info" title="Not enough order history for peak-time analysis" />;
+  const rows = Array.from(hours, ([hour, orders]) => ({ id: String(hour), hour: `${hour}:00`, orders }));
+  return (
+    <Panel title="Peak ordering times">
+      <Table
+        idKey="id"
+        data={rows as Array<(typeof rows)[number] & Record<string, unknown>>}
+        columns={[
+          { key: "hour", header: "Hour", renderCell: (row: { hour: string }) => row.hour },
+          { key: "orders", header: "Orders", align: "end", renderCell: (row: { orders: number }) => String(row.orders) },
+        ]}
+      />
+    </Panel>
+  );
+}
+
+function MenuPerformance({ data, errors, retry }: Props) {
+  const [view, setView] = useState<"best" | "attention" | "all">("best");
+  const [selected, setSelected] = useState<Product | null>(null);
+  const sales = new Map(data.stats.top_selling_items.map((item) => [item.name, item]));
+  const rows = data.products.map((product) => ({
+    ...product,
+    sold: sales.get(product.name)?.quantity || 0,
+    sales: sales.get(product.name)?.revenue || 0,
+    reason: !product.is_available ? "Unavailable" : !sales.has(product.name) ? "No completed sales" : "",
+  })).filter((row) => view === "attention" ? Boolean(row.reason) : row.sold > 0 || view === "all").sort((a, b) => b.sales - a.sales);
+  const total = rows.reduce((sum, row) => sum + row.sales, 0);
+  const items = rows.reduce((sum, row) => sum + row.sold, 0);
+  const categoryParts = shareParts(data.categories.map((category) => ({ id: category.id, label: formatCategoryName(category.name), value: rows.filter((row) => row.category_id === category.id).reduce((sum, row) => sum + row.sales, 0) })));
+
+  return (
+    <VStack gap={4}>
+      <MetricGrid>
+        <Metric label="Items sold" value={items} />
+        <Metric label="Menu sales" value={formatCurrency(total)} />
+        <Metric label="Average item value" value={formatCurrency(items ? total / items : 0)} />
+      </MetricGrid>
+      <SegmentedControl label="Menu performance view" value={view} onChange={(value) => setView(value as typeof view)}>
+        <SegmentedControlItem value="best" label="Best sellers" />
+        <SegmentedControlItem value="attention" label="Needs attention" />
+        <SegmentedControlItem value="all" label="All items" />
+      </SegmentedControl>
+      <Grid columns={{ minWidth: 320, repeat: "fit" }} gap={4}>
+        <Panel title="Top sellers by sales" description="Ranked by sales in the selected period.">
+          <RankedBars ariaLabel="Top sellers by sales" rows={rows.filter((row) => row.sales > 0).map((row) => ({ id: row.id, label: row.name, value: row.sales, detail: `${row.sold} sold` }))} format={formatCurrency} />
+        </Panel>
+        <Panel title="Sales by category" description="Share of menu sales. Smaller categories are grouped into Other.">
+          <SegmentedShare ariaLabel="Sales by category" parts={categoryParts} format={formatCurrency} />
+        </Panel>
+      </Grid>
+      <Panel title="Item performance">
+        {errors.products ? <InlineError message={errors.products} retry={retry} /> : rows.length ? (
+          <Table
+            idKey="id"
+            data={rows as Array<(typeof rows)[number] & Record<string, unknown>>}
+            columns={[
+              { key: "item", header: "Item", renderCell: (row: Product & { reason: string }) => <Button label={`Open ${row.name} details`} variant="ghost" size="sm" onClick={() => setSelected(row)}>{row.name}</Button> },
+              { key: "sold", header: "Sold", align: "end", renderCell: (row: { sold: number }) => String(row.sold) },
+              { key: "sales", header: "Sales", align: "end", renderCell: (row: { sales: number }) => formatCurrency(row.sales) },
+              { key: "status", header: "Status", renderCell: (row: { reason: string }) => row.reason ? <StatusBadge tone="warning">{row.reason}</StatusBadge> : <StatusBadge tone="success">Healthy</StatusBadge> },
+            ]}
+          />
+        ) : <EmptyBlock title={view === "attention" ? "No items need attention" : "No completed item sales"} />}
+      </Panel>
+      <Panel title="Category performance">
+        {errors.categories ? <InlineError message={errors.categories} retry={retry} /> : (
+          <Table
+            data={data.categories.map((category) => ({ category: formatCategoryName(category.name), items: data.products.filter((product) => product.category_id === category.id).length })) as Array<{ category: string; items: number } & Record<string, unknown>>}
+            idKey="category"
+            columns={[
+              { key: "category", header: "Category", renderCell: (row: { category: string }) => row.category },
+              { key: "items", header: "Items", align: "end", renderCell: (row: { items: number }) => String(row.items) },
+            ]}
+          />
+        )}
+      </Panel>
+      {selected && (
+        <DetailDrawer title={selected.name} isOpen onClose={() => setSelected(null)} footer={<Button label="Close" variant="secondary" onClick={() => setSelected(null)} />}>
+          <DetailRow label="Price">{formatCurrency(selected.price)}</DetailRow>
+          <DetailRow label="Availability">{selected.is_available ? "Available" : "Unavailable"}</DetailRow>
+          <DetailRow label="Items sold">{sales.get(selected.name)?.quantity || 0}</DetailRow>
+        </DetailDrawer>
+      )}
+    </VStack>
+  );
+}
+
+function Trends({ data }: { data: Data }) {
+  return (
+    <VStack gap={4}>
+      <Grid columns={{ minWidth: 300, repeat: "fit" }} gap={4}>
+        {(["sales", "orders", "aov"] as Measure[]).map((measure) => (
+          <Panel key={measure} title={measureNames[measure]} description={measure === "sales" ? "Revenue per day" : measure === "orders" ? "Orders per day" : "Average value of each day's orders"}>
+            <LineChart series={dailySeries(data.stats, measure, data.previous)} ariaLabel={`${measureNames[measure]} trend`} format={measureFormat(measure)} width={340} height={200} />
+          </Panel>
+        ))}
+      </Grid>
+      <Grid columns={{ minWidth: 300, repeat: "fit" }} gap={4}>
+        <Panel title="Peak ordering times">
+          <SummaryRows rows={[["Completed orders", completedCount(data)], ["Busiest period", busiest(data)]]} />
+        </Panel>
+        <Panel title="Order type trend">
+          <SummaryRows rows={Object.entries(data.stats.order_type_summary || {}).map(([key, value]) => [readable(key), value])} />
+        </Panel>
+        <Panel title="Completion time trend">
+          <NoticeBanner tone="info" title="Completion trend unavailable" description="Prep and completion timestamps were not returned." />
+        </Panel>
+        <Panel title="Top item">
+          <SummaryRows rows={data.stats.top_selling_item ? [["Top item", data.stats.top_selling_item.name]] : []} />
+        </Panel>
+      </Grid>
+    </VStack>
+  );
+}
+
+const reportTemplates = ["Sales Report", "Orders Report", "Payment Report", "Menu Performance", "Tax Summary", "Location Summary"];
+
+function Reports({ data, reporting }: { data: Data; reporting: Reporting }) {
+  const [tab, setTab] = useState<"library" | "saved" | "exports">("library");
+  const [selected, setSelected] = useState<string | null>(null);
+  const [saved, setSaved] = useState<string[]>([]);
+  return (
+    <VStack gap={4}>
+      <TabList value={tab} onChange={(value) => setTab(value as typeof tab)} size="sm" layout="hug">
+        <Tab value="library" label="Report library" />
+        <Tab value="saved" label="Saved reports" />
+        <Tab value="exports" label="Exports" />
+      </TabList>
+      {tab === "library" && (
+        <Grid columns={{ minWidth: 260, repeat: "fit" }} gap={4}>
+          {reportTemplates.map((title) => (
+            <Panel key={title} title={title} description="Structured records for the current reporting scope." actions={<Button label={`Run ${title}`} variant="secondary" onClick={() => setSelected(title)} />} />
+          ))}
+        </Grid>
+      )}
+      {tab === "saved" && (saved.length ? (
+        <Panel title="Saved reports"><SummaryRows rows={saved.map((name) => [name, periodLabel(reporting)])} /></Panel>
+      ) : <EmptyBlock title="No saved reports yet" description="Save a report configuration to run it again quickly." />)}
+      {tab === "exports" && <EmptyBlock title="No exports yet" description="Generated files will appear after a real export." />}
+      {selected && (
+        <DetailDrawer title={`Create ${selected}`} isOpen onClose={() => setSelected(null)} footer={<><Button label="Cancel" variant="secondary" onClick={() => setSelected(null)} /><Button label="Generate CSV" variant="primary" onClick={() => { downloadCsv(`${selected.toLowerCase().replaceAll(" ", "-")}.csv`, rowsFor(data)); setSaved((items) => items.includes(selected) ? items : [...items, selected]); setSelected(null); }} /></>}>
+          <DetailRow label="Current period">{periodLabel(reporting)}</DetailRow>
+        </DetailDrawer>
+      )}
+    </VStack>
+  );
+}
+
+function InsightsToolbar({ reporting, locations, onChange }: { reporting: Reporting; locations: LocationOption[]; onChange: (next: Partial<Reporting>) => void }) {
+  return (
+    <Toolbar>
+      <Selector label="Date range" value={reporting.preset} onChange={(value) => { const preset = value as Reporting["preset"]; onChange({ preset, ...rangeFor(preset) }); }} options={[{ value: "today", label: "Today" }, { value: "7d", label: "Last 7 days" }, { value: "30d", label: "Last 30 days" }]} />
+      <Selector label="Location" value={reporting.locationId || "all"} onChange={(value) => onChange({ locationId: value === "all" ? null : value })} options={[{ value: "all", label: "All locations" }, ...locations.map((item) => ({ value: item.id, label: item.name }))]} />
+      <Selector label="Compare" value={reporting.comparison} onChange={(value) => onChange({ comparison: value as Reporting["comparison"] })} options={[{ value: "previous", label: "Previous period" }, { value: "none", label: "No comparison" }]} />
+    </Toolbar>
+  );
+}
+
+function MeasureSwitch({ value, onChange }: { value: Measure; onChange: (value: Measure) => void }) {
+  return (
+    <SegmentedControl label="Chart measure" value={value} onChange={(next) => onChange(next as Measure)}>
+      {measureOptions.map((option) => <SegmentedControlItem key={option.value} value={option.value} label={option.label} />)}
+    </SegmentedControl>
+  );
+}
+
+function SummaryRows({ rows }: { rows: Array<[string, ReactNode]> }) {
+  return rows.length ? <VStack gap={3}>{rows.map(([label, value]) => <DetailRow key={label} label={label}>{value}</DetailRow>)}</VStack> : <EmptyBlock title="No data for this period" />;
+}
+
+function InlineError({ message, retry }: { message: string; retry: () => void }) {
+  return <NoticeBanner tone="danger" title={message} action={<Button label="Retry" variant="secondary" onClick={retry} />} />;
+}
+
+const measureNames: Record<Measure, string> = { sales: "Revenue", orders: "Orders", aov: "Average order value" };
+
+function measureFormat(measure: Measure) {
+  return measure === "orders" ? (value: number) => String(Math.round(value)) : (value: number) => formatCurrency(value);
+}
+
+function measureValue(point: { orders: number; revenue: number }, measure: Measure) {
+  return measure === "orders" ? point.orders : measure === "aov" ? (point.orders ? point.revenue / point.orders : 0) : point.revenue;
+}
+
+// Days are sorted oldest first so the time axis always runs forward.
+function sortedPoints<T extends { date: string }>(points: T[], pick: (point: T) => number) {
+  return [...points].sort((a, b) => a.date.localeCompare(b.date)).map((point) => ({ label: point.date.slice(5), value: pick(point) }));
+}
+
+// The subject series is the chosen measure; the previous period, when returned, is a quiet comparison line aligned by day.
+function dailySeries(stats: DashboardStats, measure: Measure, previous?: DashboardStats | null): Series[] {
+  const subject: Series = { id: "current", name: measureNames[measure], tone: "primary", values: sortedPoints(stats.weekly_revenue, (point) => measureValue(point, measure)) };
+  const prior = previous?.weekly_revenue ?? [];
+  if (!prior.length) return [subject];
+  const comparison = sortedPoints(prior, (point) => measureValue(point, measure)).map((point, index) => ({ label: `Day ${index + 1}`, value: point.value }));
+  return [subject, { id: "previous", name: "Previous period", tone: "comparison", values: comparison }];
+}
+
+// Up to five named parts, largest first; the rest fold into one "Other" so a split never exceeds six blocks.
+function shareParts(parts: Array<{ id: string; label: string; value: number }>) {
+  const ranked = parts.filter((part) => part.value > 0).sort((a, b) => b.value - a.value);
+  if (ranked.length <= 6) return ranked;
+  const head = ranked.slice(0, 5);
+  const rest = ranked.slice(5).reduce((sum, part) => sum + part.value, 0);
+  return [...head, { id: "other", label: "Other", value: rest }];
+}
+function completedCount(data: Data) {
+  return data.stats.completed_orders ?? data.orders.filter(isCompleted).length;
+}
+function isCompleted(order: Order) {
+  return order.status === "completed" && !["failed", "cancelled", "expired", "unpaid", "pending", "pay_at_counter_pending"].includes(order.payment_status);
+}
+function pill(status: string): Tone {
+  return status === "completed" ? "success" : status === "cancelled" ? "danger" : status === "pending" ? "warning" : "info";
+}
+function readable(value?: string | null) {
+  return String(value || "Unknown").replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+function busiest(data: Data) {
+  const counts = new Map<number, number>();
+  data.orders.filter(isCompleted).forEach((order) => {
+    const hour = new Date(order.placed_at).getHours();
+    counts.set(hour, (counts.get(hour) || 0) + 1);
+  });
+  const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
+  return top ? `${top[0]}:00` : "Not enough data";
+}
+function rowsFor(data: Data) {
+  return [["Net Sales", data.stats.period_net_sales ?? data.stats.net_sales_today], ["Completed Orders", completedCount(data)], ...data.orders.slice(0, 100).map((order) => [order.order_number || order.public_token || "Pending", order.placed_at, readable(order.order_type), formatOrderStatus(order.status), order.total_amount] as Array<string | number>)];
+}
+function downloadCsv(name: string, rows: Array<Array<string | number>>) {
+  if (typeof window === "undefined") return;
+  const csv = rows.map((row) => row.map((value) => `"${String(value ?? "").replaceAll('"', '""')}"`).join(",")).join("\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+function titleFor(mode: Mode) {
+  return mode === "sales-reports" ? "Sales & Orders" : mode === "menu-performance" ? "Menu Performance" : mode === "reports" ? "Reports" : "Trends";
+}
+function subtitleFor(mode: Mode) {
+  return mode === "sales-reports" ? "Understand sales and order activity for your business." : mode === "menu-performance" ? "Understand what's driving menu sales and where attention is needed." : mode === "reports" ? "Create, save and export structured business reports." : "Understand how demand and business patterns change over time.";
+}
+function useReporting(params: ReturnType<typeof useSearchParams>): Reporting {
+  const preset = params.get("preset") === "today" || params.get("preset") === "30d" ? params.get("preset") as Reporting["preset"] : "7d";
+  const range = rangeFor(preset);
+  return { preset, start: params.get("start") || range.start, end: params.get("end") || range.end, comparison: params.get("comparison") === "none" ? "none" : "previous", locationId: params.get("location_id") };
+}
+function rangeFor(preset: Reporting["preset"]) {
+  const end = isoDate(0);
+  return preset === "today" ? { start: end, end } : preset === "30d" ? { start: isoDate(-29), end } : { start: isoDate(-6), end };
+}
+function isoDate(offset: number) {
+  const date = new Date();
+  date.setDate(date.getDate() + offset);
+  return date.toISOString().slice(0, 10);
+}
+function periodLabel(reporting: Reporting) {
+  return reporting.preset === "today" ? "Today" : reporting.preset === "30d" ? "Last 30 days" : "Last 7 days";
+}

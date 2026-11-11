@@ -3,20 +3,36 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
-import { AlertTriangle, Check, ChevronRight, Lock, Minus, Pause, Plus, RefreshCw, Search, Trash2, UtensilsCrossed, Wifi, WifiOff } from "lucide-react";
+import { Lock, Minus, Plus, RefreshCw, Trash2, UtensilsCrossed, Wifi, WifiOff } from "lucide-react";
+import { Button } from "@astryxdesign/core/Button";
+import { Card } from "@astryxdesign/core/Card";
+import { CheckboxInput } from "@astryxdesign/core/CheckboxInput";
+import { Grid } from "@astryxdesign/core/Grid";
+import { IconButton } from "@astryxdesign/core/IconButton";
+import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
+import { Selector } from "@astryxdesign/core/Selector";
+import { HStack, VStack } from "@astryxdesign/core/Stack";
+import { Heading, Text } from "@astryxdesign/core/Text";
+import { Tab as AstryxTab, TabList } from "@astryxdesign/core/TabList";
+import { Table } from "@astryxdesign/core/Table";
+import { TextArea } from "@astryxdesign/core/TextArea";
+import { TextInput } from "@astryxdesign/core/TextInput";
+import { AstryxDashboardProviders } from "@/components/dashboard/AstryxDashboardProviders";
+import { DetailDrawer, DetailRow, EmptyBlock, Metric, NoticeBanner, Panel, StatusBadge } from "@/components/dashboard/kit";
+import { SegmentedShare } from "@/components/dashboard/charts";
+import { DeviceCard, DeviceFrame, DeviceLoading } from "@/components/device/DeviceFrame";
 import { api } from "@/lib/api";
 import { formatCurrency } from "@/lib/formatters";
 import type { Category, KioskMenu, LiveDeviceContext, ModifierOption, Order, Product } from "@/lib/types";
-import { connectionLabel, elapsedLabel, kitchenLabel, kitchenStage } from "@/features/staff/status";
+import { connectionLabel, elapsedLabel, kitchenLabel, kitchenStage, orderSourceLabel } from "@/features/staff/status";
 import { listQueuedCounterOrders, queueCounterOrder, removeQueuedCounterOrder, updateQueuedCounterOrder } from "./offline-store";
 import { testDeviceContext, testOrder, testSessionStateMessage } from "@/features/test-runtime";
-import { AutoRecoveringState } from "@/components/ui/AutoRecoveringState";
-import { CounterPosSkeleton } from "@/components/ui/Skeletons";
 
 type Tab = "ordering" | "kitchen" | "handover";
 type Source = "counter" | "kiosk";
 type CartLine = { product: Product; quantity: number; customizations: Array<{ option_id: string; name: string; price_delta: number }> };
-type PendingPaymentRow = { id: string; business_id?: string; amount?: number; status: string; item_count?: number; claim?: { device_id: string }; order?: { order_number?: string | number | null; public_token?: string | null; order_type?: string; table_label?: string | null; total_amount?: number; notes?: string | null; items?: Array<{ product_id: string; quantity: number; name?: string; product_name?: string }> } };
+type PendingPaymentRow = { id: string; business_id?: string; amount?: number; status: string; item_count?: number; claim?: { device_id: string }; order?: { source?: string | null; order_number?: string | number | null; public_token?: string | null; order_type?: string; table_label?: string | null; total_amount?: number; notes?: string | null; items?: Array<{ product_id: string; quantity: number; name?: string; product_name?: string }> } };
+
 const makeId = () => crypto.randomUUID();
 
 export function CounterApp({ runtimeMode = "live" }: { runtimeMode?: "live" | "test" }) {
@@ -35,7 +51,7 @@ export function CounterApp({ runtimeMode = "live" }: { runtimeMode?: "live" | "t
   const [orderType, setOrderType] = useState<"dine_in" | "takeaway">("takeaway");
   const [table, setTable] = useState("");
   const [notes, setNotes] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [paymentMethod, setPaymentMethod] = useState("pay_at_counter");
   const [category, setCategory] = useState("all");
   const [search, setSearch] = useState("");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -110,64 +126,433 @@ export function CounterApp({ runtimeMode = "live" }: { runtimeMode?: "live" | "t
     : { order_type: orderType, table_label: orderType === "dine_in" ? table || null : null, notes: notes || null, payment_method: paymentMethod, items: cart.map((line) => ({ product_id: line.product.id, quantity: line.quantity, customizations: line.customizations })) };
   const newOrder = () => { if (!cart.length || window.confirm("Discard the current order? Choose Cancel to keep it, or OK to discard it.")) { setCart([]); setTable(""); setNotes(""); setNotice(""); } };
   const holdOrder = async () => { if (!cart.length) return; if (isTest) { setNotice("Test Counter does not persist unfinished drafts."); return; } setBusy("hold"); try { await api.liveCounterHoldOrder(orderPayload()); setCart([]); setTable(""); setNotes(""); setNotice("Order held. It has not been sent to Kitchen."); await refreshOperational(); } catch (error) { setNotice(error instanceof Error ? error.message : "Could not hold this order."); } finally { setBusy(""); } };
-  const placeOrder = async () => { if (!cart.length || (orderType === "dine_in" && !table.trim())) { setNotice(orderType === "dine_in" ? "Add a table number before payment." : "Add an item before payment."); return; } const payload = orderPayload(); const idempotencyKey = `counter-${makeId()}`; setBusy("payment"); try { if (isTest) { const created = await api.testRuntimeCreateOrder(payload); await api.testRuntimeMarkPaid(String(created.id)); } else { const order = await api.liveCounterSessionCreateOrder(payload, idempotencyKey); const payment = order.payment?.payment; if (payment?.id && ["cash", "pay_at_counter"].includes(paymentMethod)) await api.liveCounterSessionMarkPaid(payment.id, { business_id: order.business_id, amount: order.total_amount, method: paymentMethod }); } setCart([]); setTable(""); setNotes(""); setNotice("Payment confirmed and order sent to Kitchen."); await refreshOperational(); } catch (error) { const message = error instanceof Error ? error.message : "Payment could not be confirmed."; if (!isTest && (!online || /network|offline|fetch/i.test(message))) { await queueCounterOrder({ localId: makeId(), idempotencyKey, payload: payload as Record<string, unknown>, createdAt: new Date().toISOString(), status: "pending", retryCount: 0 }); setQueued((count) => count + 1); setNotice("Saved locally. Payment and Kitchen dispatch will wait for a safe retry."); } else setNotice(message); } finally { setBusy(""); } };
+  const placeOrder = async () => { if (!cart.length || (orderType === "dine_in" && !table.trim())) { setNotice(orderType === "dine_in" ? "Add a table number before payment." : "Add an item before payment."); return; } const payload = orderPayload(); const idempotencyKey = `counter-${makeId()}`; setBusy("payment"); try { if (isTest) { const created = await api.testRuntimeCreateOrder(payload); await api.testRuntimeMarkPaid(String(created.id)); } else { const order = await api.liveCounterSessionCreateOrder(payload, idempotencyKey); const payment = order.payment?.payment; if (payment?.id && ["cash", "pay_at_counter"].includes(paymentMethod)) { if (payment.status !== "paid") await api.liveCounterClaimPayment(payment.id); await api.liveCounterSessionMarkPaid(payment.id, { business_id: order.business_id, amount: order.total_amount, method: paymentMethod }); } } setCart([]); setTable(""); setNotes(""); setNotice("Payment confirmed and order sent to Kitchen."); await refreshOperational(); } catch (error) { const message = error instanceof Error ? error.message : "Payment could not be confirmed."; if (!isTest && (!online || /network|offline|fetch/i.test(message))) { await queueCounterOrder({ localId: makeId(), idempotencyKey, payload: payload as Record<string, unknown>, createdAt: new Date().toISOString(), status: "pending", retryCount: 0 }); setQueued((count) => count + 1); setNotice("Saved locally. Payment and Kitchen dispatch will wait for a safe retry."); } else setNotice(message); } finally { setBusy(""); } };
   const handover = async (order: Order) => { setBusy(order.id); try { if (isTest) await api.testCounterHandover(order.id); else await api.liveCounterSessionCompleteOrder(order.id, { business_id: order.business_id }); setNotice(`Order #${order.order_number || order.public_token} handed over.`); await refreshOperational(); } catch (error) { setNotice(error instanceof Error ? error.message : "Handover could not be completed."); } finally { setBusy(""); } };
   const resumeHeld = async (item: Record<string, unknown>) => { setBusy(String(item.id)); try { const resumed = await api.liveCounterResumeHeldOrder(String(item.id)); const payload = resumed.payload as { items?: Array<{ product_id: string; quantity: number; customizations?: Array<{ option_id: string; name: string; price_delta: number }> }>; order_type?: "dine_in" | "takeaway"; table_label?: string; notes?: string }; const lines = (payload.items || []).flatMap((entry) => { const product = menu?.products.find((candidate) => candidate.id === entry.product_id); return product ? [{ product, quantity: entry.quantity, customizations: entry.customizations || [] }] : []; }); setCart(lines); setOrderType(payload.order_type || "takeaway"); setTable(payload.table_label || ""); setNotes(payload.notes || ""); setSource("counter"); switchTab("ordering"); await refreshOperational(); } catch (error) { setNotice(error instanceof Error ? error.message : "Could not resume held order."); } finally { setBusy(""); } };
   if (shellError && !context) {
     return (
-      <main className="staff-recovery">
-        <section style={{ maxWidth: "500px", width: "100%", padding: "12px" }}>
-          <AutoRecoveringState
-            title="PlaceURorder Counter"
-            description={isTest ? testSessionStateMessage(new Error(shellError)) : shellError}
-            onRetry={load}
-            action={
-              <button
-                type="button"
-                className="mt-button mt-button--secondary"
-                onClick={() => router.push(isTest ? "/dashboard/test" : "/device/start")}
-              >
-                {isTest ? "Return to Test Hub" : "Pair or recover device"}
-              </button>
-            }
-          />
-        </section>
-      </main>
+      <DeviceFrame>
+        <DeviceCard title={isTest ? "Test Counter" : "PlaceURorder Counter"} description={isTest ? testSessionStateMessage(new Error(shellError)) : shellError}>
+          <VStack gap={3}>
+            <Button label="Try again" variant="secondary" width="100%" onClick={() => void load()} />
+            <Button label={isTest ? "Return to Test Hub" : "Pair or recover device"} variant="primary" width="100%" onClick={() => router.push(isTest ? "/dashboard/test" : "/device/start")} />
+          </VStack>
+        </DeviceCard>
+      </DeviceFrame>
     );
   }
-  if (loading && !context) return <CounterPosSkeleton />;
-  return <main className="staff-app counter-app-v2">
-    <CounterHeader context={context} online={online} queued={queued} testMode={isTest} onLock={() => isTest ? router.push("/dashboard/test") : void api.clearLiveDeviceSession().then(() => router.push("/device/start"))} />
-    <nav className="staff-primary-nav counter-primary-nav" aria-label="Counter application" role="tablist">{([ ["ordering", "Counter Ordering"], ["kitchen", "Kitchen Orders"], ["handover", "Handover History"] ] as const).map(([key, label]) => <button key={key} role="tab" aria-selected={tab === key} className={tab === key ? "active" : ""} onClick={() => switchTab(key)}>{label}{key === "kitchen" && pending.length > 0 ? <b>{pending.length}</b> : null}</button>)}</nav>
-    <CounterStatusStrip online={online} queued={queued} orders={orders} pending={pending.length} deviceStatus={context?.device.status} paymentUnavailable={!!errors.payments} />
-    {notice && <p className="staff-notice" role="status">{notice}</p>}
-    {tab === "ordering" && <section className="counter-main-grid">
-      <section className="counter-order-workspace"><div className="counter-order-toolbar"><div className="segmented"><button className={orderType === "takeaway" ? "selected" : ""} onClick={() => setOrderType("takeaway")}>Takeaway</button><button className={orderType === "dine_in" ? "selected" : ""} onClick={() => setOrderType("dine_in")}>Dine In</button></div><label className="staff-search"><Search size={17}/><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search menu items…" aria-label="Search menu items" /></label><button className="staff-button" disabled={!cart.length || !!busy} onClick={() => void holdOrder()}><Pause size={16}/> Hold Order</button><button className="staff-button primary" onClick={newOrder}><Plus size={17}/> New Order</button></div>
-        <div className="counter-source-row"><strong>Order Source:</strong><button className={source === "counter" ? "selected" : ""} onClick={() => setSource("counter")}>Counter Entry</button><button className={source === "kiosk" ? "selected" : ""} onClick={() => setSource("kiosk")}>Kiosk Pay at Counter {pending.length > 0 ? <b>{pending.length}</b> : null}</button>{orderType === "dine_in" && <input value={table} onChange={(event) => setTable(event.target.value)} placeholder="Table number" aria-label="Table number" />}</div>
-        <div className="counter-product-cart"><section className="counter-menu-pane"><div className="counter-categories"><button className={category === "all" ? "selected" : ""} onClick={() => setCategory("all")}>All items</button>{menu?.categories.filter((item) => item.is_active).map((item: Category) => <button className={category === item.id ? "selected" : ""} key={item.id} onClick={() => setCategory(item.id)}>{item.name}</button>)}</div>{errors.menu ? <AreaError text={errors.menu} retry={load} /> : <div className="counter-product-grid">{products.map((product) => <ProductCard key={product.id} product={product} currency={currency} quantity={productQuantities.get(product.id) || 0} onAdd={() => addProduct(product)} onDecrease={() => decreaseProduct(product)} />)}{!products.length && <Empty text="No menu items match this search." />}</div>}</section>
-          {source === "counter" ? <CurrentOrder cart={cart} itemCount={itemCount} currency={currency} subtotal={subtotal} tax={tax} total={total} notes={notes} paymentMethod={paymentMethod} busy={busy} queued={queued} onNotes={setNotes} onPaymentMethod={setPaymentMethod} onQuantity={(index, delta) => setCart((current) => current.map((line, currentIndex) => currentIndex === index ? { ...line, quantity: Math.max(0, line.quantity + delta) } : line).filter((line) => line.quantity > 0))} onRemove={(index) => setCart((current) => current.filter((_, currentIndex) => currentIndex !== index))} onPay={() => void placeOrder()} /> : <PendingPayments rows={pending} currency={currency} error={errors.payments} onSelect={setSelectedPayment} />}</div>
-      </section><aside className="counter-right-rail"><QueuePanel orders={queueOrders} error={errors.queue} now={now} onOpen={(order) => { setSelectedOrder(order); switchTab("kitchen"); }} onView={() => switchTab("kitchen")} /><ReadyPanel orders={readyOrders} busy={busy} currency={currency} onHandover={handover} /><DeviceAlert status={context?.device.status} /></aside>
-    </section>}
-    {tab === "kitchen" && <CounterOrdersPage orders={orders} pending={pending} error={errors.queue} currency={currency} busy={busy} now={now} onRefresh={refreshOperational} onHandover={handover} selected={selectedOrder} onSelect={setSelectedOrder} onPayment={setSelectedPayment} />}
-    {tab === "handover" && <HistoryPage orders={history} error={errors.history} currency={currency} now={now} onRefresh={refreshOperational} />}
-    {held.length > 0 && tab === "ordering" && <section className="counter-held-panel"><div><h2>Held Counter Orders</h2><span>Incomplete orders only — not sent to Kitchen</span></div>{held.map((item) => <article key={String(item.id)}><span><b>{String(item.order_reference || "Held order")}</b><small>{item.created_at ? new Date(String(item.created_at)).toLocaleTimeString() : "Saved"}</small></span><button className="staff-button" disabled={!!busy} onClick={() => void resumeHeld(item)}>Resume</button></article>)}</section>}
-    {modifierProduct && <ModifierDialog product={modifierProduct} selected={modifierSelection} currency={currency} onToggle={(option) => setModifierSelection((current) => current.some((item) => item.id === option.id) ? current.filter((item) => item.id !== option.id) : [...current, option])} onClose={() => setModifierProduct(null)} onConfirm={confirmModifiers} />}
-    {selectedPayment && <PaymentDialog row={selectedPayment} currency={currency} testMode={isTest} onClose={() => setSelectedPayment(null)} onRefresh={refreshOperational} />}
-  </main>;
+  if (loading && !context) return <DeviceLoading title="PlaceURorder Counter" message="Loading the counter" />;
+
+  const alert = context?.device.status === "warning" || context?.device.status === "issue";
+  const activeOrders = orders.filter((order) => order.status !== "ready" && order.status !== "completed");
+  const exitDevice = () => (isTest ? router.push("/dashboard/test") : void api.clearLiveDeviceSession().then(() => router.push("/device/start")));
+  const counterHandovers = history.filter((order) => order.source === "counter").length;
+  const qrHandovers = history.filter((order) => order.source === "qr").length;
+  // Only counter payment methods the owner has enabled are offered; the store default is pay at counter.
+  const enabledPayments = menu?.business.payment_summary?.enabled_methods ?? [];
+  const counterPaymentOptions = [{ value: "pay_at_counter", label: "Pay at counter" }, { value: "cash", label: "Cash" }].filter((option) => enabledPayments.length === 0 ? option.value === "pay_at_counter" : enabledPayments.includes(option.value));
+  const handoverParts = [{ id: "counter", label: "Counter entry", value: counterHandovers }, { id: "qr", label: "Online (QR)", value: qrHandovers }, { id: "kiosk", label: "Kiosk", value: Math.max(history.length - counterHandovers - qrHandovers, 0) }];
+
+  return (
+    <AstryxDashboardProviders>
+      <VStack gap={0} style={{ minHeight: "100vh", background: "var(--color-background-muted)" }}>
+        <CounterHeader context={context} online={online} queued={queued} testMode={isTest} onLock={exitDevice} />
+        <VStack gap={0} style={{ background: "var(--color-background-card)", borderBottom: "1px solid var(--color-border)", padding: "0 20px" }}>
+          <HStack gap={4} vAlign="center" style={{ padding: "12px 0" }}>
+            <TabList value={tab} onChange={(value) => switchTab(value as Tab)} size="sm" layout="hug">
+              <AstryxTab value="ordering" label="Counter ordering" />
+              <AstryxTab value="kitchen" label="Kitchen orders" />
+              <AstryxTab value="handover" label="Handover history" />
+            </TabList>
+          </HStack>
+        </VStack>
+
+        <VStack gap={5} style={{ padding: 20 }}>
+          {notice && <NoticeBanner tone="info" title={notice} role="status" />}
+
+          <Grid columns={{ minWidth: 200, repeat: "fit" }} gap={4} align="start">
+            <Metric label="In the kitchen" value={activeOrders.length} hint="Orders being prepared" />
+            <Metric label="Ready for handover" value={readyOrders.length} hint="Waiting at the counter" />
+            <Metric label="To collect" value={pending.length} hint="Pay at counter: kiosk and QR orders" />
+            <Metric label="Offline sync" value={online ? (queued ? `${queued} pending` : "Clear") : "Offline"} hint={online ? "Connected to the server" : "Saved locally until reconnect"} />
+            <Metric label="Device" value={alert ? "Needs attention" : "Normal"} hint={alert ? "Check this device" : "Reporting normally"} />
+          </Grid>
+
+          {tab === "ordering" && (
+            <HStack gap={5} vAlign="start" wrap="wrap">
+              <div style={{ flex: "1 1 460px", minWidth: 0 }}>
+                <Panel title="Menu" description={`${products.length} ${products.length === 1 ? "item" : "items"} shown`}>
+                  <VStack gap={4}>
+                    <HStack gap={3} vAlign="end" wrap="wrap">
+                      <SegmentedControl label="Order type" value={orderType} onChange={(value) => setOrderType(value as "dine_in" | "takeaway")}>
+                        <SegmentedControlItem value="takeaway" label="Takeaway" />
+                        <SegmentedControlItem value="dine_in" label="Dine in" />
+                      </SegmentedControl>
+                      <TextInput label="Search menu items" isLabelHidden value={search} onChange={setSearch} placeholder="Search menu items" width={240} />
+                      <HStack gap={2} style={{ marginLeft: "auto" }}>
+                        <Button label="Hold order" variant="secondary" isDisabled={!cart.length || !!busy} onClick={() => void holdOrder()} />
+                        <Button label="New order" variant="primary" onClick={newOrder} />
+                      </HStack>
+                    </HStack>
+                    <HStack gap={3} vAlign="end" wrap="wrap">
+                      <SegmentedControl label="Order source" value={source} onChange={(value) => setSource(value as Source)}>
+                        <SegmentedControlItem value="counter" label="Counter entry" />
+                        <SegmentedControlItem value="kiosk" label={pending.length ? `Pay at counter (${pending.length})` : "Pay at counter"} />
+                      </SegmentedControl>
+                      {orderType === "dine_in" && <TextInput label="Table number" value={table} onChange={setTable} width={160} />}
+                    </HStack>
+                    {menu?.categories?.length ? (
+                      <SegmentedControl label="Category" value={category} onChange={setCategory}>
+                        <SegmentedControlItem value="all" label="All items" />
+                        {menu.categories.filter((item: Category) => item.is_active).map((item: Category) => <SegmentedControlItem key={item.id} value={item.id} label={item.name} />)}
+                      </SegmentedControl>
+                    ) : null}
+                    {errors.menu ? (
+                      <NoticeBanner tone="danger" title={errors.menu} action={<Button label="Retry" variant="secondary" size="sm" onClick={() => void load()} />} role="alert" />
+                    ) : products.length ? (
+                      <Grid columns={{ minWidth: 148, repeat: "fit" }} gap={3} align="start">
+                        {products.map((product) => <ProductTile key={product.id} product={product} currency={currency} quantity={productQuantities.get(product.id) || 0} onAdd={() => addProduct(product)} onDecrease={() => decreaseProduct(product)} />)}
+                      </Grid>
+                    ) : (
+                      <EmptyBlock title="No items match" description="Try another search or category." />
+                    )}
+                  </VStack>
+                </Panel>
+              </div>
+
+              <div style={{ flex: "0 1 360px", minWidth: 300 }}>
+                {source === "counter" ? (
+                  <Panel title="Current order" description="Counter entry · draft" actions={<StatusBadge tone="info">{`${itemCount} ${itemCount === 1 ? "item" : "items"}`}</StatusBadge>}>
+                    <VStack gap={4}>
+                      {cart.length ? (
+                        <VStack gap={3}>
+                          {cart.map((line, index) => (
+                            <HStack key={`${line.product.id}-${index}`} gap={3} vAlign="start" hAlign="between">
+                              <HStack gap={2} vAlign="center">
+                                <IconButton label={`Decrease ${line.product.name} quantity`} variant="secondary" size="sm" icon={<Minus size={14} aria-hidden="true" />} onClick={() => setCart((current) => current.map((item, currentIndex) => currentIndex === index ? { ...item, quantity: Math.max(0, item.quantity - 1) } : item).filter((item) => item.quantity > 0))} />
+                                <Text type="body" weight="semibold" color="primary">{String(line.quantity)}</Text>
+                                <IconButton label={`Increase ${line.product.name} quantity`} variant="secondary" size="sm" icon={<Plus size={14} aria-hidden="true" />} onClick={() => setCart((current) => current.map((item, currentIndex) => currentIndex === index ? { ...item, quantity: item.quantity + 1 } : item))} />
+                              </HStack>
+                              <VStack gap={0} style={{ flex: 1, minWidth: 0 }}>
+                                <Text type="body" weight="semibold" color="primary">{line.product.name}</Text>
+                                <Text type="supporting" color="secondary">{line.customizations.map((item) => item.name).join(", ") || "No modifiers"}</Text>
+                              </VStack>
+                              <HStack gap={1} vAlign="center">
+                                <Text type="body" color="primary">{formatCurrency((line.product.price + line.customizations.reduce((sum, item) => sum + item.price_delta, 0)) * line.quantity, currency)}</Text>
+                                <IconButton label={`Remove ${line.product.name}`} variant="ghost" size="sm" icon={<Trash2 size={15} aria-hidden="true" />} onClick={() => setCart((current) => current.filter((_, currentIndex) => currentIndex !== index))} />
+                              </HStack>
+                            </HStack>
+                          ))}
+                        </VStack>
+                      ) : (
+                        <EmptyBlock title="No items yet" description="Choose an item from the menu to start this order." />
+                      )}
+                      <TextArea label="Order note" rows={2} value={notes} onChange={setNotes} />
+                      <VStack gap={1}>
+                        <HStack hAlign="between"><Text type="supporting" color="secondary">Subtotal</Text><Text type="supporting" color="primary">{formatCurrency(subtotal, currency)}</Text></HStack>
+                        <HStack hAlign="between"><Text type="supporting" color="secondary">Tax</Text><Text type="supporting" color="primary">{formatCurrency(tax, currency)}</Text></HStack>
+                        <HStack hAlign="between"><Text type="body" weight="semibold" color="primary">Total</Text><Text type="label" color="primary">{formatCurrency(total, currency)}</Text></HStack>
+                      </VStack>
+                      <Selector label="Payment method" value={paymentMethod} onChange={setPaymentMethod} options={counterPaymentOptions} />
+                      <Button label={busy === "payment" ? "Confirming payment…" : "Pay & send to Kitchen"} variant="primary" width="100%" isLoading={busy === "payment"} isDisabled={!cart.length || !!busy} onClick={() => void placeOrder()} />
+                      {queued ? <Text type="supporting" color="secondary">{`${queued} ${queued > 1 ? "orders" : "order"} awaiting safe sync.`}</Text> : null}
+                    </VStack>
+                  </Panel>
+                ) : (
+                  <Panel title="Orders to collect" description="Kiosk and QR orders paid at the counter. Collect payment, then hand over when ready.">
+                    {errors.payments ? (
+                      <NoticeBanner tone="warning" title={errors.payments} role="status" />
+                    ) : pending.length ? (
+                      <VStack gap={2}>
+                        {pending.map((row) => (
+                          <Button key={row.id} label={`#${row.order?.order_number || row.order?.public_token || row.id.slice(0, 8)} · ${orderSourceLabel(row.order?.source)} · ${row.item_count || 0} items · ${formatCurrency(Number(row.amount || row.order?.total_amount || 0), currency)}`} variant="secondary" width="100%" onClick={() => setSelectedPayment(row)} />
+                        ))}
+                      </VStack>
+                    ) : (
+                      <EmptyBlock title="No kiosk orders waiting" description="Orders placed on the kiosk for counter payment appear here." />
+                    )}
+                  </Panel>
+                )}
+              </div>
+
+              <div style={{ flex: "0 1 300px", minWidth: 260 }}>
+                <VStack gap={4}>
+                  <Panel title="Kitchen queue" actions={<StatusBadge tone="info">{`${queueOrders.length} active`}</StatusBadge>}>
+                    <VStack gap={3}>
+                      {errors.queue ? (
+                        <NoticeBanner tone="danger" title={errors.queue} role="alert" />
+                      ) : queueOrders.length ? queueOrders.map((order) => (
+                        <HStack key={order.id} gap={3} vAlign="center" hAlign="between">
+                          <VStack gap={0}>
+                            <Text type="body" weight="semibold" color="primary">{`#${order.order_number || order.public_token}`}</Text>
+                            <Text type="supporting" color="secondary">{`${kitchenLabel(kitchenStage(order) || "pending")} · ${elapsedLabel(order.placed_at, now)} · ${(order.order_items || []).length} items`}</Text>
+                          </VStack>
+                          <Button label={`Open order ${order.order_number || order.public_token}`} variant="ghost" size="sm" onClick={() => { setSelectedOrder(order); switchTab("kitchen"); }} />
+                        </HStack>
+                      )) : (
+                        <EmptyBlock title="No active Kitchen orders" description="Orders sent to the Kitchen show here." />
+                      )}
+                      <Button label="View full Kitchen queue" variant="ghost" width="100%" onClick={() => switchTab("kitchen")} />
+                    </VStack>
+                  </Panel>
+
+                  <Panel title="Ready for handover" actions={<StatusBadge tone="success">{`${readyOrders.length} ready`}</StatusBadge>}>
+                    <VStack gap={3}>
+                      {readyOrders.length ? readyOrders.slice(0, 4).map((order) => (
+                        <HStack key={order.id} gap={3} vAlign="center" hAlign="between">
+                          <VStack gap={0}>
+                            <Text type="body" weight="semibold" color="primary">{`#${order.order_number || order.public_token}`}</Text>
+                            <Text type="supporting" color="secondary">{`${(order.order_items || []).length} items · ${formatCurrency(order.total_amount, currency)}`}</Text>
+                          </VStack>
+                          <Button label="Mark handed over" variant="primary" size="sm" isDisabled={!!busy} onClick={() => void handover(order)} />
+                        </HStack>
+                      )) : (
+                        <EmptyBlock title="No orders are ready" description="Finished orders wait here for handover." />
+                      )}
+                    </VStack>
+                  </Panel>
+
+                  {alert ? (
+                    <NoticeBanner tone="warning" title="Device needs attention" description="This counter reported a problem. Check the device." role="status" />
+                  ) : (
+                    <NoticeBanner tone="success" title="No device alerts" description="Counter device is reporting normally." role="status" />
+                  )}
+                </VStack>
+              </div>
+            </HStack>
+          )}
+
+          {tab === "kitchen" && (
+            <KitchenOrdersView orders={orders} pending={pending} error={errors.queue} currency={currency} busy={busy} now={now} onRefresh={refreshOperational} onOpen={setSelectedOrder} onPayment={setSelectedPayment} />
+          )}
+
+          {tab === "handover" && (
+            <VStack gap={5}>
+              <Grid columns={{ minWidth: 260, repeat: "fit" }} gap={4} align="start">
+                <Metric label="Handed over" value={history.length} hint="Completed on this counter" />
+                <Panel title="Handover source" description="Share of handovers by where the order came from.">
+                  {history.length ? (
+                    <SegmentedShare ariaLabel="Handovers by source" parts={handoverParts} format={(value) => String(Math.round(value))} />
+                  ) : (
+                    <Text type="supporting" color="secondary">No handovers yet.</Text>
+                  )}
+                </Panel>
+              </Grid>
+              <Panel title="Handover history" description="Completed handovers for this device." actions={<Button label="Refresh" variant="secondary" size="sm" onClick={() => void refreshOperational()} />}>
+                {errors.history ? (
+                  <NoticeBanner tone="danger" title={errors.history} action={<Button label="Retry" variant="secondary" size="sm" onClick={() => void refreshOperational()} />} role="alert" />
+                ) : history.length ? (
+                  <Table
+                    idKey="id"
+                    data={history as Array<Order & Record<string, unknown>>}
+                    columns={[
+                      { key: "order", header: "Order", renderCell: (row: Order) => `#${row.order_number || row.public_token}` },
+                      { key: "source", header: "Source", renderCell: (row: Order) => orderSourceLabel(row.source) },
+                      { key: "total", header: "Total", align: "end", renderCell: (row: Order) => formatCurrency(row.total_amount, currency) },
+                      { key: "ready", header: "Ready at", renderCell: (row: Order) => (row.ready_at ? new Date(row.ready_at).toLocaleTimeString() : "—") },
+                      { key: "handed", header: "Handed over", renderCell: (row: Order) => (row.completed_at ? new Date(row.completed_at).toLocaleTimeString() : "—") },
+                      { key: "prep", header: "Kitchen prep", renderCell: (row: Order) => (row.prep_started_at && row.ready_at ? elapsedLabel(row.prep_started_at, new Date(row.ready_at).getTime()) : elapsedLabel(row.placed_at, now)) },
+                    ]}
+                  />
+                ) : (
+                  <EmptyBlock title="No handovers yet" description="Handed-over orders appear here." />
+                )}
+              </Panel>
+            </VStack>
+          )}
+
+          {held.length > 0 && tab === "ordering" && (
+            <Panel title="Held counter orders" description="Incomplete orders only. They have not been sent to Kitchen.">
+              <VStack gap={3}>
+                {held.map((item) => (
+                  <HStack key={String(item.id)} gap={3} vAlign="center" hAlign="between">
+                    <VStack gap={0}>
+                      <Text type="body" weight="semibold" color="primary">{String(item.order_reference || "Held order")}</Text>
+                      <Text type="supporting" color="secondary">{item.created_at ? new Date(String(item.created_at)).toLocaleTimeString() : "Saved"}</Text>
+                    </VStack>
+                    <Button label="Resume" variant="secondary" size="sm" isDisabled={!!busy} onClick={() => void resumeHeld(item)} />
+                  </HStack>
+                ))}
+              </VStack>
+            </Panel>
+          )}
+        </VStack>
+      </VStack>
+
+      {modifierProduct && <ModifierDrawer product={modifierProduct} selected={modifierSelection} currency={currency} onToggle={(option) => setModifierSelection((current) => current.some((item) => item.id === option.id) ? current.filter((item) => item.id !== option.id) : [...current, option])} onClose={() => setModifierProduct(null)} onConfirm={confirmModifiers} />}
+      {selectedPayment && <PaymentDrawer row={selectedPayment} currency={currency} testMode={isTest} onClose={() => setSelectedPayment(null)} onRefresh={refreshOperational} />}
+      {selectedOrder && <OrderDrawer order={selectedOrder} currency={currency} busy={busy} onClose={() => setSelectedOrder(null)} onHandover={(order) => { setSelectedOrder(null); void handover(order); }} />}
+    </AstryxDashboardProviders>
+  );
 }
 
-function CounterHeader({ context, online, queued, testMode, onLock }: { context: LiveDeviceContext | null; online: boolean; queued: number; testMode: boolean; onLock: () => void }) { return <header className="staff-header counter-header"><div className="staff-brand"><strong>PlaceURorder</strong><span>COUNTER</span>{testMode && <em>TEST MODE</em>}</div><div className="staff-location"><b>{context?.device.location_label || "Assigned location"}</b><small>{context?.business.name || "Counter session"}</small></div><div className="staff-header-actions"><span className={`staff-connection ${online ? "healthy" : "warning"}`}>{online ? <Wifi size={16}/> : <WifiOff size={16}/>}{testMode ? "Test Session · Current" : connectionLabel(online, queued)}</span><button className="icon-button" aria-label="Lock device" onClick={onLock}><Lock size={18}/></button></div></header>; }
-function CounterStatusStrip({ online, queued, orders, pending, deviceStatus, paymentUnavailable }: { online: boolean; queued: number; orders: Order[]; pending: number; deviceStatus?: string; paymentUnavailable: boolean }) { const active = orders.filter((order) => order.status !== "ready" && order.status !== "completed").length; return <section className="counter-status-strip" aria-label="Operational status"><StatusCell label="Payment Terminal" value={paymentUnavailable ? "Status unavailable" : "Not reported"} tone={paymentUnavailable ? "warning" : "neutral"}/><StatusCell label="Kitchen" value={online ? `${active} active orders` : "Offline"} tone={online ? "success" : "warning"}/><StatusCell label="Kiosk" value="Not reported" tone="neutral"/><StatusCell label="Device Alert" value={deviceStatus === "warning" || deviceStatus === "issue" ? "Investigate" : "No device alerts"} tone={deviceStatus === "warning" || deviceStatus === "issue" ? "error" : "success"}/><StatusCell label="Offline Sync" value={online ? (queued ? `${queued} pending sync` : "Clear") : "Offline"} tone={online && !queued ? "success" : "warning"}/><StatusCell label="Kiosk Orders" value={pending ? `${pending} awaiting payment` : "Clear"} tone={pending ? "warning" : "success"}/></section>; }
-function StatusCell({ label, value, tone }: { label: string; value: string; tone: string }) { return <div className={`status-cell ${tone}`}><small>{label}</small><b>{value}</b></div>; }
-function ProductCard({ product, currency, quantity, onAdd, onDecrease }: { product: Product; currency: string; quantity: number; onAdd: () => void; onDecrease: () => void }) { return <article className={`counter-product-card ${product.is_available ? "" : "unavailable"}`}><div className="product-image">{product.primary_image_path ? <Image src={product.primary_image_path} alt="" fill sizes="(max-width: 767px) 45vw, 145px" unoptimized /> : <UtensilsCrossed size={28}/>}</div><div><b>{product.name}</b><small>{formatCurrency(product.price, currency)}</small></div>{!product.is_available ? <span className="status-badge">Unavailable</span> : quantity ? <div className="quantity product-quantity"><button aria-label={`Decrease ${product.name} quantity`} onClick={onDecrease}><Minus size={15}/></button><b>{quantity}</b><button aria-label={`Increase ${product.name} quantity`} onClick={onAdd}><Plus size={15}/></button></div> : <button className="staff-button" onClick={onAdd}><Plus size={15}/> Add</button>}</article>; }
-function CurrentOrder({ cart, itemCount, currency, subtotal, tax, total, notes, paymentMethod, busy, queued, onNotes, onPaymentMethod, onQuantity, onRemove, onPay }: { cart: CartLine[]; itemCount: number; currency: string; subtotal: number; tax: number; total: number; notes: string; paymentMethod: string; busy: string; queued: number; onNotes: (value: string) => void; onPaymentMethod: (value: string) => void; onQuantity: (index: number, delta: number) => void; onRemove: (index: number) => void; onPay: () => void }) { return <aside className="current-order"><header><div><h2>Current Order</h2><small>Counter Entry · Draft</small></div><span>{itemCount} {itemCount === 1 ? "item" : "items"}</span></header><div className="cart-lines">{cart.map((line, index) => <article key={`${line.product.id}-${index}`}><div className="quantity"><button aria-label={`Decrease ${line.product.name} quantity`} onClick={() => onQuantity(index, -1)}><Minus size={14}/></button><b>{line.quantity}</b><button aria-label={`Increase ${line.product.name} quantity`} onClick={() => onQuantity(index, 1)}><Plus size={14}/></button></div><div><b>{line.product.name}</b><small>{line.customizations.map((item) => item.name).join(", ") || "No modifiers"}</small></div><span>{formatCurrency((line.product.price + line.customizations.reduce((sum, item) => sum + item.price_delta, 0)) * line.quantity, currency)}<button aria-label={`Remove ${line.product.name}`} onClick={() => onRemove(index)}><Trash2 size={15}/></button></span></article>)}{!cart.length && <Empty text="No items added yet. Choose an item from the menu to start this order." />}</div><details className="item-note"><summary>+ Add Item Note</summary><textarea value={notes} onChange={(event) => onNotes(event.target.value)} placeholder="Order note" /></details><div className="totals"><span>Subtotal <b>{formatCurrency(subtotal, currency)}</b></span><span>Tax <b>{formatCurrency(tax, currency)}</b></span><strong>Total <b>{formatCurrency(total, currency)}</b></strong></div><label className="payment-select">Payment method<select value={paymentMethod} onChange={(event) => onPaymentMethod(event.target.value)}><option value="cash">Cash</option><option value="pay_at_counter">Pay at Counter</option></select></label><button className="staff-button primary pay-button" disabled={!cart.length || !!busy} onClick={onPay}>{busy === "payment" ? "Confirming payment…" : "Pay & Send to Kitchen"}</button>{queued ? <small className="offline-copy">{queued} order{queued > 1 ? "s" : ""} awaiting safe sync.</small> : null}</aside>; }
-function PendingPayments({ rows, currency, error, onSelect }: { rows: PendingPaymentRow[]; currency: string; error?: string; onSelect: (row: PendingPaymentRow) => void }) { return <aside className="current-order pending-order"><header><div><h2>Kiosk Pay at Counter</h2><small>Kitchen receives these only after payment confirmation.</small></div><span>{rows.length}</span></header>{error ? <AreaError text={error} /> : rows.map((row) => <button className="pending-payment" key={row.id} onClick={() => onSelect(row)}><b>#{row.order?.order_number || row.order?.public_token || row.id.slice(0, 8)}</b><small>{row.item_count || 0} items · {row.order?.order_type || "Takeaway"}</small><span>{currency}{Number(row.amount || row.order?.total_amount || 0).toFixed(2)}<ChevronRight size={16}/></span></button>)}{!rows.length && !error ? <Empty text="No kiosk orders are awaiting payment." /> : null}</aside>; }
-function QueuePanel({ orders, error, now, onOpen, onView }: { orders: Order[]; error?: string; now: number; onOpen: (order: Order) => void; onView: () => void }) { return <section className="rail-panel"><header><h2><UtensilsCrossed size={17}/>Kitchen Queue</h2><span>{orders.length} Active</span></header>{error ? <AreaError text={error} /> : orders.map((order) => <button className={`queue-row ${order.status}`} key={order.id} onClick={() => onOpen(order)}><span><b>{kitchenLabel(kitchenStage(order) || "pending")}</b><strong>#{order.order_number || order.public_token}</strong><small>{elapsedLabel(order.placed_at, now)} elapsed · {(order.order_items || []).length} items</small></span><ChevronRight size={16}/></button>)}{!orders.length && !error ? <Empty text="No active Kitchen orders." /> : null}<button className="rail-footer" onClick={onView}>View Full Kitchen Queue <ChevronRight size={15}/></button></section>; }
-function ReadyPanel({ orders, busy, currency, onHandover }: { orders: Order[]; busy: string; currency: string; onHandover: (order: Order) => void }) { return <section className="rail-panel"><header><h2><Check size={17}/>Ready for Handover</h2><span>{orders.length} Ready</span></header>{orders.slice(0, 3).map((order) => <article className="ready-card" key={order.id}><div><b>READY</b><strong>#{order.order_number || order.public_token}</strong><small>{(order.order_items || []).length} items · {currency}{order.total_amount.toFixed(2)}</small></div><button className="staff-button primary" disabled={!!busy} onClick={() => void onHandover(order)}>Mark Handed Over</button></article>)}{!orders.length && <Empty text="No orders are ready for handover." />}</section>; }
-function DeviceAlert({ status }: { status?: string }) { const alert = status === "warning" || status === "issue"; return <section className={`device-alert ${alert ? "has-alert" : ""}`}><AlertTriangle size={17}/><span><b>{alert ? "Device alert" : "No Device Alerts"}</b><small>{alert ? "This device needs attention." : "Counter device is reporting normally."}</small></span></section>; }
-function CounterOrdersPage({ orders, pending, error, currency, busy, now, onRefresh, onHandover, selected, onSelect, onPayment }: { orders: Order[]; pending: PendingPaymentRow[]; error?: string; currency: string; busy: string; now: number; onRefresh: () => Promise<void>; onHandover: (order: Order) => void; selected: Order | null; onSelect: (order: Order) => void; onPayment: (row: PendingPaymentRow) => void }) { const [search, setSearch] = useState(""); const visible = orders.filter((order) => String(order.order_number || order.public_token).includes(search) || order.status.includes(search.toLowerCase())); return <section className="counter-table-page"><header className="page-toolbar"><label className="staff-search"><Search size={16}/><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search orders" /></label><button className="staff-button" onClick={() => void onRefresh()}><RefreshCw size={16}/>Refresh</button></header><div className="counter-orders-layout"><section className="staff-table"><header><span>Order</span><span>Source</span><span>Payment</span><span>Kitchen Status</span><span>Elapsed</span></header>{error ? <AreaError text={error} retry={onRefresh} /> : visible.map((order) => <button key={order.id} onClick={() => onSelect(order)}><span><b>#{order.order_number || order.public_token}</b><small>{order.order_type === "dine_in" ? `Table ${order.table_label || "—"}` : "Takeaway"}</small></span><span>{order.source || "Kiosk"}</span><span>{order.payment_status}</span><span className={`state-pill ${order.status}`}>{order.status}</span><span>{elapsedLabel(order.placed_at, now)}</span></button>)}{!visible.length && !error ? <Empty text="No Kitchen orders match this view." /> : null}</section><aside className="order-detail"><h2>{selected ? `Order #${selected.order_number || selected.public_token}` : "Select an order"}</h2>{selected ? <><p>{selected.source || "Kiosk"} · {selected.payment_status} · {selected.status}</p>{(selected.order_items || []).map((item) => <p key={item.id}>{item.quantity} × {item.product_name}</p>)}<p>Total: {currency}{selected.total_amount.toFixed(2)}</p>{selected.status === "ready" ? <button className="staff-button primary" disabled={!!busy} onClick={() => void onHandover(selected)}>Mark Handed Over</button> : null}</> : <p>View payment, items and Kitchen lifecycle details without taking preparation actions.</p>}<h3>Awaiting payment</h3>{pending.map((row) => <button className="detail-link" key={row.id} onClick={() => onPayment(row)}>#{row.order?.order_number || row.id.slice(0, 8)} <ChevronRight size={15}/></button>)}</aside></div></section>; }
-function HistoryPage({ orders, error, currency, now, onRefresh }: { orders: Order[]; error?: string; currency: string; now: number; onRefresh: () => Promise<void> }) { return <section className="counter-table-page"><header className="page-toolbar"><div><h1>Handover History</h1><small>Completed handovers for this Counter device.</small></div><button className="staff-button" onClick={() => void onRefresh()}><RefreshCw size={16}/>Refresh</button></header><section className="staff-table handover-table"><header><span>Order</span><span>Source</span><span>Ready At</span><span>Handed Over</span><span>Kitchen Prep</span></header>{error ? <AreaError text={error} retry={onRefresh} /> : orders.map((order) => <article key={order.id}><span><b>#{order.order_number || order.public_token}</b><small>{currency}{order.total_amount.toFixed(2)}</small></span><span>{order.source || "Kiosk"}</span><span>{order.ready_at ? new Date(order.ready_at).toLocaleTimeString() : "—"}</span><span>{order.completed_at ? new Date(order.completed_at).toLocaleTimeString() : "—"}</span><span>{order.prep_started_at && order.ready_at ? elapsedLabel(order.prep_started_at, new Date(order.ready_at).getTime()) : elapsedLabel(order.placed_at, now)}</span></article>)}{!orders.length && !error ? <Empty text="No handovers have been recorded yet." /> : null}</section></section>; }
-function ModifierDialog({ product, selected, currency, onToggle, onClose, onConfirm }: { product: Product; selected: ModifierOption[]; currency: string; onToggle: (option: ModifierOption) => void; onClose: () => void; onConfirm: () => void }) { return <div className="staff-dialog-backdrop"><section className="staff-dialog" role="dialog" aria-modal="true" aria-label={`Configure ${product.name}`}><header><h2>Configure {product.name}</h2><button className="icon-button" onClick={onClose}>×</button></header>{(product.modifier_groups || []).map((group) => <fieldset key={group.id}><legend>{group.name}{group.is_required ? " (required)" : ""}</legend>{group.options.filter((option) => option.is_available).map((option) => <label key={option.id}><input type="checkbox" checked={selected.some((item) => item.id === option.id)} onChange={() => onToggle(option)} />{option.name}<span>{option.price_delta ? `+${currency}${option.price_delta.toFixed(2)}` : ""}</span></label>)}</fieldset>)}<footer><button className="staff-button" onClick={onClose}>Cancel</button><button className="staff-button primary" onClick={onConfirm}>Add to Order</button></footer></section></div>; }
-function PaymentDialog({ row, currency, testMode, onClose, onRefresh }: { row: PendingPaymentRow; currency: string; testMode: boolean; onClose: () => void; onRefresh: () => Promise<void> }) { const [busy, setBusy] = useState(false); const [message, setMessage] = useState(""); const order = row.order || {}; const run = async () => { setBusy(true); try { if (testMode) await api.testRuntimeMarkPaid(row.id); else { if (!row.claim) await api.liveCounterClaimPayment(row.id); await api.liveCounterSessionMarkPaid(row.id, { business_id: String(row.business_id), amount: Number(row.amount || order.total_amount || 0), method: "cash" }); } await onRefresh(); onClose(); } catch (error) { setMessage(error instanceof Error ? error.message : "Payment could not be confirmed."); } finally { setBusy(false); } }; return <div className="staff-dialog-backdrop"><section className="staff-dialog" role="dialog" aria-modal="true" aria-label="Counter payment"><header><h2>Counter payment</h2><button className="icon-button" onClick={onClose}>×</button></header><p><b>Order:</b> #{order.order_number || order.public_token || row.id.slice(0, 8)}</p><p><b>Total:</b> {currency}{Number(row.amount || order.total_amount || 0).toFixed(2)}</p><p className="info-panel">This order will reach Kitchen only after this authoritative payment confirmation.</p>{message && <p className="staff-notice">{message}</p>}<footer><button className="staff-button" onClick={onClose}>Close</button><button className="staff-button primary" disabled={busy} onClick={() => void run()}>{busy ? "Confirming…" : row.claim ? "Take payment" : "Claim & take payment"}</button></footer></section></div>; }
-function AreaError({ text, retry }: { text: string; retry?: () => void | Promise<void> }) { return <div className="area-error"><p>{text}</p>{retry ? <button className="staff-button" onClick={() => void retry()}>Retry</button> : null}</div>; }
-function Empty({ text }: { text: string }) { return <p className="staff-empty">{text}</p>; }
+function CounterHeader({ context, online, queued, testMode, onLock }: { context: LiveDeviceContext | null; online: boolean; queued: number; testMode: boolean; onLock: () => void }) {
+  return (
+    <HStack gap={4} vAlign="center" hAlign="between" wrap="wrap" style={{ background: "var(--color-background-card)", borderBottom: "1px solid var(--color-border)", padding: "14px 20px" }}>
+      <HStack gap={3} vAlign="center" wrap="wrap">
+        <Heading level={2} weight="semibold">Counter</Heading>
+        <StatusBadge tone="info">{testMode ? "Test mode" : "Counter display"}</StatusBadge>
+        <Text type="supporting" color="secondary">{context?.device.location_label || context?.business.name || "Assigned location"}</Text>
+      </HStack>
+      <HStack gap={3} vAlign="center">
+        <StatusBadge tone={online ? "success" : "warning"}>
+          <HStack gap={1} vAlign="center">{online ? <Wifi size={14} aria-hidden="true" /> : <WifiOff size={14} aria-hidden="true" />}{testMode ? "Test session · current" : connectionLabel(online, queued)}</HStack>
+        </StatusBadge>
+        <IconButton label="Lock device" variant="ghost" icon={<Lock size={18} aria-hidden="true" />} onClick={onLock} />
+      </HStack>
+    </HStack>
+  );
+}
+
+function ProductTile({ product, currency, quantity, onAdd, onDecrease }: { product: Product; currency: string; quantity: number; onAdd: () => void; onDecrease: () => void }) {
+  return (
+    <Card padding={3} elevation="low">
+      <VStack gap={2}>
+        <div style={{ position: "relative", height: 88, borderRadius: 10, overflow: "hidden", background: "var(--color-background-muted)", display: "grid", placeItems: "center" }}>
+          {product.primary_image_path ? <Image src={product.primary_image_path} alt="" fill sizes="160px" unoptimized /> : <UtensilsCrossed size={26} aria-hidden="true" />}
+        </div>
+        <VStack gap={0}>
+          <Text type="body" weight="semibold" color="primary">{product.name}</Text>
+          <Text type="supporting" color="secondary">{formatCurrency(product.price, currency)}</Text>
+        </VStack>
+        {!product.is_available ? (
+          <StatusBadge tone="neutral">Unavailable</StatusBadge>
+        ) : quantity ? (
+          <HStack gap={2} vAlign="center" hAlign="between">
+            <IconButton label={`Decrease ${product.name}`} variant="secondary" size="sm" icon={<Minus size={14} aria-hidden="true" />} onClick={onDecrease} />
+            <Text type="body" weight="semibold" color="primary">{String(quantity)}</Text>
+            <IconButton label={`Increase ${product.name}`} variant="secondary" size="sm" icon={<Plus size={14} aria-hidden="true" />} onClick={onAdd} />
+          </HStack>
+        ) : (
+          <Button label="Add" variant="secondary" size="sm" width="100%" onClick={onAdd} />
+        )}
+      </VStack>
+    </Card>
+  );
+}
+
+function KitchenOrdersView({ orders, pending, error, currency, busy, now, onRefresh, onOpen, onPayment }: { orders: Order[]; pending: PendingPaymentRow[]; error?: string; currency: string; busy: string; now: number; onRefresh: () => Promise<void>; onOpen: (order: Order) => void; onPayment: (row: PendingPaymentRow) => void }) {
+  const [search, setSearch] = useState("");
+  const query = search.trim().toLowerCase();
+  const visible = orders.filter((order) => !query || String(order.order_number || order.public_token).toLowerCase().includes(query) || order.status.toLowerCase().includes(query));
+  return (
+    <VStack gap={5}>
+      <Panel title="Kitchen orders" description="Track status and handover. Preparation actions stay on the Kitchen display." actions={<IconButton label="Refresh orders" variant="ghost" size="sm" icon={<RefreshCw size={15} aria-hidden="true" />} onClick={() => void onRefresh()} />}>
+        <VStack gap={4}>
+          <TextInput label="Search orders" isLabelHidden value={search} onChange={setSearch} placeholder="Search by order number or status" width={320} />
+          {error ? (
+            <NoticeBanner tone="danger" title={error} action={<Button label="Retry" variant="secondary" size="sm" onClick={() => void onRefresh()} />} role="alert" />
+          ) : visible.length ? (
+            <Table
+              idKey="id"
+              data={visible as Array<Order & Record<string, unknown>>}
+              columns={[
+                { key: "order", header: "Order", renderCell: (row: Order) => `#${row.order_number || row.public_token}` },
+                { key: "source", header: "Source", renderCell: (row: Order) => orderSourceLabel(row.source) },
+                { key: "payment", header: "Payment", renderCell: (row: Order) => row.payment_status },
+                { key: "status", header: "Kitchen status", renderCell: (row: Order) => <StatusBadge tone={row.status === "ready" ? "success" : row.status === "completed" ? "neutral" : "info"}>{row.status}</StatusBadge> },
+                { key: "elapsed", header: "Elapsed", renderCell: (row: Order) => elapsedLabel(row.placed_at, now) },
+                { key: "open", header: "", align: "end", renderCell: (row: Order) => <Button label={`Details for order ${row.order_number || row.public_token}`} variant="ghost" size="sm" onClick={() => onOpen(row)} /> },
+              ]}
+            />
+          ) : (
+            <EmptyBlock title="No Kitchen orders match" description="Orders sent to the Kitchen appear here." />
+          )}
+        </VStack>
+      </Panel>
+      <Panel title="Awaiting payment" description="Kiosk and QR orders the counter has not collected yet.">
+        {pending.length ? (
+          <VStack gap={2}>
+            {pending.map((row) => (
+              <Button key={row.id} label={`#${row.order?.order_number || row.id.slice(0, 8)} · ${orderSourceLabel(row.order?.source)} · ${formatCurrency(Number(row.amount || row.order?.total_amount || 0), currency)}`} variant="secondary" width="100%" isDisabled={!!busy} onClick={() => onPayment(row)} />
+            ))}
+          </VStack>
+        ) : (
+          <EmptyBlock title="Nothing awaiting payment" description="Kiosk and QR orders waiting for the counter appear here." />
+        )}
+      </Panel>
+    </VStack>
+  );
+}
+
+function ModifierDrawer({ product, selected, currency, onToggle, onClose, onConfirm }: { product: Product; selected: ModifierOption[]; currency: string; onToggle: (option: ModifierOption) => void; onClose: () => void; onConfirm: () => void }) {
+  return (
+    <DetailDrawer
+      title={`Configure ${product.name}`}
+      isOpen
+      onClose={onClose}
+      footer={<HStack gap={2} hAlign="end"><Button label="Cancel" variant="secondary" onClick={onClose} /><Button label="Add to order" variant="primary" onClick={onConfirm} /></HStack>}
+    >
+      <VStack gap={5}>
+        {(product.modifier_groups || []).map((group) => (
+          <VStack key={group.id} gap={2}>
+            <Text type="label" color="primary">{`${group.name}${group.is_required ? " (required)" : ""}`}</Text>
+            {group.options.filter((option) => option.is_available).map((option) => (
+              <CheckboxInput key={option.id} label={`${option.name}${option.price_delta ? ` · +${formatCurrency(option.price_delta, currency)}` : ""}`} value={selected.some((item) => item.id === option.id)} onChange={() => onToggle(option)} />
+            ))}
+          </VStack>
+        ))}
+      </VStack>
+    </DetailDrawer>
+  );
+}
+
+function OrderDrawer({ order, currency, busy, onClose, onHandover }: { order: Order; currency: string; busy: string; onClose: () => void; onHandover: (order: Order) => void }) {
+  return (
+    <DetailDrawer
+      title={`Order #${order.order_number || order.public_token}`}
+      isOpen
+      onClose={onClose}
+      footer={order.status === "ready" ? <Button label="Mark handed over" variant="primary" width="100%" isDisabled={!!busy} onClick={() => onHandover(order)} /> : undefined}
+    >
+      <VStack gap={4}>
+        <DetailRow label="Source">{orderSourceLabel(order.source)}</DetailRow>
+        <DetailRow label="Payment">{order.payment_status}</DetailRow>
+        <DetailRow label="Kitchen status"><StatusBadge tone={order.status === "ready" ? "success" : "info"}>{order.status}</StatusBadge></DetailRow>
+        <DetailRow label="Total">{formatCurrency(order.total_amount, currency)}</DetailRow>
+        <VStack gap={1}>
+          <Text type="label" color="primary">Items</Text>
+          {(order.order_items || []).map((item) => <Text key={item.id} type="body" color="primary">{`${item.quantity} × ${item.product_name}`}</Text>)}
+        </VStack>
+      </VStack>
+    </DetailDrawer>
+  );
+}
+
+function PaymentDrawer({ row, currency, testMode, onClose, onRefresh }: { row: PendingPaymentRow; currency: string; testMode: boolean; onClose: () => void; onRefresh: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const order = row.order || {};
+  const amount = Number(row.amount || order.total_amount || 0);
+  const run = async () => {
+    setBusy(true);
+    try {
+      if (testMode) await api.testRuntimeMarkPaid(row.id);
+      else {
+        if (!row.claim) await api.liveCounterClaimPayment(row.id);
+        await api.liveCounterSessionMarkPaid(row.id, { business_id: String(row.business_id), amount, method: "cash" });
+      }
+      await onRefresh();
+      onClose();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Payment could not be confirmed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <DetailDrawer
+      title="Counter payment"
+      isOpen
+      onClose={onClose}
+      footer={<HStack gap={2} hAlign="end"><Button label="Close" variant="secondary" onClick={onClose} /><Button label={row.claim ? "Take payment" : "Claim & take payment"} variant="primary" isLoading={busy} isDisabled={busy} onClick={() => void run()} /></HStack>}
+    >
+      <VStack gap={4}>
+        <DetailRow label="Order">{`#${order.order_number || order.public_token || row.id.slice(0, 8)}`}</DetailRow>
+        <DetailRow label="Total">{formatCurrency(amount, currency)}</DetailRow>
+        <NoticeBanner tone="info" title="This order reaches Kitchen only after payment is confirmed here." />
+        {message ? <NoticeBanner tone="danger" title={message} role="alert" /> : null}
+      </VStack>
+    </DetailDrawer>
+  );
+}

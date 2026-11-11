@@ -8,3 +8,13 @@
 **/.pytest_cache
 **/test-results
 **/playwright-report
+
+# Hardening: no env files, venvs or local data in the image, at any depth.
+**/.env
+**/.env.*
+!**/.env.example
+**/venv
+**/.venv
+**/uploads
+**/email_outbox
+**/*.pyc

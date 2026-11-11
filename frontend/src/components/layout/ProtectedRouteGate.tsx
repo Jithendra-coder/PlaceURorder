@@ -2,14 +2,18 @@
 
 import { useEffect, useMemo, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { Button } from "@astryxdesign/core/Button";
 import { useBusiness } from "@/components/layout/BusinessProvider";
 import { safeSetupRoute } from "@/lib/protected-routing";
+import { DashboardPage, DashboardPageSkeleton, NoticeBanner } from "@/components/dashboard/kit";
 
 import { AutoRecoveringState } from "@/components/ui/AutoRecoveringState";
-import { SetupShellSkeleton, WorkspaceSkeleton } from "@/components/ui/Skeletons";
+import { SetupShellSkeleton } from "@/components/ui/Skeletons";
 
 type ProtectedArea = "dashboard" | "setup";
 
+// The dashboard gate sits inside the app shell, so the navigation stays on screen while the workspace loads.
+// Only the content area swaps between a placeholder shaped like the real page and the page itself.
 export function ProtectedRouteGate({ area, children }: { area: ProtectedArea; children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -29,18 +33,33 @@ export function ProtectedRouteGate({ area, children }: { area: ProtectedArea; ch
     if (redirectTarget) router.replace(redirectTarget);
   }, [redirectTarget, router]);
 
+  const retry = async () => { await Promise.all([refresh(), refreshOnboarding()]); };
+
   if (unresolved || redirectTarget) {
-    return area === "setup" ? <SetupShellSkeleton /> : <WorkspaceSkeleton />;
+    return area === "setup" ? <SetupShellSkeleton /> : <DashboardPageSkeleton />;
   }
 
   if (loadError || !onboardingStatus) {
+    if (area === "dashboard") {
+      return (
+        <DashboardPage>
+          <NoticeBanner
+            tone="danger"
+            title="Could not verify your workspace"
+            description={loadError || "Onboarding status is currently unavailable."}
+            role="alert"
+            action={<Button label="Try again" variant="secondary" onClick={() => void retry()} />}
+          />
+        </DashboardPage>
+      );
+    }
     return (
       <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: "24px", background: "#f8fafc" }}>
         <div style={{ width: "100%", maxWidth: "560px" }}>
           <AutoRecoveringState
             title="Could not verify your workspace"
             description={loadError || "Onboarding status is currently unavailable."}
-            onRetry={async () => { await Promise.all([refresh(), refreshOnboarding()]); }}
+            onRetry={retry}
           />
         </div>
       </div>

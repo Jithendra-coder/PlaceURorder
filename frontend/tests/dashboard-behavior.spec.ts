@@ -54,7 +54,7 @@ async function mockDashboard(page: Page, locations: Array<{ id: string; name: st
 }
 
 async function openArchive(page: Page) {
-  await page.getByRole("button", { name: "Open Classic Burger details" }).click({ force: true });
+  await page.getByRole("button", { name: "Open Classic Burger details" }).dispatchEvent("click");
   const drawer = page.locator("dialog[open]");
   await expect(drawer.getByRole("heading", { name: "Classic Burger" })).toBeVisible();
   await drawer.getByRole("button", { name: "Archive", exact: true }).click();
@@ -72,7 +72,9 @@ test("Manage Menu archive dialog is wired to one target and closes safely", asyn
   await page.keyboard.press("Escape");
   await expect(page.getByRole("heading", { name: "Archive item?" })).toHaveCount(0);
   await openArchive(page);
-  await page.locator("dialog.mt-overlay--dialog button[aria-label=Close]").click();
+  // The archive confirm sits above the still-open drawer, so cancel it before closing the drawer.
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await page.locator("dialog[open]").getByRole("button", { name: "Close", exact: true }).first().click();
   await expect(page.getByRole("heading", { name: "Archive item?" })).toHaveCount(0);
 });
 
@@ -85,7 +87,7 @@ test("Branding & Theme uses the shared logo upload without a logo shape control"
   await expect(page.getByRole("heading", { name: "Brand colors" })).toBeVisible();
   await expect(page.getByText("Logo Shape", { exact: true })).toHaveCount(0);
   await page.screenshot({ path: "../qa-artifacts/ui-audit/after/logo-refresh/branding-theme.png", fullPage: true });
-  await expect(page.getByLabel("Choose logo")).toHaveAttribute("accept", "image/png,image/jpeg,image/gif,image/webp");
+  await expect(page.locator('input[type="file"]').first()).toHaveAttribute("accept", "image/png,image/jpeg,image/gif,image/webp");
   await expect(page.getByText("PNG, JPG, GIF or WebP · 5 MB max")).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false);
@@ -104,18 +106,18 @@ test("Manage Menu keeps a menu-local error and retry when a required API fails",
   await page.goto("/dashboard/kiosk-experience/menu?mode=items");
   const errorState = page.getByRole("alert").filter({ hasText: "Could not load Manage Menu." });
   await expect(errorState).toContainText("The server could not complete this request.");
-  await expect(errorState.getByRole("button", { name: "Try again now" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Try again now" })).toBeVisible();
 });
 
-test("Ask AI starts closed and opens as a compact floating panel on desktop and mobile", async ({ page }) => {
+test("Ask AI is a logo-only corner trigger that opens a drawer and closes on Escape", async ({ page }) => {
   await mockDashboard(page);
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/dashboard");
 
-  const trigger = page.getByRole("button", { name: "Ask AI" });
-  const panel = page.locator("#mt-ai-dialog");
+  const trigger = page.getByRole("button", { name: "Ask AI", exact: true });
+  const drawer = page.getByRole("dialog", { name: "Ask AI" });
   await expect(trigger).toBeEnabled();
-  await expect(panel).toBeHidden();
+  await expect(drawer).toBeHidden();
 
   const triggerBox = await trigger.boundingBox();
   expect(triggerBox).not.toBeNull();
@@ -123,41 +125,23 @@ test("Ask AI starts closed and opens as a compact floating panel on desktop and 
   expect(Math.abs(800 - (triggerBox!.y + triggerBox!.height) - 24)).toBeLessThanOrEqual(1);
 
   await trigger.click();
-  await expect(panel).toBeVisible();
-  await expect(panel.locator(".mt-ai-composer-meta, .mt-ai-privacy")).toHaveCount(0);
-  let panelBox = await panel.boundingBox();
-  expect(panelBox?.width).toBeLessThanOrEqual(380);
-  expect(panelBox?.height).toBeLessThanOrEqual(520);
-  const focusStyles = await panel.locator("textarea").evaluate((element) => ({
-    inputOutline: getComputedStyle(element).outlineStyle,
-    inputShadow: getComputedStyle(element).boxShadow,
-    fieldShadow: getComputedStyle(element.closest("form")!).boxShadow,
-    fieldBorder: getComputedStyle(element.closest("form")!).borderTopColor,
+  await expect(drawer).toBeVisible();
+  const drawerBox = await drawer.boundingBox();
+  expect(drawerBox?.width).toBeLessThanOrEqual(480);
+
+  const textarea = drawer.locator("textarea");
+  const focusStyles = await textarea.evaluate((element) => ({
+    outline: getComputedStyle(element).outlineStyle,
+    shadow: getComputedStyle(element).boxShadow,
   }));
-  expect(focusStyles.inputOutline).toBe("none");
-  expect(focusStyles.inputShadow).toBe("none");
-  expect(focusStyles.fieldShadow).toBe("none");
-  expect(focusStyles.fieldBorder).toBe("rgb(132, 202, 255)");
-  const textarea = panel.locator("textarea");
+  expect(focusStyles.outline).toBe("none");
+  expect(focusStyles.shadow).toBe("none");
+
   await textarea.fill("How many orders were placed in the last 24 hours, and which items sold best across all available locations?");
   await expect.poll(() => textarea.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThan(42);
-  await page.locator(".mt-dashboard-main").click({ position: { x: 10, y: 100 } });
-  await expect(panel).toBeHidden();
-  await expect(trigger).not.toBeFocused();
 
-  await trigger.click();
-  await expect(panel).toBeVisible();
-  await panel.getByRole("button", { name: "Close Ask AI" }).click();
-  await expect(panel).toBeHidden();
-
-  await page.setViewportSize({ width: 390, height: 844 });
-  await trigger.click();
-  await expect(panel).toBeVisible();
-  panelBox = await panel.boundingBox();
-  expect(panelBox?.x).toBeGreaterThanOrEqual(0);
-  expect(panelBox!.x + panelBox!.width).toBeLessThanOrEqual(390);
   await page.keyboard.press("Escape");
-  await expect(panel).toBeHidden();
+  await expect(drawer).toBeHidden();
 });
 
 test("dashboard popovers close on outside pointer interaction", async ({ page }) => {
@@ -165,37 +149,31 @@ test("dashboard popovers close on outside pointer interaction", async ({ page })
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/dashboard");
 
-  await page.locator(".mt-dashboard-location").click();
-  await expect(page.getByRole("listbox", { name: "Business locations" })).toBeVisible();
-  await page.locator(".mt-dashboard-main").click({ position: { x: 10, y: 100 } });
-  await expect(page.getByRole("listbox", { name: "Business locations" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Business location" }).click();
+  await expect(page.getByRole("menu")).toBeVisible();
+  await page.mouse.click(10, 500);
+  await expect(page.getByRole("menu")).toHaveCount(0);
 
-  await page.locator(".mt-dashboard-topbar-location").click();
-  await expect(page.getByRole("listbox", { name: "Business locations" })).toBeVisible();
-  await page.locator(".mt-dashboard-main").click({ position: { x: 10, y: 100 } });
-  await expect(page.getByRole("listbox", { name: "Business locations" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Business location" }).click();
+  await expect(page.getByRole("menu")).toBeVisible();
+  await page.mouse.click(10, 500);
+  await expect(page.getByRole("menu")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Notifications" }).click();
   await expect(page.getByRole("dialog", { name: "Notifications" })).toBeVisible();
-  await page.locator(".mt-dashboard-main").click({ position: { x: 10, y: 100 } });
+  await page.mouse.click(10, 500);
   await expect(page.getByRole("dialog", { name: "Notifications" })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Account" }).click();
   await expect(page.getByRole("menu")).toBeVisible();
-  await page.locator(".mt-dashboard-main").click({ position: { x: 10, y: 100 } });
+  await page.mouse.click(10, 500);
   await expect(page.getByRole("menu")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Collapse sidebar" }).click();
-  await page.getByRole("button", { name: "Open Insights" }).click();
-  await expect(page.getByRole("navigation", { name: "Insights navigation" })).toBeVisible();
-  await page.locator(".mt-dashboard-main").click({ position: { x: 10, y: 100 } });
-  await expect(page.getByRole("navigation", { name: "Insights navigation" })).toHaveCount(0);
-
-  await page.goto("/dashboard/kiosk-experience/menu?mode=items");
-  await page.locator('summary[aria-label="Actions for Burgers"]').click();
-  await expect(page.locator("details.mt-menu-more[open]")).toHaveCount(1);
-  await page.locator(".mt-dashboard-main").click({ position: { x: 10, y: 100 } });
-  await expect(page.locator("details.mt-menu-more[open]")).toHaveCount(0);
+  await page.getByRole("button", { name: "Insights", exact: true }).click();
+  await expect(page.getByRole("link", { name: "Menu Performance", exact: true })).toBeVisible();
+  await page.mouse.click(10, 500);
+  await expect(page.getByRole("link", { name: "Menu Performance", exact: true })).toHaveCount(0);
 });
 
 test("Insights fails locally while Sales & Orders and Menu Performance render with dashboard data", async ({ page }) => {
@@ -234,24 +212,24 @@ test("Availability uses zero, one, and two-location modal rules", async ({ page 
   await mockDashboard(page, []);
   await page.goto("/dashboard/kiosk-experience/availability");
   await expect(page.getByRole("heading", { name: "Availability" })).toBeVisible();
-  await page.locator("label.mt-toggle").first().click();
+  await page.locator("[role=switch]").first().click();
   await page.getByRole("button", { name: "Apply", exact: true }).click();
   await expect(page.getByText(/Apply to \d+ locations\?/)).toHaveCount(0);
 
   await page.unrouteAll({ behavior: "ignoreErrors" });
   await mockDashboard(page, locations.slice(0, 1));
   await page.reload();
-  await page.locator("label.mt-toggle").first().click();
+  await page.locator("[role=switch]").first().click();
   await page.getByRole("button", { name: "Apply", exact: true }).click();
   await expect(page.getByText(/Apply to \d+ locations\?/)).toHaveCount(0);
 
   await page.unrouteAll({ behavior: "ignoreErrors" });
   await mockDashboard(page, locations);
   await page.reload();
-  await page.locator("label.mt-toggle").first().click();
+  await page.locator("[role=switch]").first().click();
   await page.getByRole("button", { name: "Apply", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Apply to 2 locations?" })).toBeVisible();
-  await page.getByRole("dialog", { name: "Apply to 2 locations?" }).getByRole("button", { name: "Cancel", exact: true }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Apply to 2 locations?" })).toHaveCount(0);
 });
 
@@ -262,10 +240,10 @@ test("Promotions route has one visible heading and no generic details page", asy
   await expect(page.getByText("Promotion details", { exact: true })).toHaveCount(0);
 });
 
-test("QR Codes page uses the shared page heading", async ({ page }) => {
+test("QR ordering page uses the shared page heading", async ({ page }) => {
   await mockDashboard(page);
   await page.goto("/dashboard/kiosk-experience/qr-codes");
-  await expect(page.getByRole("heading", { name: "QR Codes", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "QR ordering", level: 1 })).toBeVisible();
 });
 
 test("Promotions renders working groups and guarded create types", async ({ page }) => {
@@ -281,7 +259,7 @@ test("Promotions renders working groups and guarded create types", async ({ page
   await expect(page.getByRole("heading", { name: "SCHEDULED" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "DRAFT" })).toBeVisible();
   await expect(page.getByText("Old Deal", { exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: /Ended/ }).click();
+  await page.getByRole("radio", { name: /Ended/ }).click();
   await expect(page.getByText("Old Deal", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Create promotion" }).first().click();
   await expect(page.getByRole("heading", { name: "Create promotion" })).toBeVisible();

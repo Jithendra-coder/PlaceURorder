@@ -2,14 +2,27 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Bell, Check, ChevronRight, Clock3, Expand, Filter, Lock, PackageCheck, Pause, Play, RefreshCw, Search, UtensilsCrossed, Volume2, VolumeX, Wifi, WifiOff, X } from "lucide-react";
+import { RefreshCw } from "lucide-react";
+import { Button } from "@astryxdesign/core/Button";
+import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
+import { Card } from "@astryxdesign/core/Card";
+import { Grid } from "@astryxdesign/core/Grid";
+import { IconButton } from "@astryxdesign/core/IconButton";
+import { HStack, VStack } from "@astryxdesign/core/Stack";
+import { Heading, Text } from "@astryxdesign/core/Text";
+import { Tab as AstryxTab, TabList } from "@astryxdesign/core/TabList";
+import { Table } from "@astryxdesign/core/Table";
+import { TextArea } from "@astryxdesign/core/TextArea";
+import { TextInput } from "@astryxdesign/core/TextInput";
+import { AstryxDashboardProviders } from "@/components/dashboard/AstryxDashboardProviders";
+import { BoardColumn, BoardGrid, DetailDrawer, EmptyBlock, Metric, NoticeBanner, Panel, StatusBadge } from "@/components/dashboard/kit";
+import { SegmentedShare } from "@/components/dashboard/charts";
+import { DeviceCard, DeviceFrame, DeviceLoading } from "@/components/device/DeviceFrame";
 import { api } from "@/lib/api";
 import type { LiveDeviceContext, Order, OrderItem, Product } from "@/lib/types";
-import { connectionLabel, elapsedLabel, kitchenLabel, kitchenStage, type KitchenStage } from "@/features/staff/status";
+import { elapsedLabel, isOnlineOrder, kitchenLabel, kitchenStage, orderSourceLabel, type KitchenStage } from "@/features/staff/status";
 import { queuedKitchenEvents, removeKitchenEvent, saveKitchenEvent, type KitchenQueuedEvent } from "./offline-store";
 import { testDeviceContext, testOrder, testProducts, testSessionStateMessage } from "@/features/test-runtime";
-import { AutoRecoveringState } from "@/components/ui/AutoRecoveringState";
-import { KitchenDisplaySkeleton } from "@/components/ui/Skeletons";
 
 type Tab = "live" | "availability" | "completed";
 type KitchenOrder = Order & { source?: string; items?: (OrderItem & { completed_quantity?: number; kitchen_status?: string })[]; kitchen?: { stage?: KitchenStage; is_held?: boolean; hold_reason?: string; delayed?: boolean; delay_minutes?: number }; sync_state?: string };
@@ -21,7 +34,8 @@ export function KitchenApp({ runtimeMode = "live" }: { runtimeMode?: "live" | "t
   const [tab, setTab] = useState<Tab>((params.get("tab") as Tab) || "live");
   const [context, setContext] = useState<LiveDeviceContext | null>(null); const [orders, setOrders] = useState<KitchenOrder[]>([]); const [completed, setCompleted] = useState<KitchenOrder[]>([]); const [products, setProducts] = useState<Product[]>([]); const [queue, setQueue] = useState<KitchenQueuedEvent[]>([]);
   const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine); const [sound, setSound] = useState(true); const [now, setNow] = useState(0); const [loading, setLoading] = useState(true); const [shellError, setShellError] = useState(""); const [errors, setErrors] = useState<Record<string, string>>({}); const [notice, setNotice] = useState(""); const [busy, setBusy] = useState("");
-  const [selected, setSelected] = useState<KitchenOrder | null>(null); const [heldOpen, setHeldOpen] = useState(false); const [allDayOpen, setAllDayOpen] = useState(false); const [allDay, setAllDay] = useState<Array<Record<string, unknown>>>([]); const [delayedOnly, setDelayedOnly] = useState(false); const [mobileStage, setMobileStage] = useState<KitchenStage>("pending"); const [holdOrder, setHoldOrder] = useState<KitchenOrder | null>(null); const [recallOrder, setRecallOrder] = useState<KitchenOrder | null>(null);
+  const [selected, setSelected] = useState<KitchenOrder | null>(null); const [heldOpen, setHeldOpen] = useState(false); const [allDayOpen, setAllDayOpen] = useState(false); const [allDay, setAllDay] = useState<Array<Record<string, unknown>>>([]); const [delayedOnly, setDelayedOnly] = useState(false);
+  const [sourceFilter, setSourceFilter] = useState<"all" | "online" | "instore">("all"); const [holdOrder, setHoldOrder] = useState<KitchenOrder | null>(null); const [recallOrder, setRecallOrder] = useState<KitchenOrder | null>(null);
   const setAreaError = (area: string, value = "") => setErrors((current) => ({ ...current, [area]: value }));
   const invoke = useCallback((event: KitchenQueuedEvent) => { if (isTest) { if (event.action === "availability") return api.testKitchenSetAvailability(event.productId!, (event.payload as { status: string }).status === "available"); if (event.action === "item") return api.testKitchenItem(event.orderId!, event.itemId!, (event.payload as { completed_quantity: number }).completed_quantity); return api.testKitchenAction(event.action as "start" | "hold" | "resume" | "ready" | "recall", event.orderId!, event.payload as Record<string, unknown>); } if (event.action === "start") return api.liveKitchenStart(event.orderId!, event.payload as { event_id: string }); if (event.action === "hold") return api.liveKitchenHold(event.orderId!, event.payload as { event_id: string; reason: string }); if (event.action === "resume") return api.liveKitchenResume(event.orderId!, event.payload as { event_id: string }); if (event.action === "ready") return api.liveKitchenReady(event.orderId!, event.payload as { event_id: string }); if (event.action === "recall") return api.liveKitchenRecall(event.orderId!, event.payload as { event_id: string; reason: string; override_token: string }); if (event.action === "item") return api.liveKitchenItem(event.orderId!, event.itemId!, event.payload as { event_id: string; completed_quantity: number }); return api.liveKitchenSetAvailability(event.productId!, event.payload as { event_id: string; status: "available" | "temporarily_unavailable" | "out_of_stock" }); }, [isTest]);
   const refreshBoard = useCallback(async () => { try { const board = isTest ? await api.testKitchenOrders() : await api.liveKitchenBoard(); setOrders((isTest ? board.orders.map((order) => testOrder(order, context?.business.id || "test")) : board.orders) as KitchenOrder[]); setAreaError("board"); } catch { setAreaError("board", "Couldn't load Kitchen orders. The server couldn't complete this request."); } }, [context?.business.id, isTest]);
@@ -46,57 +60,299 @@ export function KitchenApp({ runtimeMode = "live" }: { runtimeMode?: "live" | "t
   const changeTab = (next: Tab) => { setTab(next); router.replace(isTest ? `/test/kitchen?tab=${next}` : `/device?tab=${next}`); };
   const submit = async (event: KitchenQueuedEvent) => { setBusy(event.id); try { if (!online && !isTest) throw new Error("Offline"); await invoke(event); await refreshBoard(); if (event.action === "availability") await refreshOptional(); return true; } catch (error) { const message = error instanceof Error ? error.message : "Kitchen action failed."; if (!isTest && (!online || /network|offline|fetch/i.test(message))) { await saveKitchenEvent(event); setQueue(await queuedKitchenEvents()); setNotice("Saved locally. Kitchen Sync will retry with the same event ID."); } else setNotice(message); return false; } finally { setBusy(""); } };
   const action = (actionName: KitchenQueuedEvent["action"], order: KitchenOrder, extra: Record<string, unknown> = {}, itemId?: string) => void submit({ id: makeId(), action: actionName, orderId: order.id, itemId, payload: { event_id: makeId(), ...extra }, createdAt: new Date().toISOString(), retryCount: 0 });
-  const held = orders.filter((order) => order.kitchen?.is_held); const active = orders.filter((order) => !order.kitchen?.is_held); const delayed = active.filter((order) => order.kitchen?.delayed); const lanes = (["pending", "preparing", "ready"] as const).map((stage) => ({ stage, label: kitchenLabel(stage), orders: active.filter((order) => kitchenStage(order) === stage && (!delayedOnly || order.kitchen?.delayed)) }));
+  const held = orders.filter((order) => order.kitchen?.is_held); const active = orders.filter((order) => !order.kitchen?.is_held && (sourceFilter === "all" || isOnlineOrder(order.source) === (sourceFilter === "online"))); const onlineCount = orders.filter((order) => !order.kitchen?.is_held && isOnlineOrder(order.source)).length; const delayed = active.filter((order) => order.kitchen?.delayed); const lanes = (["pending", "preparing", "ready"] as const).map((stage) => ({ stage, label: kitchenLabel(stage), orders: active.filter((order) => kitchenStage(order) === stage && (!delayedOnly || order.kitchen?.delayed)) }));
   const toggleSound = async () => { const next = !sound; setSound(next); if (isTest) return; try { await api.liveKitchenSetPreferences({ sound_enabled: next }); setAreaError("preferences"); } catch { setSound(!next); setAreaError("preferences", "Kitchen sound preference unavailable."); } };
   const fullscreen = () => { if (!document.fullscreenElement) void document.documentElement.requestFullscreen?.(); else void document.exitFullscreen?.(); };
   const loadAllDay = useCallback(async () => { if (isTest) { setAllDay([]); return; } try { setAllDay((await api.liveKitchenAllDay()).items); } catch { setNotice("Couldn't load All Day view."); } }, [isTest]);
   if (shellError && !context) {
     return (
-      <main className="staff-recovery">
-        <section style={{ maxWidth: "500px", width: "100%", padding: "12px" }}>
-          <AutoRecoveringState
-            title="PlaceURorder Kitchen"
-            description={isTest ? testSessionStateMessage(new Error(shellError)) : shellError}
-            onRetry={load}
-            action={
-              <button
-                type="button"
-                className="mt-button mt-button--secondary"
-                onClick={() => router.push(isTest ? "/dashboard/test" : "/device/start")}
-              >
-                {isTest ? "Return to Test Hub" : "Pair or recover device"}
-              </button>
-            }
-          />
-        </section>
-      </main>
+      <DeviceFrame>
+        <DeviceCard title={isTest ? "Test Kitchen" : "PlaceURorder Kitchen"} description={isTest ? testSessionStateMessage(new Error(shellError)) : shellError}>
+          <VStack gap={3}>
+            <Button label="Try again" variant="secondary" width="100%" onClick={() => void load()} />
+            <Button label={isTest ? "Return to Test Hub" : "Pair or recover device"} variant="primary" width="100%" onClick={() => router.push(isTest ? "/dashboard/test" : "/device/start")} />
+          </VStack>
+        </DeviceCard>
+      </DeviceFrame>
     );
   }
-  if (loading && !context) return <KitchenDisplaySkeleton />;
-  return <main className="staff-app kitchen-app-v2">
-    <KitchenHeader context={context} now={now} online={online} queue={queue.length} sound={sound} testMode={isTest} onSound={toggleSound} onFullscreen={fullscreen} onExit={() => isTest ? router.push("/dashboard/test") : void api.clearLiveDeviceSession().then(() => router.push("/device/start"))}/>
-    <nav className="staff-primary-nav kitchen-primary-nav" aria-label="Kitchen application" role="tablist">{([ ["live", "Live Orders"], ["availability", "Item Availability"], ["completed", "Completed"] ] as const).map(([key, label]) => <button key={key} role="tab" aria-selected={tab === key} className={tab === key ? "active" : ""} onClick={() => changeTab(key)}>{label}</button>)}{tab === "live" && <div className="kitchen-nav-actions"><button onClick={() => setAllDayOpen(true)}>All Day View</button><button onClick={() => setDelayedOnly((value) => !value)} className={delayedOnly ? "active-filter" : ""}><Filter size={15}/>{delayedOnly ? "Delayed" : "Filter"}</button></div>}</nav>
-    {notice && <p className="staff-notice" role="status">{notice}</p>}
-    {tab === "live" && <><section className="kitchen-summary-strip">{errors.board ? <><SummaryCard label="New" count="—" tone="blue"/><SummaryCard label="Preparing" count="—" tone="orange"/><SummaryCard label="Ready" count="—" tone="green"/><SummaryCard label="Held" count="—" tone="purple"/><SummaryCard label="Delayed" count="—" tone="red"/></> : <><SummaryCard label="New" count={String(active.filter((order) => kitchenStage(order) === "pending").length)} tone="blue"/><SummaryCard label="Preparing" count={String(active.filter((order) => kitchenStage(order) === "preparing").length)} tone="orange"/><SummaryCard label="Ready" count={String(active.filter((order) => kitchenStage(order) === "ready").length)} tone="green"/><button className="summary-card purple" onClick={() => setHeldOpen(true)}><span><Pause size={18}/></span><div><small>Held</small><b>{held.length}</b></div></button><button className="summary-card red" onClick={() => setDelayedOnly((value) => !value)}><span><Clock3 size={18}/></span><div><small>Delayed</small><b>{delayed.length}</b></div></button></>}</section>{delayedOnly ? <div className="active-filter-banner">Showing delayed orders in their current lane.<button onClick={() => setDelayedOnly(false)}>Clear filter</button></div> : null}<div className="kitchen-stage-selector" aria-label="Kitchen lane selector">{lanes.map((lane) => <button className={mobileStage === lane.stage ? "active" : ""} key={lane.stage} onClick={() => setMobileStage(lane.stage)}>{lane.label} ({lane.orders.length})</button>)}</div><section className="kitchen-board" aria-label="Live Kitchen orders">{lanes.map((lane) => <KitchenLane key={lane.stage} lane={lane} mobileActive={mobileStage === lane.stage} now={now} error={errors.board} busy={busy} onOpen={setSelected} onStart={(order) => action("start", order)} onHold={setHoldOrder} onReady={(order) => action("ready", order)} onRecall={setRecallOrder}/>)}</section></>}
-    {tab === "availability" && <AvailabilityPage products={products} error={errors.availability} busy={busy} onRetry={refreshOptional} onChange={(product, status) => { const previous = products; setProducts((current) => current.map((item) => item.id === product.id ? { ...item, is_available: status === "available" } : item)); void submit({ id: makeId(), action: "availability", productId: product.id, payload: { event_id: makeId(), status }, createdAt: new Date().toISOString(), retryCount: 0 }).then((success) => { if (!success) setProducts(previous); }); }}/>} {tab === "completed" && <CompletedPage orders={completed} error={errors.completed} onRetry={refreshOptional} onOpen={setSelected}/>} 
-    <KitchenSystemBar online={online} queue={queue.length} error={errors.board} now={now} onRefresh={refreshBoard}/>
-    {selected && <OrderDrawer order={selected} busy={busy} onClose={() => setSelected(null)} onItem={(item) => action("item", selected, { completed_quantity: item.completed_quantity === item.quantity ? 0 : item.quantity }, item.id)} onRecall={() => setRecallOrder(selected)} />}
-    {heldOpen && <HeldDrawer orders={held} busy={busy} onClose={() => setHeldOpen(false)} onResume={(order) => action("resume", order)} onOpen={setSelected}/>} {allDayOpen && <AllDayDrawer items={allDay} onLoad={loadAllDay} onClose={() => setAllDayOpen(false)}/>} {holdOrder && <HoldDialog order={holdOrder} busy={busy} onClose={() => setHoldOrder(null)} onConfirm={(reason) => { action("hold", holdOrder, { reason }); setHoldOrder(null); }}/>} {recallOrder && <RecallDialog order={recallOrder} busy={busy} testMode={isTest} onClose={() => setRecallOrder(null)} onConfirm={async (reason, pin) => { try { if (isTest) action("recall", recallOrder, { reason }); else { const result = await api.liveKitchenOverride({ action: "recall", reason, pin }); action("recall", recallOrder, { reason, override_token: result.override_token }); } setRecallOrder(null); } catch (error) { setNotice(error instanceof Error ? error.message : "Recall approval failed."); } }}/>} 
-  </main>;
+  if (loading && !context) return <DeviceLoading title="PlaceURorder Kitchen" message="Loading the kitchen display" />;
+
+  const stageCount = (stage: KitchenStage) => active.filter((order) => kitchenStage(order) === stage).length;
+  const parts = (["pending", "preparing", "ready"] as const).map((stage) => ({ id: stage, label: kitchenLabel(stage), value: stageCount(stage) }));
+  const exitDevice = () => (isTest ? router.push("/dashboard/test") : void api.clearLiveDeviceSession().then(() => router.push("/device/start")));
+
+  return (
+    <AstryxDashboardProviders>
+      <VStack gap={0} style={{ minHeight: "100vh", background: "var(--color-background-muted)" }}>
+        <KitchenHeader context={context} now={now} online={online} queue={queue.length} sound={sound} testMode={isTest} onSound={toggleSound} onFullscreen={fullscreen} onExit={exitDevice} />
+        <VStack gap={0} style={{ background: "var(--color-background-card)", borderBottom: "1px solid var(--color-border)", padding: "0 20px" }}>
+          <HStack gap={4} vAlign="center" hAlign="between" wrap="wrap" style={{ padding: "12px 0" }}>
+            <TabList value={tab} onChange={(value) => changeTab(value as Tab)} size="sm" layout="hug">
+              <AstryxTab value="live" label="Live orders" />
+              <AstryxTab value="availability" label="Item availability" />
+              <AstryxTab value="completed" label="Completed" />
+            </TabList>
+            {tab === "live" && (
+              <HStack gap={2} vAlign="center" wrap="wrap">
+                <SegmentedControl label="Order source" value={sourceFilter} onChange={(value) => setSourceFilter(value as typeof sourceFilter)}>
+                  <SegmentedControlItem value="all" label="All" />
+                  <SegmentedControlItem value="online" label="Online (QR)" />
+                  <SegmentedControlItem value="instore" label="Kiosk & counter" />
+                </SegmentedControl>
+                <Button label="All-day view" variant="secondary" size="sm" onClick={() => setAllDayOpen(true)} />
+                <Button label={delayedOnly ? "Showing delayed only" : "Delayed only"} variant={delayedOnly ? "primary" : "ghost"} size="sm" onClick={() => setDelayedOnly((value) => !value)} />
+              </HStack>
+            )}
+          </HStack>
+        </VStack>
+
+        <VStack gap={5} style={{ padding: 20 }}>
+          {notice && <NoticeBanner tone="info" title={notice} role="status" />}
+
+          {tab === "live" && (
+            <VStack gap={5}>
+              {errors.board && <NoticeBanner tone="danger" title="Kitchen orders are unavailable" description={errors.board} action={<Button label="Retry" variant="secondary" onClick={() => void refreshBoard()} />} role="alert" />}
+              <Grid columns={{ minWidth: 240, repeat: "fit" }} gap={4} align="start">
+                <Panel title="Active orders" description={`${active.length} in the kitchen right now`}>
+                  <SegmentedShare ariaLabel="Active orders by stage" parts={parts} format={(value) => String(Math.round(value))} />
+                </Panel>
+                <Metric label="Held" value={held.length} hint="Paused with a reason" />
+                <Metric label="Delayed" value={delayed.length} hint="Past the expected prep time" />
+                <Metric label="Online (QR)" value={onlineCount} hint="Ordered from your QR link" />
+              </Grid>
+              {delayedOnly && <NoticeBanner tone="warning" title="Showing delayed orders only" action={<Button label="Clear filter" variant="ghost" size="sm" onClick={() => setDelayedOnly(false)} />} />}
+              <BoardGrid>
+                {lanes.map((lane) => {
+                  const oldest = lane.orders.reduce<string | null>((value, order) => (value === null || order.placed_at < value ? order.placed_at : value), null);
+                  return (
+                    <BoardColumn key={lane.stage} title={lane.label} count={lane.orders.length}>
+                      {oldest && <Text type="supporting" color="secondary">{`Oldest ${elapsedLabel(oldest, now)}`}</Text>}
+                      {lane.orders.length ? lane.orders.map((order) => (
+                        <KitchenTicket key={order.id} order={order} now={now} busy={busy} onOpen={() => setSelected(order)} onStart={() => action("start", order)} onHold={() => setHoldOrder(order)} onReady={() => action("ready", order)} onRecall={() => setRecallOrder(order)} />
+                      )) : <EmptyBlock title={laneEmpty[lane.stage][0]} description={laneEmpty[lane.stage][1]} />}
+                    </BoardColumn>
+                  );
+                })}
+              </BoardGrid>
+            </VStack>
+          )}
+
+          {tab === "availability" && <AvailabilityPanel products={products} error={errors.availability} busy={busy} onRetry={refreshOptional} onChange={(product, status) => { const previous = products; setProducts((current) => current.map((item) => item.id === product.id ? { ...item, is_available: status === "available" } : item)); void submit({ id: makeId(), action: "availability", productId: product.id, payload: { event_id: makeId(), status }, createdAt: new Date().toISOString(), retryCount: 0 }).then((success) => { if (!success) setProducts(previous); }); }} />}
+
+          {tab === "completed" && <CompletedPanel orders={completed} error={errors.completed} onRetry={refreshOptional} onOpen={setSelected} />}
+        </VStack>
+
+        <KitchenSystemBar online={online} queue={queue.length} error={errors.board} now={now} onRefresh={refreshBoard} />
+
+        {selected && <OrderDrawer order={selected} busy={busy} onClose={() => setSelected(null)} onItem={(item) => action("item", selected, { completed_quantity: item.completed_quantity === item.quantity ? 0 : item.quantity }, item.id)} onRecall={() => setRecallOrder(selected)} />}
+        {heldOpen && <HeldDrawer orders={held} busy={busy} onClose={() => setHeldOpen(false)} onResume={(order) => action("resume", order)} onOpen={setSelected} />}
+        {allDayOpen && <AllDayDrawer items={allDay} onLoad={loadAllDay} onClose={() => setAllDayOpen(false)} />}
+        {holdOrder && <HoldDialog order={holdOrder} busy={busy} onClose={() => setHoldOrder(null)} onConfirm={(reason) => { action("hold", holdOrder, { reason }); setHoldOrder(null); }} />}
+        {recallOrder && <RecallDialog order={recallOrder} busy={busy} testMode={isTest} onClose={() => setRecallOrder(null)} onConfirm={async (reason, pin) => { try { if (isTest) action("recall", recallOrder, { reason }); else { const result = await api.liveKitchenOverride({ action: "recall", reason, pin }); action("recall", recallOrder, { reason, override_token: result.override_token }); } setRecallOrder(null); } catch (error) { setNotice(error instanceof Error ? error.message : "Recall approval failed."); } }} />}
+      </VStack>
+    </AstryxDashboardProviders>
+  );
 }
 
-function KitchenHeader({ context, now, online, queue, sound, testMode, onSound, onFullscreen, onExit }: { context: LiveDeviceContext | null; now: number; online: boolean; queue: number; sound: boolean; testMode: boolean; onSound: () => void; onFullscreen: () => void; onExit: () => void }) { return <header className="staff-header kitchen-header"><div className="staff-brand"><strong>PlaceURorder</strong><span>KITCHEN</span>{testMode && <em>TEST MODE</em>}</div><div className="staff-location"><b>{context?.device.location_label || "Main Kitchen"}</b><small>{testMode ? "● Test Session · Current" : `● Live · ${context?.device.name || "Kitchen device"}`}</small></div><div className="kitchen-clock"><b>{new Date(now).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</b><small>{new Date(now).toLocaleDateString()}</small></div><div className="sync-card"><small>{testMode ? "Test Session" : "Kitchen Sync"}</small><b>{testMode ? "Current" : connectionLabel(online, queue)}</b></div><div className="sync-card"><small>{testMode ? "Runtime" : "Counter Sync"}</small><b>{testMode ? "Isolated" : online ? "Status unavailable" : "Offline"}</b></div><div className="staff-header-actions"><button className="staff-button" onClick={onSound}>{sound ? <Volume2 size={16}/> : <VolumeX size={16}/>} {sound ? "Sound On" : "Sound Off"}</button><button className="staff-button" onClick={onFullscreen}><Expand size={16}/>Fullscreen</button><button className="staff-button" aria-label="Exit Kitchen" onClick={onExit}><Lock size={16}/>Exit</button></div></header>; }
-function SummaryCard({ label, count, tone }: { label: string; count: string; tone: string }) { return <article className={`summary-card ${tone}`}><span>{label === "New" ? <Bell size={18}/> : label === "Preparing" ? <UtensilsCrossed size={18}/> : label === "Ready" ? <Check size={18}/> : null}</span><div><small>{label}</small><b>{count}</b></div></article>; }
-function KitchenLane({ lane, mobileActive, now, error, busy, onOpen, onStart, onHold, onReady, onRecall }: { lane: { stage: KitchenStage; label: string; orders: KitchenOrder[] }; mobileActive: boolean; now: number; error?: string; busy: string; onOpen: (order: KitchenOrder) => void; onStart: (order: KitchenOrder) => void; onHold: (order: KitchenOrder) => void; onReady: (order: KitchenOrder) => void; onRecall: (order: KitchenOrder) => void }) { const oldest = lane.orders.reduce<number | null>((value, order) => value === null || new Date(order.placed_at).getTime() < value ? new Date(order.placed_at).getTime() : value, null); return <section className={`kitchen-lane ${lane.stage} ${mobileActive ? "mobile-active" : ""}`} data-stage={lane.stage}><header><div><b>{lane.label}</b><span>{lane.orders.length}</span></div><small>{oldest ? `Oldest: ${elapsedLabel(new Date(oldest).toISOString(), now)}` : ""}</small></header><div className="kitchen-lane-body">{error ? <AreaError text={error} /> : lane.orders.map((order) => <KitchenTicket key={order.id} order={order} now={now} busy={busy} onOpen={() => onOpen(order)} onStart={() => onStart(order)} onHold={() => onHold(order)} onReady={() => onReady(order)} onRecall={() => onRecall(order)}/>) }{!lane.orders.length && !error ? <LaneEmpty stage={lane.stage} /> : null}</div></section>; }
-function KitchenTicket({ order, now, busy, onOpen, onStart, onHold, onReady, onRecall }: { order: KitchenOrder; now: number; busy: string; onOpen: () => void; onStart: () => void; onHold: () => void; onReady: () => void; onRecall: () => void }) { const stage = kitchenStage(order) || "pending"; const items = (order.items || order.order_items || []) as Array<OrderItem & { completed_quantity?: number }>; const readyAllowed = items.every((item) => (item.completed_quantity || 0) >= item.quantity); return <article className={`kitchen-ticket ${stage} ${order.kitchen?.delayed ? "delayed" : ""}`}><button className="ticket-main" onClick={onOpen}><div><b>#{order.order_number || order.public_token}</b><span>{order.source || "Kiosk"}</span><span>{order.order_type === "dine_in" ? `Table ${order.table_label || "—"}` : "Takeaway"}</span></div><small className={order.kitchen?.delayed ? "late" : ""}>{elapsedLabel(order.placed_at, now)} {order.kitchen?.delayed ? "· Delayed" : ""}</small></button><div className="ticket-items">{items.slice(0, 4).map((item) => <span key={item.id}><b>{item.quantity} ×</b>{item.product_name}{stage === "preparing" && (item.completed_quantity || 0) >= item.quantity ? <Check size={14}/> : null}</span>)}</div><footer>{stage === "pending" ? <><button className="staff-button" disabled={!!busy} onClick={onHold}><Pause size={15}/>Hold</button><button className="staff-button primary" disabled={!!busy} onClick={onStart}><Play size={15}/>Start Preparing</button></> : stage === "preparing" ? <><button className="staff-button" disabled={!!busy} onClick={onHold}><Pause size={15}/>Hold</button><button className="staff-button primary kitchen-action" disabled={!!busy || !readyAllowed} onClick={onReady}><Check size={15}/>Mark Ready</button></> : <><button className="staff-button" onClick={onOpen}>View Details</button><button className="staff-button" disabled={!!busy} onClick={onRecall}>Recall</button></>}</footer></article>; }
-function LaneEmpty({ stage }: { stage: KitchenStage }) { const content = stage === "pending" ? ["No new orders", "New orders from Kiosk or Counter will appear here."] : stage === "preparing" ? ["No orders in preparation", "Orders being prepared will appear here."] : ["No ready orders", "Completed orders will appear here and wait for handover."]; return <div className="lane-empty"><PackageCheck size={36}/><b>{content[0]}</b><span>{content[1]}</span></div>; }
-function AvailabilityPage({ products, error, busy, onRetry, onChange }: { products: Product[]; error?: string; busy: string; onRetry: () => Promise<void>; onChange: (product: Product, status: "available" | "temporarily_unavailable" | "out_of_stock") => void }) { const [search, setSearch] = useState(""); const shown = products.filter((product) => product.name.toLowerCase().includes(search.toLowerCase())); return <section className="staff-data-page"><header className="page-toolbar"><div><h1>Item Availability</h1><small>Immediate Kitchen staff override. This does not edit menu prices.</small></div><label className="staff-search"><Search size={16}/><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search items"/></label></header>{error ? <AreaError text={error} retry={onRetry} /> : <section className="staff-table availability-table"><header><span>Item</span><span>Availability</span><span>Current schedule</span><span>Action</span></header>{shown.map((product) => <article key={product.id}><span><b>{product.name}</b><small>{product.category_id ? "Menu category" : "Uncategorized"}</small></span><span className={product.is_available ? "state-pill ready" : "state-pill cancelled"}>{product.is_available ? "Available" : "Unavailable"}</span><span>{product.availability_start_time || product.availability_end_time ? "Scheduled availability" : "No schedule"}</span><span><button className="staff-button" disabled={!!busy} onClick={() => onChange(product, product.is_available ? "temporarily_unavailable" : "available")}>{product.is_available ? "Set unavailable" : "Set available"}</button></span></article>)}{!shown.length ? <Empty text="No products match this search." /> : null}</section>}</section>; }
-function CompletedPage({ orders, error, onRetry, onOpen }: { orders: KitchenOrder[]; error?: string; onRetry: () => Promise<void>; onOpen: (order: KitchenOrder) => void }) { return <section className="staff-data-page"><header className="page-toolbar"><div><h1>Completed</h1><small>Read-only operational Kitchen history.</small></div><button className="staff-button" onClick={() => void onRetry()}><RefreshCw size={16}/>Refresh</button></header>{error ? <AreaError text={error} retry={onRetry} /> : <section className="staff-table completed-table"><header><span>Order</span><span>Source</span><span>Started</span><span>Ready</span><span>Prep Time</span><span>Handover</span></header>{orders.map((order) => <button key={order.id} onClick={() => onOpen(order)}><span><b>#{order.order_number || order.public_token}</b><small>{order.order_type}</small></span><span>{order.source || "Kiosk"}</span><span>{order.prep_started_at ? new Date(order.prep_started_at).toLocaleTimeString() : "—"}</span><span>{order.ready_at ? new Date(order.ready_at).toLocaleTimeString() : "—"}</span><span>{order.prep_started_at && order.ready_at ? elapsedLabel(order.prep_started_at, new Date(order.ready_at).getTime()) : "—"}</span><span>{order.completed_at ? "Handed over" : "Awaiting Counter"}</span></button>)}{!orders.length ? <Empty text="No completed Kitchen orders today." /> : null}</section>}</section>; }
-function KitchenSystemBar({ online, queue, error, now, onRefresh }: { online: boolean; queue: number; error?: string; now: number; onRefresh: () => Promise<void> }) { const label = !online ? "Offline mode" : error ? "Kitchen sync reconnecting" : queue ? `${queue} pending Kitchen sync` : "All systems operational"; return <footer className="kitchen-system-bar"><span className={!online || error ? "warning" : "healthy"}>{online ? <Wifi size={16}/> : <WifiOff size={16}/>}{label}</span><span>Last updated: {new Date(now).toLocaleTimeString()}<button className="icon-button" onClick={() => void onRefresh()} aria-label="Refresh orders"><RefreshCw size={15}/></button></span><span>Refresh orders <ChevronRight size={15}/></span></footer>; }
-function OrderDrawer({ order, busy, onClose, onItem, onRecall }: { order: KitchenOrder; busy: string; onClose: () => void; onItem: (item: OrderItem & { completed_quantity?: number }) => void; onRecall: () => void }) { const items = (order.items || order.order_items || []) as Array<OrderItem & { completed_quantity?: number }>; return <aside className="staff-drawer" role="dialog" aria-modal="true" aria-label="Kitchen order detail"><header><div><h2>Order #{order.order_number || order.public_token}</h2><small>{order.source || "Kiosk"} · {order.payment_status} · {order.status}</small></div><button className="icon-button" onClick={onClose}><X size={18}/></button></header>{items.map((item) => <article key={item.id}><span><b>{item.quantity} × {item.product_name}</b><small>{item.notes || "No item note"}</small></span>{kitchenStage(order) === "preparing" ? <button className="staff-button" disabled={!!busy} onClick={() => onItem(item)}>{(item.completed_quantity || 0) >= item.quantity ? "Undo" : "Complete"}</button> : null}</article>)}{order.notes ? <p className="info-panel">{order.notes}</p> : null}{kitchenStage(order) === "ready" ? <button className="staff-button" disabled={!!busy} onClick={onRecall}>Recall with manager approval</button> : null}</aside>; }
-function HeldDrawer({ orders, busy, onClose, onResume, onOpen }: { orders: KitchenOrder[]; busy: string; onClose: () => void; onResume: (order: KitchenOrder) => void; onOpen: (order: KitchenOrder) => void }) { return <aside className="staff-drawer" role="dialog" aria-modal="true" aria-label="Held orders"><header><div><h2>Held Orders</h2><small>{orders.length} contextual Kitchen holds</small></div><button className="icon-button" onClick={onClose}><X size={18}/></button></header>{orders.map((order) => <article key={order.id}><span><b>#{order.order_number || order.public_token}</b><small>{kitchenLabel(kitchenStage(order) || "pending")} · {order.kitchen?.hold_reason || "No reason recorded"}</small></span><div><button className="staff-button" onClick={() => onOpen(order)}>Details</button><button className="staff-button primary" disabled={!!busy} onClick={() => onResume(order)}>Resume</button></div></article>)}{!orders.length ? <Empty text="No Kitchen orders are held." /> : null}</aside>; }
-function AllDayDrawer({ items, onLoad, onClose }: { items: Array<Record<string, unknown>>; onLoad: () => Promise<void>; onClose: () => void }) { useEffect(() => { void onLoad(); }, [onLoad]); return <aside className="staff-drawer" role="dialog" aria-modal="true" aria-label="All Day view"><header><div><h2>All Day View</h2><small>Current production workload</small></div><button className="icon-button" onClick={onClose}><X size={18}/></button></header>{items.map((item) => <article key={String(item.item)}><span><b>{String(item.item)}</b><small>{String(item.total_required)} required · {String(item.preparing_quantity)} preparing · {String(item.held_quantity)} held</small></span></article>)}{!items.length ? <Empty text="No active production quantities." /> : null}</aside>; }
-function HoldDialog({ order, busy, onClose, onConfirm }: { order: KitchenOrder; busy: string; onClose: () => void; onConfirm: (reason: string) => void }) { const [reason, setReason] = useState(""); return <div className="staff-dialog-backdrop"><section className="staff-dialog" role="dialog" aria-modal="true" aria-label="Hold Kitchen order"><header><h2>Hold order #{order.order_number || order.public_token}</h2><button className="icon-button" onClick={onClose}>×</button></header><label>Hold reason<textarea value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Why is this order held?"/></label><footer><button className="staff-button" onClick={onClose}>Cancel</button><button className="staff-button primary" disabled={!reason.trim() || !!busy} onClick={() => onConfirm(reason.trim())}>Hold Order</button></footer></section></div>; }
-function RecallDialog({ order, busy, testMode, onClose, onConfirm }: { order: KitchenOrder; busy: string; testMode: boolean; onClose: () => void; onConfirm: (reason: string, pin: string) => Promise<void> }) { const [reason, setReason] = useState(""); const [pin, setPin] = useState(""); return <div className="staff-dialog-backdrop"><section className="staff-dialog" role="dialog" aria-modal="true" aria-label="Recall Kitchen order"><header><h2>Recall order #{order.order_number || order.public_token}</h2><button className="icon-button" onClick={onClose}>×</button></header><label>Reason<textarea value={reason} onChange={(event) => setReason(event.target.value)} /></label>{!testMode && <label>Manager PIN<input inputMode="numeric" value={pin} onChange={(event) => setPin(event.target.value)} /></label>}<footer><button className="staff-button" onClick={onClose}>Cancel</button><button className="staff-button primary" disabled={!!busy || !reason.trim() || (!testMode && pin.length < 4)} onClick={() => void onConfirm(reason.trim(), pin)}>Recall to Preparing</button></footer></section></div>; }
-function AreaError({ text, retry }: { text: string; retry?: () => void | Promise<void> }) { return <div className="area-error"><p>{text}</p>{retry ? <button className="staff-button" onClick={() => void retry()}>Retry</button> : null}</div>; }
-function Empty({ text }: { text: string }) { return <p className="staff-empty">{text}</p>; }
+const laneEmpty: Record<KitchenStage, [string, string]> = {
+  pending: ["No new orders", "New orders from the kiosk or counter appear here."],
+  preparing: ["Nothing in preparation", "Orders you start preparing appear here."],
+  ready: ["No ready orders", "Finished orders wait here for handover."],
+};
+
+function KitchenHeader({ context, now, online, queue, sound, testMode, onSound, onFullscreen, onExit }: { context: LiveDeviceContext | null; now: number; online: boolean; queue: number; sound: boolean; testMode: boolean; onSound: () => void; onFullscreen: () => void; onExit: () => void }) {
+  return (
+    <HStack gap={4} vAlign="center" hAlign="between" wrap="wrap" style={{ padding: "14px 20px", background: "var(--color-background-card)", borderBottom: "1px solid var(--color-border)" }}>
+      <HStack gap={3} vAlign="center" wrap="wrap">
+        <Heading level={2} weight="semibold">Kitchen</Heading>
+        <StatusBadge tone={testMode ? "warning" : "info"}>{testMode ? "Test mode" : context?.device.name || "Kitchen device"}</StatusBadge>
+        <Text type="supporting" color="secondary">{context?.device.location_label || context?.business.name || "Main kitchen"}</Text>
+      </HStack>
+      <HStack gap={4} vAlign="center" wrap="wrap">
+        <Text type="label" color="primary">{new Date(now).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</Text>
+        <StatusBadge tone={online ? (queue ? "warning" : "success") : "danger"}>{testMode ? "Test session" : connectionLabelText(online, queue)}</StatusBadge>
+        <Button label={sound ? "Sound on" : "Sound off"} variant="ghost" size="sm" onClick={onSound} />
+        <Button label="Fullscreen" variant="ghost" size="sm" onClick={onFullscreen} />
+        <Button label="Exit" variant="secondary" size="sm" onClick={onExit} />
+      </HStack>
+    </HStack>
+  );
+}
+
+// Short, plain status for the header: the connection state plus any orders still waiting to sync.
+function connectionLabelText(online: boolean, queue: number) {
+  if (!online) return "Offline";
+  return queue ? `${queue} waiting to sync` : "Connected";
+}
+
+function KitchenTicket({ order, now, busy, onOpen, onStart, onHold, onReady, onRecall }: { order: KitchenOrder; now: number; busy: string; onOpen: () => void; onStart: () => void; onHold: () => void; onReady: () => void; onRecall: () => void }) {
+  const stage = kitchenStage(order) || "pending";
+  const items = (order.items || order.order_items || []) as Array<OrderItem & { completed_quantity?: number }>;
+  const readyAllowed = items.every((item) => (item.completed_quantity || 0) >= item.quantity);
+  return (
+    <Card padding={4} elevation="low">
+      <VStack gap={3}>
+        <HStack gap={2} vAlign="center" hAlign="between">
+          <Heading level={3} weight="semibold">{`#${order.order_number || order.public_token}`}</Heading>
+          {order.kitchen?.delayed ? <StatusBadge tone="danger">Delayed</StatusBadge> : <Text type="supporting" color="secondary">{elapsedLabel(order.placed_at, now)}</Text>}
+        </HStack>
+        <Text type="supporting" color="secondary">{`${orderSourceLabel(order.source)} · ${order.order_type === "dine_in" ? `Table ${order.table_label || "—"}` : "Takeaway"}`}</Text>
+        <VStack gap={1}>
+          {items.slice(0, 4).map((item) => (
+            <HStack key={item.id} gap={2} vAlign="center">
+              <Text type="body" weight="semibold" color="primary">{`${item.quantity} ×`}</Text>
+              <Text type="body" color="primary">{item.product_name}</Text>
+              {stage === "preparing" && (item.completed_quantity || 0) >= item.quantity && <StatusBadge tone="success">Done</StatusBadge>}
+            </HStack>
+          ))}
+          {items.length > 4 && <Text type="supporting" color="secondary">{`+${items.length - 4} more`}</Text>}
+        </VStack>
+        <HStack gap={2} wrap="wrap">
+          {stage === "pending" && <Button label="Hold" variant="secondary" size="sm" isDisabled={!!busy} onClick={onHold} />}
+          {stage === "pending" && <Button label="Start preparing" variant="primary" size="sm" isDisabled={!!busy} onClick={onStart} />}
+          {stage === "preparing" && <Button label="Hold" variant="secondary" size="sm" isDisabled={!!busy} onClick={onHold} />}
+          {stage === "preparing" && <Button label="Mark ready" variant="primary" size="sm" isDisabled={!!busy || !readyAllowed} onClick={onReady} />}
+          {stage === "ready" && <Button label="Recall" variant="secondary" size="sm" isDisabled={!!busy} onClick={onRecall} />}
+          <Button label="Details" variant="ghost" size="sm" onClick={onOpen} />
+        </HStack>
+      </VStack>
+    </Card>
+  );
+}
+
+function AvailabilityPanel({ products, error, busy, onRetry, onChange }: { products: Product[]; error?: string; busy: string; onRetry: () => Promise<void>; onChange: (product: Product, status: "available" | "temporarily_unavailable" | "out_of_stock") => void }) {
+  const [search, setSearch] = useState("");
+  const shown = products.filter((product) => product.name.toLowerCase().includes(search.toLowerCase()));
+  return (
+    <Panel title="Item availability" description="A Kitchen override. It does not change menu prices or schedules.">
+      <VStack gap={4}>
+        <TextInput label="Search items" value={search} onChange={setSearch} placeholder="Search items" width={320} />
+        {error ? <NoticeBanner tone="danger" title={error} action={<Button label="Retry" variant="secondary" onClick={() => void onRetry()} />} /> : (
+          <Table
+            idKey="id"
+            data={shown as Array<Product & Record<string, unknown>>}
+            columns={[
+              { key: "item", header: "Item", renderCell: (row: Product) => row.name },
+              { key: "status", header: "Availability", renderCell: (row: Product) => <StatusBadge tone={row.is_available ? "success" : "danger"}>{row.is_available ? "Available" : "Unavailable"}</StatusBadge> },
+              { key: "schedule", header: "Schedule", renderCell: (row: Product) => (row.availability_start_time || row.availability_end_time ? "Scheduled" : "No schedule") },
+              { key: "action", header: "Action", align: "end", renderCell: (row: Product) => <Button label={row.is_available ? "Set unavailable" : "Set available"} variant="secondary" size="sm" isDisabled={!!busy} onClick={() => onChange(row, row.is_available ? "temporarily_unavailable" : "available")} /> },
+            ]}
+          />
+        )}
+        {!error && !shown.length && <EmptyBlock title="No items match this search" />}
+      </VStack>
+    </Panel>
+  );
+}
+
+function CompletedPanel({ orders, error, onRetry, onOpen }: { orders: KitchenOrder[]; error?: string; onRetry: () => Promise<void>; onOpen: (order: KitchenOrder) => void }) {
+  return (
+    <Panel title="Completed" description="Read-only history of finished Kitchen orders." actions={<Button label="Refresh" variant="secondary" size="sm" onClick={() => void onRetry()} />}>
+      {error ? <NoticeBanner tone="danger" title={error} action={<Button label="Retry" variant="secondary" onClick={() => void onRetry()} />} /> : orders.length ? (
+        <Table
+          idKey="id"
+          data={orders as Array<KitchenOrder & Record<string, unknown>>}
+          columns={[
+            { key: "order", header: "Order", renderCell: (row: KitchenOrder) => `#${row.order_number || row.public_token}` },
+            { key: "source", header: "Source", renderCell: (row: KitchenOrder) => orderSourceLabel(row.source) },
+            { key: "started", header: "Started", renderCell: (row: KitchenOrder) => (row.prep_started_at ? new Date(row.prep_started_at).toLocaleTimeString() : "—") },
+            { key: "ready", header: "Ready", renderCell: (row: KitchenOrder) => (row.ready_at ? new Date(row.ready_at).toLocaleTimeString() : "—") },
+            { key: "prep", header: "Prep time", renderCell: (row: KitchenOrder) => (row.prep_started_at && row.ready_at ? elapsedLabel(row.prep_started_at, new Date(row.ready_at).getTime()) : "—") },
+            { key: "handover", header: "Handover", renderCell: (row: KitchenOrder) => (row.completed_at ? "Handed over" : "Awaiting counter") },
+            { key: "open", header: "", align: "end", renderCell: (row: KitchenOrder) => <Button label={`Details for order ${row.order_number || row.public_token}`} variant="ghost" size="sm" onClick={() => onOpen(row)} /> },
+          ]}
+        />
+      ) : <EmptyBlock title="No completed orders today" description="Finished Kitchen orders appear here." />}
+    </Panel>
+  );
+}
+
+function KitchenSystemBar({ online, queue, error, now, onRefresh }: { online: boolean; queue: number; error?: string; now: number; onRefresh: () => Promise<void> }) {
+  const label = !online ? "Offline. Changes will sync when the connection returns." : error ? "Reconnecting to the kitchen feed." : queue ? `${queue} change${queue === 1 ? "" : "s"} waiting to sync.` : "All systems operational.";
+  return (
+    <HStack gap={3} vAlign="center" hAlign="between" wrap="wrap" style={{ padding: "10px 20px", background: "var(--color-background-card)", borderTop: "1px solid var(--color-border)" }}>
+      <StatusBadge tone={!online || error ? "warning" : "success"}>{label}</StatusBadge>
+      <HStack gap={2} vAlign="center">
+        <Text type="supporting" color="secondary">{`Last updated ${new Date(now).toLocaleTimeString()}`}</Text>
+        <IconButton label="Refresh orders" variant="ghost" size="sm" icon={<RefreshCw size={15} aria-hidden="true" />} onClick={() => void onRefresh()} />
+      </HStack>
+    </HStack>
+  );
+}
+
+function OrderDrawer({ order, busy, onClose, onItem, onRecall }: { order: KitchenOrder; busy: string; onClose: () => void; onItem: (item: OrderItem & { completed_quantity?: number }) => void; onRecall: () => void }) {
+  const items = (order.items || order.order_items || []) as Array<OrderItem & { completed_quantity?: number }>;
+  const stage = kitchenStage(order);
+  return (
+    <DetailDrawer title={`Order #${order.order_number || order.public_token}`} isOpen onClose={onClose} footer={stage === "ready" ? <Button label="Recall with manager approval" variant="secondary" isDisabled={!!busy} onClick={onRecall} /> : undefined}>
+      <Text type="supporting" color="secondary">{`${orderSourceLabel(order.source)} · ${order.payment_status} · ${order.status}`}</Text>
+      <VStack gap={3}>
+        {items.map((item) => (
+          <HStack key={item.id} gap={3} vAlign="center" hAlign="between">
+            <VStack gap={0}>
+              <Text type="body" color="primary">{`${item.quantity} × ${item.product_name}`}</Text>
+              <Text type="supporting" color="secondary">{item.notes || "No item note"}</Text>
+            </VStack>
+            {stage === "preparing" && <Button label={(item.completed_quantity || 0) >= item.quantity ? "Undo" : "Complete"} variant="secondary" size="sm" isDisabled={!!busy} onClick={() => onItem(item)} />}
+          </HStack>
+        ))}
+      </VStack>
+      {order.notes && <Text type="body" color="secondary">{order.notes}</Text>}
+    </DetailDrawer>
+  );
+}
+
+function HeldDrawer({ orders, busy, onClose, onResume, onOpen }: { orders: KitchenOrder[]; busy: string; onClose: () => void; onResume: (order: KitchenOrder) => void; onOpen: (order: KitchenOrder) => void }) {
+  return (
+    <DetailDrawer title="Held orders" isOpen onClose={onClose}>
+      {orders.length ? orders.map((order) => (
+        <HStack key={order.id} gap={3} vAlign="center" hAlign="between" wrap="wrap">
+          <VStack gap={0}>
+            <Text type="body" weight="semibold" color="primary">{`#${order.order_number || order.public_token}`}</Text>
+            <Text type="supporting" color="secondary">{`${kitchenLabel(kitchenStage(order) || "pending")} · ${order.kitchen?.hold_reason || "No reason recorded"}`}</Text>
+          </VStack>
+          <HStack gap={2}>
+            <Button label="Details" variant="ghost" size="sm" onClick={() => onOpen(order)} />
+            <Button label="Resume" variant="primary" size="sm" isDisabled={!!busy} onClick={() => onResume(order)} />
+          </HStack>
+        </HStack>
+      )) : <EmptyBlock title="No held orders" description="Orders you hold with a reason appear here." />}
+    </DetailDrawer>
+  );
+}
+
+function AllDayDrawer({ items, onLoad, onClose }: { items: Array<Record<string, unknown>>; onLoad: () => Promise<void>; onClose: () => void }) {
+  useEffect(() => { void onLoad(); }, [onLoad]);
+  return (
+    <DetailDrawer title="All-day view" isOpen onClose={onClose}>
+      <Text type="supporting" color="secondary">Total production still needed, by item.</Text>
+      {items.length ? items.map((item) => (
+        <VStack key={String(item.item)} gap={0}>
+          <Text type="body" weight="semibold" color="primary">{String(item.item)}</Text>
+          <Text type="supporting" color="secondary">{`${String(item.total_required)} required · ${String(item.preparing_quantity)} preparing · ${String(item.held_quantity)} held`}</Text>
+        </VStack>
+      )) : <EmptyBlock title="Nothing in production" />}
+    </DetailDrawer>
+  );
+}
+
+function HoldDialog({ order, busy, onClose, onConfirm }: { order: KitchenOrder; busy: string; onClose: () => void; onConfirm: (reason: string) => void }) {
+  const [reason, setReason] = useState("");
+  return (
+    <DetailDrawer title={`Hold order #${order.order_number || order.public_token}`} isOpen onClose={onClose} footer={<><Button label="Cancel" variant="ghost" onClick={onClose} /><Button label="Hold order" variant="primary" isDisabled={!reason.trim() || !!busy} onClick={() => onConfirm(reason.trim())} /></>}>
+      <TextArea label="Hold reason" value={reason} onChange={setReason} placeholder="Why is this order held?" rows={3} />
+    </DetailDrawer>
+  );
+}
+
+function RecallDialog({ order, busy, testMode, onClose, onConfirm }: { order: KitchenOrder; busy: string; testMode: boolean; onClose: () => void; onConfirm: (reason: string, pin: string) => Promise<void> }) {
+  const [reason, setReason] = useState("");
+  const [pin, setPin] = useState("");
+  return (
+    <DetailDrawer title={`Recall order #${order.order_number || order.public_token}`} isOpen onClose={onClose} footer={<><Button label="Cancel" variant="ghost" onClick={onClose} /><Button label="Recall to preparing" variant="primary" isDisabled={!!busy || !reason.trim() || (!testMode && pin.length < 4)} onClick={() => void onConfirm(reason.trim(), pin)} /></>}>
+      <TextArea label="Reason" value={reason} onChange={setReason} rows={3} />
+      {!testMode && <TextInput label="Manager PIN" inputMode="numeric" value={pin} onChange={setPin} />}
+    </DetailDrawer>
+  );
+}
