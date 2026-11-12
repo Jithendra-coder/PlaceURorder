@@ -26,6 +26,11 @@ type Props = { data: Data; locations: LocationOption[]; reporting: Reporting; on
 type Measure = "sales" | "orders" | "aov";
 
 const measureOptions: Array<{ value: Measure; label: string }> = [{ value: "sales", label: "Revenue" }, { value: "orders", label: "Orders" }, { value: "aov", label: "Average order value" }];
+const measureDescriptions: Record<Measure, string> = {
+  sales: "Completed sales per day in the selected period.",
+  orders: "Completed orders per day in the selected period.",
+  aov: "Average order value per day in the selected period.",
+};
 
 export function BusinessInsightsPage({ mode }: { mode: Mode }) {
   return <Suspense fallback={<DashboardPage><LoadingBlock rows={4} /></DashboardPage>}><Insights mode={mode} /></Suspense>;
@@ -150,12 +155,10 @@ async function loadInsightsData(businessId: string, reporting: Pick<Reporting, "
 }
 
 function SalesOrders({ data, locations, reporting, onChange, errors, retry }: Props) {
-  const [measure, setMeasure] = useState<Measure>("sales");
   const [status, setStatus] = useState<string | null>(null);
   const completed = completedCount(data);
   const stats = data.stats;
   const rows = data.orders.filter((order) => !status || order.status === status).slice(0, 8);
-  const trend = dailySeries(stats, measure, data.previous);
 
   return (
     <>
@@ -174,9 +177,13 @@ function SalesOrders({ data, locations, reporting, onChange, errors, retry }: Pr
             <Metric label="Completed orders" value={completed} />
             <Metric label="Average order value" value={formatCurrency(stats.period_average_order_value ?? stats.average_order_value)} />
           </MetricGrid>
-          <Panel title="Revenue & order activity" actions={<MeasureSwitch value={measure} onChange={setMeasure} />}>
-            <LineChart series={trend} ariaLabel={`${measure} activity`} format={measureFormat(measure)} />
-          </Panel>
+          <Grid columns={{ minWidth: 300, repeat: "fit" }} gap={4}>
+            {measureOptions.map((option) => (
+              <Panel key={option.value} title={option.label} description={measureDescriptions[option.value]}>
+                <LineChart series={dailySeries(stats, option.value, data.previous)} ariaLabel={`${option.label} by day`} format={measureFormat(option.value)} height={220} />
+              </Panel>
+            ))}
+          </Grid>
           <Grid columns={{ minWidth: 320, repeat: "fit" }} gap={4}>
             <Panel title="Period summary">
               <SummaryRows rows={[
@@ -640,10 +647,15 @@ function sortedPoints<T extends { date: string }>(points: T[], pick: (point: T) 
   return [...points].sort((a, b) => a.date.localeCompare(b.date)).map((point) => ({ label: point.date.slice(5), value: pick(point) }));
 }
 
+// The selected period's days when the API returns them, otherwise the last seven days.
+function periodDays(source: DashboardStats) {
+  return source.daily_revenue?.length ? source.daily_revenue : source.weekly_revenue;
+}
+
 // The subject series is the chosen measure; the previous period, when returned, is a quiet comparison line aligned by day.
 function dailySeries(stats: DashboardStats, measure: Measure, previous?: DashboardStats | null): Series[] {
-  const subject: Series = { id: "current", name: measureNames[measure], tone: "primary", values: sortedPoints(stats.weekly_revenue, (point) => measureValue(point, measure)) };
-  const prior = previous?.weekly_revenue ?? [];
+  const subject: Series = { id: "current", name: measureNames[measure], tone: "primary", values: sortedPoints(periodDays(stats), (point) => measureValue(point, measure)) };
+  const prior = previous ? periodDays(previous) : [];
   if (!prior.length) return [subject];
   const comparison = sortedPoints(prior, (point) => measureValue(point, measure)).map((point, index) => ({ label: `Day ${index + 1}`, value: point.value }));
   return [subject, { id: "previous", name: "Previous period", tone: "comparison", values: comparison }];

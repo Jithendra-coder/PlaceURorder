@@ -170,3 +170,23 @@ def test_dashboard_projects_only_required_fields_and_bounds_the_database_query(m
     _name, columns, filters = client.queries[0]
     assert columns == ", ".join(analytics_service.ANALYTICS_ORDER_COLUMNS)
     assert ("lte", "placed_at", NOW.isoformat()) in filters
+
+
+def test_daily_revenue_covers_the_selected_period(monkeypatch):
+    business_id = uuid4()
+    client = FakeClient(
+        [
+            order(str(uuid4()), str(business_id), "2026-07-09T10:00:00+00:00", 100),
+            order(str(uuid4()), str(business_id), "2026-07-09T15:00:00+00:00", 50),
+            order(str(uuid4()), str(business_id), "2026-07-11T09:00:00+00:00", 30),
+        ]
+    )
+    monkeypatch.setattr(analytics_service, "datetime", FixedDateTime)
+
+    result = analytics_service.dashboard_stats(client, business_id, start=datetime(2026, 7, 8, tzinfo=timezone.utc))
+
+    days = result["daily_revenue"]
+    assert [day["date"] for day in days] == ["2026-07-08", "2026-07-09", "2026-07-10", "2026-07-11"]
+    assert days[1] == {"date": "2026-07-09", "orders": 2, "revenue": 150.0, "average_order_value": 75.0}
+    assert days[2] == {"date": "2026-07-10", "orders": 0, "revenue": 0.0, "average_order_value": 0.0}
+    assert days[3]["revenue"] == 30.0

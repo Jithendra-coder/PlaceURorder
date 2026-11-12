@@ -1255,6 +1255,7 @@ class DashboardStats(BaseModel):
     cancellations_today: FiniteFloat = 0
     net_sales_today: FiniteFloat = 0
     weekly_revenue: List[Dict[str, Any]]
+    daily_revenue: List[Dict[str, Any]] = Field(default_factory=list)
     period_start: Optional[datetime] = None
     period_end: Optional[datetime] = None
     completed_orders: int = 0

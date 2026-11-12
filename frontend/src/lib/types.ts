@@ -627,6 +627,7 @@ export type DashboardStats = {
   cancellations_today: number;
   net_sales_today: number;
   weekly_revenue: { date: string; orders: number; revenue: number }[];
+  daily_revenue?: { date: string; orders: number; revenue: number; average_order_value: number }[];
   period_start?: string | null;
   period_end?: string | null;
   completed_orders?: number;
