@@ -25,6 +25,15 @@ type BusinessContextValue = {
 
 const BusinessContext = createContext<BusinessContextValue | null>(null);
 
+// The demo deployment signs visitors in again when a session has expired, so no login screen is shown.
+function redirectToSignIn(next: string) {
+  if (process.env.NEXT_PUBLIC_DEMO_ACCOUNT === "true") {
+    window.location.replace("/demo");
+    return;
+  }
+  window.location.replace(`/auth/sign-in?next=${encodeURIComponent(next)}`);
+}
+
 export function BusinessProvider({ children }: { children: ReactNode }) {
   const [business, setBusiness] = useState<Business | null>(null);
   const [loading, setLoading] = useState(true);
@@ -50,7 +59,7 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
         redirectingRef.current = true;
         setBusiness(null);
         const next = `${window.location.pathname}${window.location.search}`;
-        window.location.replace(`/auth/sign-in?next=${encodeURIComponent(next)}`);
+        redirectToSignIn(next);
       }
       setError(cause instanceof Error ? cause.message : "Could not load the business.");
       return null;
@@ -71,7 +80,7 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
         redirectingRef.current = true;
         setOnboardingStatus(null);
         const next = `${window.location.pathname}${window.location.search}`;
-        window.location.replace(`/auth/sign-in?next=${encodeURIComponent(next)}`);
+        redirectToSignIn(next);
       }
       setOnboardingError(cause instanceof Error ? cause.message : "Could not load onboarding status.");
       return null;

@@ -28,8 +28,20 @@ def home_activation(client: DbClient, business_id: UUID, location_id: UUID | Non
     return {
         "state": "returning" if completed_order_count > 1 else "new",
         "completed_order_count": completed_order_count,
-        "mode": home_mode(client, business_id, completed_order_count),
+        "mode": home_mode(client, business_id, _business_completed_for_mode(client, business_id, completed_order_count, location_id)),
     }
+
+
+def _business_completed_for_mode(client: DbClient, business_id: UUID, location_count: int, location_id: UUID | None) -> int:
+    """The Home mode is a business-wide decision. A location with no completed orders must not make an
+    established business look new, so a business that has any completed order counts as having one."""
+    if location_count > 0 or location_id is None:
+        return location_count
+    has_any = client.fetch_one(
+        "select 1 as ok from orders where business_id = %(business)s and status = 'completed' limit 1",
+        {"business": str(business_id)},
+    )
+    return 1 if has_any else 0
 
 
 def dashboard_stats(
