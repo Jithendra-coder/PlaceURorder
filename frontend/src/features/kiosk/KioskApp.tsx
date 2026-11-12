@@ -1507,7 +1507,7 @@ function StartScreen({
             <p className="mb-4 max-w-4xl truncate text-[clamp(18px,1.45cqw,28px)] font-black uppercase leading-[1.15] tracking-[0.04em] text-[var(--kiosk-accent)]">
               {startCopy.welcomeText}
             </p>
-            <h2 className={`${portrait ? "text-[clamp(82px,12cqw,178px)]" : "text-[clamp(102px,10.2cqw,218px)]"} line-clamp-2 max-w-6xl break-words font-black leading-[0.9]`}>
+            <h2 className={`${portrait ? "text-[clamp(44px,12cqw,178px)]" : "text-[clamp(102px,10.2cqw,218px)]"} line-clamp-2 max-w-6xl break-words font-black leading-[0.9]`}>
               {startCopy.landingText}
             </h2>
             <p className="mt-5 max-w-4xl text-[clamp(42px,4.4cqw,76px)] font-black leading-[1.08] text-[var(--kiosk-accent)]">
