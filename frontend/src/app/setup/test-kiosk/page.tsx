@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { KioskRuntime } from "@/features/kiosk/KioskApp";
 import { useBusiness } from "@/components/layout/BusinessProvider";
 import { VirtualKioskFrame } from "@/components/onboarding/VirtualKioskFrame";
@@ -12,8 +12,13 @@ import {
   useMenuPresetExperience,
 } from "@/features/onboarding/menu-presets";
 import { api as kioskApi } from "@/lib/api";
+import { onboardingPreviewActive } from "@/lib/onboarding-preview";
 import type { KioskScreenOrientation } from "@/lib/types";
 import { api as setupApi, type SetupOverview } from "@/services/api";
+
+function subscribeNothing() {
+  return () => undefined;
+}
 
 export default function TestKioskPage() {
   const router = useRouter();
@@ -26,6 +31,8 @@ export default function TestKioskPage() {
   const [attemptNumber, setAttemptNumber] = useState(0);
   const [overview, setOverview] = useState<SetupOverview | null>(null);
   const [error, setError] = useState("");
+  // The onboarding preview never creates a real test session, so it shows a note instead of waiting on one.
+  const previewOnly = useSyncExternalStore(subscribeNothing, onboardingPreviewActive, () => false);
   const selectedPresets = useMemo(() => {
     const selectedIds = new Set(selectedPresetIds);
     return ALL_MENU_PRESETS.filter((preset) => selectedIds.has(preset.id));
@@ -50,7 +57,7 @@ export default function TestKioskPage() {
   }, [load]);
 
   useEffect(() => {
-    if (!business || !selectedPresets.length) return;
+    if (!business || !selectedPresets.length || previewOnly) return;
     let current = true;
     sessionTaskRef.current ??= kioskApi.createKioskTestSession(business.id)
       .then(({ session }) => kioskApi.exchangeKioskTestSession(session.token))
@@ -65,7 +72,7 @@ export default function TestKioskPage() {
     return () => {
       current = false;
     };
-  }, [business, selectedPresets.length]);
+  }, [business, previewOnly, selectedPresets.length]);
 
   const receiveEvent = useCallback((event: string, payload?: Record<string, unknown>) => {
     if (event === "test-payment-completed" && payload?.success === true) {
@@ -124,6 +131,11 @@ export default function TestKioskPage() {
           <h2>Select menu items first</h2>
           <p>Return to Menu Items and choose at least four presets for this temporary test.</p>
           <button type="button" onClick={() => router.push("/setup/menu-items")}>Choose menu items</button>
+        </div>
+      ) : previewOnly ? (
+        <div className="mt-test-kiosk-empty" role="status">
+          <h2>Test Kiosk is not started in the preview</h2>
+          <p>The onboarding demo shows each step without saving. A real Test Kiosk creates an isolated test session, so it runs on a live business only.</p>
         </div>
       ) : !experience || !sessionReady ? (
         <div className="mt-setup-loading" role="status">Preparing your isolated Test Kiosk…</div>

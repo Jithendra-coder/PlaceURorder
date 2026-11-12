@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useBusiness } from "@/components/layout/BusinessProvider";
+import { Button } from "@astryxdesign/core/Button";
 import { SetupShell } from "@/components/layout/SetupShell";
 import {
   ALL_MENU_PRESETS,
@@ -96,10 +97,7 @@ export default function MenuItemsPage() {
       </section>
       <div className="mt-menu-actions">
         {selected.size >= 4 && <p>Want to add more?</p>}
-        <button type="button" className="mt-menu-continue" onClick={() => void continueSetup()} disabled={selected.size < 4 || busy}>
-          {busy ? "Loading..." : remaining ? `${remaining} more ${remaining === 1 ? "item" : "items"} to continue` : `Continue with ${selected.size} items`}
-          {!remaining && !busy && <span aria-hidden="true">→</span>}
-        </button>
+        <Button label={busy ? "Loading…" : remaining ? `${remaining} more ${remaining === 1 ? "item" : "items"} to continue` : `Continue with ${selected.size} items`} variant="primary" isDisabled={selected.size < 4 || busy} isLoading={busy} onClick={() => void continueSetup()} />
       </div>
     </SetupShell>
   );

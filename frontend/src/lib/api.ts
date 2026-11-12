@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { devUserIdHeader } from "@/lib/dev-demo";
+import { onboardingPreviewActive } from "@/lib/onboarding-preview";
 import type {
   AuthSession,
   AuthUser,
@@ -115,6 +116,10 @@ export function apiRequest<T>(
   options: RequestInit & { auth?: boolean; timeoutMs?: number } = {}
 ): Promise<T> {
   const method = (options.method ?? "GET").toUpperCase();
+  // The onboarding demo is a read-only preview: nothing the setup screens try to save reaches the server.
+  if (method !== "GET" && !path.startsWith("/auth/") && onboardingPreviewActive()) {
+    return Promise.reject(new ApiError("Preview only: nothing is saved in the onboarding demo.", 409));
+  }
   if (method !== "GET" || options.signal) return performApiRequest<T>(path, options);
   const key = `${API_BASE}${path}`;
   const existing = inFlightGetRequests.get(key);

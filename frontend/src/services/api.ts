@@ -1,5 +1,6 @@
 import type { AuthSession, BusinessLocation, OnboardingStatus } from "@/lib/types";
 import { apiRequest as request } from "@/lib/api";
+import { onboardingPreviewActive } from "@/lib/onboarding-preview";
 
 export type KioskLayoutId = "side-navigation" | "top-navigation" | "category-first";
 
@@ -147,17 +148,28 @@ export const api = {
   onboardingStatus: () =>
     request<OnboardingStatus>("/onboarding/status"),
   onboardingBusinessType: (options?: RequestOptions) => request<{ business_type: string | null; business_description: string | null }>("/onboarding/business-type", options),
-  saveOnboardingBusinessType: (businessType: string, businessDescription?: string, options?: RequestOptions) =>
-    request<{ business_type: string; business_description: string | null }>("/onboarding/business-type", { ...options, method: "PUT", body: JSON.stringify({ business_type: businessType, business_description: businessDescription || null }) }),
+  saveOnboardingBusinessType: async (businessType: string, businessDescription?: string, options?: RequestOptions) => {
+    // Onboarding preview: report the choice back without saving it.
+    if (onboardingPreviewActive()) return { business_type: businessType, business_description: businessDescription || null };
+    return request<{ business_type: string; business_description: string | null }>("/onboarding/business-type", { ...options, method: "PUT", body: JSON.stringify({ business_type: businessType, business_description: businessDescription || null }) });
+  },
   myBusiness: () => request<{ business: Business | null }>("/businesses/me"),
   locations: (businessId: string) => request<{ locations: BusinessLocation[] }>(`/businesses/${businessId}/administration/locations`),
   createBusiness: (payload: Record<string, unknown>) => data<Business>("/businesses", { method: "POST", body: JSON.stringify(payload) }),
-  updateBusiness: (id: string, payload: Record<string, unknown>) => data<Business>(`/businesses/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  updateBusiness: async (id: string, payload: Record<string, unknown>) => {
+    // Onboarding preview: return the business as it would look after the change, without saving it.
+    if (onboardingPreviewActive()) {
+      const { business: current } = await request<{ business: Business }>(`/businesses/${id}`);
+      return { ...current, ...payload } as Business;
+    }
+    return data<Business>(`/businesses/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+  },
   categories: (businessId: string) => request<{ categories: Category[] }>(`/businesses/${businessId}/categories`),
   products: (businessId: string) => request<{ products: Product[] }>(`/businesses/${businessId}/products`),
   createCategory: (businessId: string, name: string) => data<Category>(`/businesses/${businessId}/categories`, { method: "POST", body: JSON.stringify({ name }) }),
   createProduct: (businessId: string, payload: Record<string, unknown>) => data<Product>(`/businesses/${businessId}/products`, { method: "POST", body: JSON.stringify(payload) }),
   uploadBrandAsset: async (businessId: string, file: File) => {
+    if (onboardingPreviewActive()) return { path: "" };
     const form = new FormData();
     form.append("file", file);
     return data<{ path: string }>(`/businesses/${businessId}/uploads/brand-asset`, { method: "POST", body: form, timeoutMs: 60000 });

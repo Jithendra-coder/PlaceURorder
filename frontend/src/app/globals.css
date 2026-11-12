@@ -1521,7 +1521,9 @@
   }
 
   .mt-setup-page--test .mt-setup-heading {
-    width: min(620px, calc(100vw - 48px));
+    /* Same left edge and width as the other setup screens; the completion card below stays centred. */
+    width: min(1368px, calc(100% - 72px));
+    justify-self: center;
     margin-bottom: 16px;
   }
 
