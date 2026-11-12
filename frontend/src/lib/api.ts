@@ -13,6 +13,7 @@ import type {
   ComboPayload,
   ComboSection,
   DashboardStats,
+  GrowthRecommendations,
   HomeActivation,
   KioskMenu,
   OwnerStoreOrdering,
@@ -465,6 +466,13 @@ export const api = {
   },
   homeActivation: (businessId: string, locationId?: string | null) =>
     apiRequest<HomeActivation>(`/businesses/${businessId}/home-activation${locationId ? `?location_id=${encodeURIComponent(locationId)}` : ""}`),
+  growthRecommendations: (businessId: string, locationId?: string | null, refresh = false) => {
+    const query = new URLSearchParams();
+    if (locationId) query.set("location_id", locationId);
+    if (refresh) query.set("refresh", "true");
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return apiRequest<GrowthRecommendations>(`/businesses/${businessId}/growth/recommendations${suffix}`);
+  },
   categories: (businessId: string) =>
     apiRequest<{ categories: Category[] }>(`/businesses/${businessId}/categories`),
   createCategory: (businessId: string, payload: Partial<Category>) =>

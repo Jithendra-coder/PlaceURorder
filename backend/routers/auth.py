@@ -29,7 +29,7 @@ from schemas import (
     VerifyEmailRequest,
 )
 from services import auth_service
-from services.rate_limit_service import RateLimitRule, assert_rate_limit
+from services.rate_limit_service import RateLimitRule, assert_rate_limit, request_client_ip
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 SIGNUP_LIMIT = RateLimitRule("auth:signup", 5, 60)
@@ -154,8 +154,30 @@ def login(
 ):
     assert_rate_limit(request, LOGIN_LIMIT, identity_parts=[payload.email])
     session = auth_service.login(client, payload)
+    _record_session_device(client, session, request, settings)
     _set_session_cookie(response, session, settings)
     return session
+
+
+def _record_session_device(client: DbClient, session: dict, request: Request, settings: Settings) -> None:
+    """Store the browser and address for the new session so Security & sessions can show the device."""
+    token = session.get(auth_service.INTERNAL_SESSION_TOKEN_FIELD)
+    session_id = auth_service.session_id_from_access_token(token) if token else None
+    if not session_id:
+        return
+    user_agent = (request.headers.get("user-agent") or "").strip()[:300] or None
+    try:
+        client.execute_command(
+            "update auth_sessions set user_agent=%(user_agent)s, ip_address=%(ip)s::inet where id=%(id)s",
+            {
+                "id": str(session_id),
+                "user_agent": user_agent,
+                "ip": request_client_ip(request, settings.rate_limit_trusted_proxy_cidrs),
+            },
+        )
+    except Exception:
+        # Device details are informational. A failure here must never block sign-in.
+        return
 
 
 @router.get("/oauth/google/start")

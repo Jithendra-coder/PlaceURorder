@@ -310,7 +310,7 @@ def integration_activity(client: DbClient, business_id: UUID, user_id: UUID, lim
 
 def sessions(client: DbClient, business_id: UUID, user_id: UUID, current_session_id: UUID | None = None) -> list[dict]:
     _admin(client, business_id, user_id)
-    return client.fetch_all("select s.id,s.created_at,s.expires_at,s.last_active_at,s.revoked_at,s.user_agent,s.ip_address,u.email,(s.id=%(current)s) as is_current from auth_sessions s join app_users u on u.id=s.user_id where (u.id=%(user_id)s or exists(select 1 from business_staff bs where bs.business_id=%(business_id)s and bs.user_id=s.user_id)) order by s.last_active_at desc", {"business_id": str(business_id), "user_id": str(user_id), "current": str(current_session_id) if current_session_id else "00000000-0000-0000-0000-000000000000"})
+    return client.fetch_all("select s.id,s.created_at,s.expires_at,s.last_active_at,s.revoked_at,s.user_agent,s.ip_address,u.email,(s.id=%(current)s) as is_current from auth_sessions s join app_users u on u.id=s.user_id where s.revoked_at is null and s.expires_at > now() and (u.id=%(user_id)s or exists(select 1 from business_staff bs where bs.business_id=%(business_id)s and bs.user_id=s.user_id)) order by s.last_active_at desc", {"business_id": str(business_id), "user_id": str(user_id), "current": str(current_session_id) if current_session_id else "00000000-0000-0000-0000-000000000000"})
 
 
 def revoke_session(client: DbClient, business_id: UUID, user_id: UUID, session_id: UUID, all_others: bool = False, current_session_id: UUID | None = None) -> int:

@@ -186,6 +186,11 @@ def _client_ip(request: Request, trusted_proxy_cidrs: str = "") -> str:
     return str(client_ip)
 
 
+def request_client_ip(request: Request, trusted_proxy_cidrs: str = "") -> str:
+    """Public accessor for the caller's address, honouring only trusted proxies."""
+    return _client_ip(request, trusted_proxy_cidrs)
+
+
 def _trusted_networks(value: str) -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]:
     networks = []
     for item in value.split(","):

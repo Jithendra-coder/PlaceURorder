@@ -4,6 +4,8 @@
 
 > A modern, responsive self-service kiosk, counter point-of-sale (POS), kitchen display system (KDS), and merchant administration platform built with **Next.js 16 (React 19)** and **FastAPI (PostgreSQL)**.
 
+**Live demo:** [tasty-bug-app.vercel.app](https://tasty-bug-app.vercel.app) opens the signed-in dashboard of **Tasty Bug**, a demo burger restaurant with 30 days of sample orders, menu items with artwork, reports and order analysis. The data is fictional and lives in a separate demo database.
+
 ---
 
 ## Overview

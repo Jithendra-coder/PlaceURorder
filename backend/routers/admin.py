@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends
 from database import DbClient, get_db_client
 from deps import require_user_id
 from schemas import DashboardStats, HomeActivation
-from services import alert_service, analytics_service, auth_service, business_service, insights_service, setup_service
+from services import alert_service, analytics_service, auth_service, business_service, growth_recommendation_service, insights_service, setup_service
 from services.business_service import ADMIN_ROLES, assert_business_access
 
 router = APIRouter(prefix="/businesses/{business_id}", tags=["admin"])
@@ -61,6 +61,18 @@ def home_activation(
 ):
     assert_business_access(client, business_id, user_id, ADMIN_ROLES)
     return analytics_service.home_activation(client, business_id, location_id=location_id)
+
+
+@router.get("/growth/recommendations")
+def growth_recommendations(
+    business_id: UUID,
+    location_id: UUID | None = None,
+    refresh: bool = False,
+    user_id: UUID = Depends(require_user_id),
+    client: DbClient = Depends(get_db_client),
+):
+    assert_business_access(client, business_id, user_id, ADMIN_ROLES)
+    return growth_recommendation_service.recommendations(client, business_id, location_id, refresh=refresh)
 
 
 @router.get("/analytics", response_model=DashboardStats)

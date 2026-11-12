@@ -245,7 +245,7 @@ function AppShellInner({ children }: { children: ReactNode }) {
             header={<Text type="supporting">Owner</Text>}
             items={[
               { label: "Profile & business settings", href: "/dashboard/administration/business-settings", icon: <UserRound size={16} aria-hidden="true" /> },
-              { label: "Security & active sessions", href: "/dashboard/administration/team?tab=Sessions", icon: <ShieldCheck size={16} aria-hidden="true" /> },
+              { label: "Security & active sessions", href: "/dashboard/administration/team?tab=security", icon: <ShieldCheck size={16} aria-hidden="true" /> },
               { label: "Sign out", icon: <LogOut size={16} aria-hidden="true" />, variant: "destructive", onClick: () => void authApi.logout().finally(() => router.replace("/auth/sign-in")) },
             ]}
             placement="below"

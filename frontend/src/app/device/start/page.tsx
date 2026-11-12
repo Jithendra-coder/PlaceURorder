@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState, type FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@astryxdesign/core/Button";
 import { VStack } from "@astryxdesign/core/Stack";
 import { Text } from "@astryxdesign/core/Text";
@@ -16,9 +16,11 @@ const normalise = (value: string) => value.trim().toUpperCase().replace(/[\s-]/g
 // The code decides what the device is. The server returns that type and the name it was created with.
 const typeLabels: Record<string, string> = { counter: "Counter", kitchen: "Kitchen", kiosk: "Kiosk" };
 
-export default function DeviceStartPage() {
+function DeviceStartForm() {
   const router = useRouter();
-  const [code, setCode] = useState("");
+  const search = useSearchParams();
+  // A pairing link from the dashboard carries the code, so it is already filled in when the device opens it.
+  const [code, setCode] = useState(() => (search.get("code") || "").slice(0, 32));
   const [error, setError] = useState("");
   const [paired, setPaired] = useState<{ name: string; type: string; launchPath: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -80,4 +82,8 @@ export default function DeviceStartPage() {
       </DeviceCard>
     </DeviceFrame>
   );
+}
+
+export default function DeviceStartPage() {
+  return <Suspense fallback={null}><DeviceStartForm /></Suspense>;
 }

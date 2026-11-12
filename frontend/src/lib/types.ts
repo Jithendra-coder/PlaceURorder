@@ -627,6 +627,7 @@ export type DashboardStats = {
   cancellations_today: number;
   net_sales_today: number;
   weekly_revenue: { date: string; orders: number; revenue: number }[];
+  daily_revenue?: { date: string; orders: number; revenue: number; average_order_value: number }[];
   period_start?: string | null;
   period_end?: string | null;
   completed_orders?: number;
@@ -641,7 +642,34 @@ export type DashboardStats = {
   order_funnel?: Record<string, number>;
 };
 
-export type HomeActivation = { state: "new" | "returning"; completed_order_count: number };
+export type GrowthRecommendation = {
+  rule_key: string;
+  title: string;
+  detail: string;
+  action_label: string;
+  action_href: string;
+  score: number;
+  impact_estimate: number;
+  evidence: Record<string, unknown>;
+};
+export type GrowthRecommendations = {
+  as_of: string;
+  source: "saved" | "generated";
+  summary: {
+    period_days: number;
+    scope_name: string;
+    currency: string;
+    current_paid_total: number;
+    previous_paid_total: number;
+    current_orders: number;
+    previous_orders: number;
+    paid_total_change_percent: number | null;
+  };
+  recommendations: GrowthRecommendation[];
+};
+export type HomeMode = "setup" | "first_order" | "active";
+// The server decides which Home screen applies; the browser renders that mode once.
+export type HomeActivation = { state: "new" | "returning"; completed_order_count: number; mode: HomeMode };
 
 export type OnboardingStatus = {
   has_business: boolean;

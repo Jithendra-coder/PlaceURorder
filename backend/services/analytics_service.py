@@ -4,6 +4,7 @@ from uuid import UUID
 
 from database import DbClient
 from schemas import OrderStatus
+from services.home_mode_service import home_mode
 from services.order_service import ACTIVE_STATUSES
 
 
@@ -27,6 +28,7 @@ def home_activation(client: DbClient, business_id: UUID, location_id: UUID | Non
     return {
         "state": "returning" if completed_order_count > 1 else "new",
         "completed_order_count": completed_order_count,
+        "mode": home_mode(client, business_id, completed_order_count),
     }
 
 
@@ -141,7 +143,31 @@ def dashboard_stats(
             }
         )
 
+    # One bucket per calendar day across the selected period (oldest first), so charts follow the
+    # chosen range instead of always showing the last seven days. Capped to keep responses bounded.
+    period_first_day = _aware(period_start).replace(hour=0, minute=0, second=0, microsecond=0)
+    period_last_day = period_end.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_count = max(1, min(366, (period_last_day - period_first_day).days + 1))
+    day_totals: dict = {}
+    for order in completed_orders:
+        bucket = day_totals.setdefault(order["_placed_at"].date(), {"orders": 0, "revenue": 0.0})
+        bucket["orders"] += 1
+        bucket["revenue"] += float(order.get("total_amount") or 0)
+    daily_revenue = []
+    for offset in range(day_count):
+        day_date = (period_first_day + timedelta(days=offset)).date()
+        bucket = day_totals.get(day_date, {"orders": 0, "revenue": 0.0})
+        daily_revenue.append(
+            {
+                "date": day_date.isoformat(),
+                "orders": bucket["orders"],
+                "revenue": round(bucket["revenue"], 2),
+                "average_order_value": round(bucket["revenue"] / bucket["orders"], 2) if bucket["orders"] else 0.0,
+            }
+        )
+
     return {
+        "daily_revenue": daily_revenue,
         "revenue_today": round(revenue_today, 2),
         "active_orders": active_orders,
         "orders_today": len(today_orders),
