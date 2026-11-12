@@ -36,6 +36,42 @@
 .kiosk-stage {
   background: #ffffff;
   color: var(--color-text-primary);
+  /* Sizes inside the kiosk use container units (cqw/cqh), so every screen scales with the kiosk frame, not the raw browser window. */
+  container-type: size;
+}
+
+/* Full-screen kiosk: the design is framed to the screen's real shape. Landscape stays between 4:3 and 21:9,
+   portrait between 3:4 and 9:16, and the frame is capped at a 1920px (landscape) or 1080px (portrait) design width,
+   so large monitors and TVs show the same composed layout instead of stretched components. */
+.kiosk-viewport {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: #0b0f19;
+}
+
+.kiosk-viewport--landscape .kiosk-frame {
+  width: min(100dvw, 1920px, calc(100dvh * 21 / 9));
+  height: min(100dvh, calc(min(100dvw, 1920px, calc(100dvh * 21 / 9)) * 3 / 4));
+}
+
+.kiosk-viewport--portrait .kiosk-frame {
+  width: min(100dvw, 1080px, calc(100dvh * 3 / 4));
+  height: min(100dvh, calc(min(100dvw, 1080px, calc(100dvh * 3 / 4)) * 16 / 9));
+}
+
+.kiosk-frame {
+  position: relative;
+  overflow: hidden;
+}
+
+@media (max-width: 700px) {
+  .kiosk-viewport .kiosk-frame {
+    width: 100dvw;
+    height: 100dvh;
+  }
 }
 
 @keyframes slideUp {

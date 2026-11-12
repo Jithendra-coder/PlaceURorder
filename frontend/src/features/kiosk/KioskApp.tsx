@@ -1032,11 +1032,11 @@ export function KioskRuntime({
     }
   };
 
-  return (
+  const kioskRoot = (
     <main
       data-testid="kiosk-root"
       style={kioskAccentStyle(kioskSelection.accentColor, business.brand_color)}
-      className={`kiosk-ui kiosk-stage overflow-hidden text-[#0F172A] ${contained ? "h-full w-full" : "h-[100dvh] w-[100dvw]"}`}
+      className="kiosk-ui kiosk-stage h-full w-full overflow-hidden text-[#0F172A]"
       onPointerDown={markKioskActivity}
       onKeyDown={markKioskActivity}
       onInput={markKioskActivity}
@@ -1045,7 +1045,7 @@ export function KioskRuntime({
       <div className="relative h-full w-full overflow-hidden bg-[#0F172A]">
         <div className="kiosk-device-screen kiosk-order-flow relative flex h-full w-full flex-col overflow-hidden bg-white">
           {lockMisconfigured && (
-            <div className="absolute left-3 top-3 z-40 max-w-[min(520px,calc(100vw-96px))] rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-black leading-5 text-amber-950 shadow-lg">
+            <div className="absolute left-3 top-3 z-40 max-w-[min(520px,calc(100cqw-96px))] rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-black leading-5 text-amber-950 shadow-lg">
               Kiosk lock is enabled but no owner PIN is configured. Lock controls are disabled; open admin advanced settings to create a kiosk PIN.
             </div>
           )}
@@ -1246,6 +1246,12 @@ export function KioskRuntime({
 
     </main>
   );
+  if (contained) return kioskRoot;
+  return (
+    <div className={`kiosk-viewport kiosk-viewport--${effectiveKioskOrientation}`} data-testid="kiosk-viewport">
+      <div className="kiosk-frame">{kioskRoot}</div>
+    </div>
+  );
 }
 
 function OwnerPinModal({
@@ -1396,16 +1402,16 @@ function KioskHeader({
           </button>
         )}
         <div className="min-w-0">
-          <p className={`truncate text-[clamp(11px,0.9vw,15px)] font-black leading-tight ${isContrast ? "text-white/72" : "text-slate-600"}`}>{greetingFor(now)}</p>
-          <p className="mt-0.5 truncate text-[clamp(13px,1.1vw,18px)] font-black leading-tight tabular-nums">{formatKioskTime(now)}</p>
+          <p className={`truncate text-[clamp(11px,0.9cqw,15px)] font-black leading-tight ${isContrast ? "text-white/72" : "text-slate-600"}`}>{greetingFor(now)}</p>
+          <p className="mt-0.5 truncate text-[clamp(13px,1.1cqw,18px)] font-black leading-tight tabular-nums">{formatKioskTime(now)}</p>
         </div>
       </div>
       <div className="flex min-w-0 items-center justify-center gap-3 text-center">
         <Logo business={business} logoImage={logoImage} size={44} />
         <div className="min-w-0">
-          <h1 className="truncate text-[clamp(21px,2.25vw,36px)] font-black leading-none">{business.name}</h1>
+          <h1 className="truncate text-[clamp(21px,2.25cqw,36px)] font-black leading-none">{business.name}</h1>
           {business.display_show_tagline !== false && (
-            <p className={`mt-1 truncate text-[clamp(11px,1vw,15px)] font-bold ${isContrast ? "text-white/60" : "text-slate-500"}`}>
+            <p className={`mt-1 truncate text-[clamp(11px,1cqw,15px)] font-bold ${isContrast ? "text-white/60" : "text-slate-500"}`}>
               {business.tagline || businessFallbackTagline(capability)}
             </p>
           )}
@@ -1489,7 +1495,7 @@ function StartScreen({
         aria-label={touchToStart && isOpen ? "Touch anywhere to start ordering" : undefined}
       >
         {heroImage ? (
-          <Image src={heroImage} alt="" fill sizes="100vw" unoptimized className="object-cover" style={{ objectPosition: `${focalX * 100}% ${focalY * 100}%` }} />
+          <Image src={heroImage} alt="" fill sizes="100cqw" unoptimized className="object-cover" style={{ objectPosition: `${focalX * 100}% ${focalY * 100}%` }} />
         ) : (
           <div className="absolute inset-0 bg-slate-100" />
         )}
@@ -1498,22 +1504,22 @@ function StartScreen({
         />
         <div className={`relative z-10 flex h-full min-h-0 flex-col ${contentPosition === "bottom_left" ? "items-start text-left" : "items-center text-center"} ${contentPosition === "bottom_center" || contentPosition === "bottom_left" ? "justify-end" : "justify-center"} px-[7%] py-[5%] ${textOnImage}`}>
           <div className={`${portrait ? "max-w-[94%]" : "max-w-[76%]"} min-w-0 ${contentPosition === "bottom_center" || contentPosition === "bottom_left" ? "pb-[2%]" : ""}`}>
-            <p className="mb-4 max-w-4xl truncate text-[clamp(18px,1.45vw,28px)] font-black uppercase leading-[1.15] tracking-[0.04em] text-[var(--kiosk-accent)]">
+            <p className="mb-4 max-w-4xl truncate text-[clamp(18px,1.45cqw,28px)] font-black uppercase leading-[1.15] tracking-[0.04em] text-[var(--kiosk-accent)]">
               {startCopy.welcomeText}
             </p>
-            <h2 className={`${portrait ? "text-[clamp(82px,12vw,178px)]" : "text-[clamp(102px,10.2vw,218px)]"} line-clamp-2 max-w-6xl break-words font-black leading-[0.9]`}>
+            <h2 className={`${portrait ? "text-[clamp(82px,12cqw,178px)]" : "text-[clamp(102px,10.2cqw,218px)]"} line-clamp-2 max-w-6xl break-words font-black leading-[0.9]`}>
               {startCopy.landingText}
             </h2>
-            <p className="mt-5 max-w-4xl text-[clamp(42px,4.4vw,76px)] font-black leading-[1.08] text-[var(--kiosk-accent)]">
+            <p className="mt-5 max-w-4xl text-[clamp(42px,4.4cqw,76px)] font-black leading-[1.08] text-[var(--kiosk-accent)]">
               {startCopy.instructionText}
             </p>
             {startCopy.subtitleTexts.length > 0 && (
-              <p className="mt-5 min-h-[2.32em] line-clamp-2 max-w-4xl text-[clamp(24px,2.4vw,40px)] font-bold leading-[1.2] opacity-90">
+              <p className="mt-5 min-h-[2.32em] line-clamp-2 max-w-4xl text-[clamp(24px,2.4cqw,40px)] font-bold leading-[1.2] opacity-90">
                 <TypewriterText texts={startCopy.subtitleTexts} typewriterKey={startCopy.subtitleKey} speedMs={54} deleteSpeedMs={32} waitMs={1600} cursorClassName="text-[var(--kiosk-accent)]" />
               </p>
             )}
             {touchToStart ? (
-              <p className="mt-7 w-fit rounded-2xl border border-white/35 bg-black/40 px-8 py-5 text-[clamp(24px,2.6vw,40px)] font-black text-white shadow-xl backdrop-blur-md">
+              <p className="mt-7 w-fit rounded-2xl border border-white/35 bg-black/40 px-8 py-5 text-[clamp(24px,2.6cqw,40px)] font-black text-white shadow-xl backdrop-blur-md">
                 Touch anywhere
               </p>
             ) : (
@@ -1524,7 +1530,7 @@ function StartScreen({
                   event.stopPropagation();
                   onStart(primaryMode);
                 }}
-                className="mt-9 flex min-h-20 min-w-[280px] max-w-full items-center justify-center gap-4 rounded-2xl bg-[var(--kiosk-primary)] px-10 text-[clamp(24px,2.6vw,40px)] font-black text-[var(--kiosk-primary-foreground)] shadow-[0_18px_36px_var(--kiosk-accent-ring)] transition hover:bg-[var(--kiosk-primary)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--kiosk-accent-ring)] disabled:bg-slate-400 disabled:text-white"
+                className="mt-9 flex min-h-20 min-w-[280px] max-w-full items-center justify-center gap-4 rounded-2xl bg-[var(--kiosk-primary)] px-10 text-[clamp(24px,2.6cqw,40px)] font-black text-[var(--kiosk-primary-foreground)] shadow-[0_18px_36px_var(--kiosk-accent-ring)] transition hover:bg-[var(--kiosk-primary)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--kiosk-accent-ring)] disabled:bg-slate-400 disabled:text-white"
               >
                 {startButtonLabel}
                 <ArrowRight size={24} />
@@ -1532,8 +1538,8 @@ function StartScreen({
             )}
           </div>
           <div className={`absolute ${availabilityPosition} w-fit rounded-2xl border border-white/20 bg-black/60 px-4 py-3 text-left text-white shadow-xl backdrop-blur-md`}>
-            <p className="max-w-[360px] text-[clamp(13px,1.15vw,19px)] font-black leading-tight text-white">{isOpen ? "We hope you're having a good day" : availability.title}</p>
-            <p className="mt-1 max-w-[360px] text-[clamp(11px,0.98vw,16px)] font-bold leading-tight text-white">
+            <p className="max-w-[360px] text-[clamp(13px,1.15cqw,19px)] font-black leading-tight text-white">{isOpen ? "We hope you're having a good day" : availability.title}</p>
+            <p className="mt-1 max-w-[360px] text-[clamp(11px,0.98cqw,16px)] font-bold leading-tight text-white">
               {isOpen
                 ? business.closing_time
                   ? `Store closes at ${formatBusinessTime(business.closing_time) || business.closing_time.slice(0, 5)}`
@@ -1580,10 +1586,10 @@ function OrderConfirmedScreen({
     <section data-testid="kiosk-confirmation-screen" data-guided-test="success" data-kiosk-theme={isContrast ? "premium-black" : "light-white"} className={`flex h-full min-h-0 flex-col overflow-hidden ${isContrast ? "bg-[#070B14] text-white" : "bg-white text-slate-950"}`}>
       <KioskHeader business={business} capability={capability} logoImage={logoImage} isContrast={isContrast} onSupport={onSupport} />
       <main className="grid min-h-0 flex-1 place-items-center overflow-y-auto p-[3%]">
-        <div className="grid w-full max-w-4xl gap-5 rounded-[26px] border border-slate-200 bg-white p-[clamp(20px,3vw,42px)] text-slate-950 shadow-[0_24px_70px_rgba(0,0,0,0.22)] md:grid-cols-[0.58fr_1.42fr] md:items-center">
+        <div className="grid w-full max-w-4xl gap-5 rounded-[26px] border border-slate-200 bg-white p-[clamp(20px,3cqw,42px)] text-slate-950 shadow-[0_24px_70px_rgba(0,0,0,0.22)] md:grid-cols-[0.58fr_1.42fr] md:items-center">
           <div className="grid place-items-center">
             <div
-              className="grid aspect-square w-[min(42vw,220px)] place-items-center rounded-full p-3"
+              className="grid aspect-square w-[min(42cqw,220px)] place-items-center rounded-full p-3"
               style={{ background: `conic-gradient(var(--kiosk-accent) ${progress}%, var(--kiosk-accent-soft) 0)` }}
             >
               <div className="grid h-full w-full place-items-center rounded-full bg-white text-center shadow-inner">
@@ -1595,7 +1601,7 @@ function OrderConfirmedScreen({
             <p className="text-sm font-black uppercase tracking-[0.12em] text-[var(--kiosk-accent)]">
               {confirmation.referenceLabel} #{confirmation.referenceValue}
             </p>
-            <h2 className="mt-3 text-[clamp(30px,4vw,52px)] font-black leading-[1.03]">{confirmation.title}</h2>
+            <h2 className="mt-3 text-[clamp(30px,4cqw,52px)] font-black leading-[1.03]">{confirmation.title}</h2>
             <p className="mt-3 text-base font-semibold leading-7 text-slate-600">{confirmation.message}</p>
             <div className={`mt-5 grid gap-3 ${showEstimatedTime ? "sm:grid-cols-2" : ""}`}>
               {showEstimatedTime && (
@@ -1880,13 +1886,13 @@ function MenuScreen({
         >
           <span className={`flex min-w-0 items-center ${isPortrait ? "gap-4" : "gap-3"}`}>
             <ShoppingCart size={isPortrait ? 34 : 26} className="shrink-0" strokeWidth={2.15} />
-            <span className={`${isPortrait ? "text-[clamp(24px,2.35vw,37px)]" : "text-[clamp(17px,1.55vw,24px)]"} truncate font-black leading-none`}>View Cart</span>
+            <span className={`${isPortrait ? "text-[clamp(24px,2.35cqw,37px)]" : "text-[clamp(17px,1.55cqw,24px)]"} truncate font-black leading-none`}>View Cart</span>
           </span>
-          <span className={`whitespace-nowrap rounded-[16px] font-black shadow-[0_2px_7px_rgba(0,0,0,0.18)] ${isPortrait ? "px-5 py-3 text-[clamp(16px,1.35vw,22px)]" : "px-3 py-2 text-[clamp(11px,0.95vw,14px)]"} ${isDark ? "bg-[#EEF1F5] text-[#111827]" : "bg-white text-[#111827]"}`}>
+          <span className={`whitespace-nowrap rounded-[16px] font-black shadow-[0_2px_7px_rgba(0,0,0,0.18)] ${isPortrait ? "px-5 py-3 text-[clamp(16px,1.35cqw,22px)]" : "px-3 py-2 text-[clamp(11px,0.95cqw,14px)]"} ${isDark ? "bg-[#EEF1F5] text-[#111827]" : "bg-white text-[#111827]"}`}>
             {quantity} {quantity === 1 ? "item" : "items"}
           </span>
           <span className={`flex min-w-0 items-center border-l ${isPortrait ? "pl-5" : "pl-3"} ${isDark ? "border-[#CBD5E1]" : "border-white/30"}`}>
-            <span className={`${isPortrait ? "text-[clamp(26px,2.7vw,42px)]" : "text-[clamp(17px,1.55vw,24px)]"} truncate font-black leading-none`}>{money(total, symbol)}</span>
+            <span className={`${isPortrait ? "text-[clamp(26px,2.7cqw,42px)]" : "text-[clamp(17px,1.55cqw,24px)]"} truncate font-black leading-none`}>{money(total, symbol)}</span>
           </span>
         </button>
       </footer>
@@ -1979,11 +1985,11 @@ type LandscapeMenuLayoutProps = {
 function LandscapeTopCategoryLayout(props: LandscapeMenuLayoutProps) {
   const isPortrait = props.orientation === "portrait";
   return (
-    <div className={`flex h-full min-h-0 flex-col ${isPortrait ? "gap-[clamp(14px,2.2vh,22px)] pt-[clamp(16px,3vh,30px)]" : "gap-2 pt-0"}`}>
+    <div className={`flex h-full min-h-0 flex-col ${isPortrait ? "gap-[clamp(14px,2.2cqh,22px)] pt-[clamp(16px,3cqh,30px)]" : "gap-2 pt-0"}`}>
       {isPortrait ? (
-        <div className="flex min-h-[clamp(52px,7vh,64px)] shrink-0 items-center gap-[1.5%]">
+        <div className="flex min-h-[clamp(52px,7cqh,64px)] shrink-0 items-center gap-[1.5%]">
           <div className="min-w-0 flex-1">
-            <h2 className={`truncate text-[clamp(28px,2.6vw,42px)] font-black ${props.isDark ? "text-white" : "text-[#0F172A]"}`}>
+            <h2 className={`truncate text-[clamp(28px,2.6cqw,42px)] font-black ${props.isDark ? "text-white" : "text-[#0F172A]"}`}>
               {kioskBrowseTitle(props.business.type)}
             </h2>
           </div>
@@ -1991,7 +1997,7 @@ function LandscapeTopCategoryLayout(props: LandscapeMenuLayoutProps) {
         </div>
       ) : (
         <div className="flex min-h-[34px] shrink-0 items-center">
-          <h2 className={`truncate text-[clamp(18px,1.45vw,24px)] font-black leading-tight ${props.isDark ? "text-white" : "text-[#0F172A]"}`}>
+          <h2 className={`truncate text-[clamp(18px,1.45cqw,24px)] font-black leading-tight ${props.isDark ? "text-white" : "text-[#0F172A]"}`}>
             {kioskBrowseTitle(props.business.type)}
           </h2>
         </div>
@@ -2017,7 +2023,7 @@ function LandscapeLeftCategoryLayout(props: LandscapeMenuLayoutProps) {
       <aside data-testid="kiosk-side-category-rail" className={`hidden min-h-0 flex-col overflow-y-auto pr-1 pt-1 no-scrollbar md:flex ${isPortrait ? "gap-4" : "gap-2"}`}>
         {props.tabs.slice(0, 8).map((tab) => <KioskSideCategory key={tab.id} tab={tab} active={props.activeCategory === tab.id} {...props} />)}
       </aside>
-      <section className={`flex min-h-0 flex-col ${isPortrait ? "gap-[clamp(14px,2vh,20px)]" : "gap-[clamp(10px,1.4vh,16px)]"}`}>
+      <section className={`flex min-h-0 flex-col ${isPortrait ? "gap-[clamp(14px,2cqh,20px)]" : "gap-[clamp(10px,1.4cqh,16px)]"}`}>
         <KioskCategoryCarousel
           categories={props.categoryItems}
           activeCategoryId={props.activeCategory}
@@ -2029,7 +2035,7 @@ function LandscapeLeftCategoryLayout(props: LandscapeMenuLayoutProps) {
         />
         <div className={`${isPortrait ? "min-h-[56px]" : "min-h-[42px]"} flex shrink-0 items-center justify-between gap-[2%]`}>
           <div className="min-w-0">
-            <h2 className={`truncate ${isPortrait ? "text-3xl" : "text-[clamp(28px,2.4vw,38px)]"} font-black ${props.isDark ? "text-white" : "text-[#0F172A]"}`}>{props.activeLabel}</h2>
+            <h2 className={`truncate ${isPortrait ? "text-3xl" : "text-[clamp(28px,2.4cqw,38px)]"} font-black ${props.isDark ? "text-white" : "text-[#0F172A]"}`}>{props.activeLabel}</h2>
           </div>
           <KioskFilterButton {...props} className={isPortrait ? "w-[28%]" : "w-[15%]"} />
         </div>
@@ -2069,7 +2075,7 @@ function LandscapeCategoryGateLayout(props: LandscapeMenuLayoutProps) {
               </span>
               <span className={`${props.orientation === "portrait" ? "min-h-20 px-4 pb-4 pt-10" : "min-h-12 px-3 pb-3 pt-7"} absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 bg-gradient-to-t from-slate-950/94 via-slate-950/58 to-transparent text-white`}>
                 <span className="min-w-0">
-                  <span className={`${props.orientation === "portrait" ? "text-[clamp(20px,2vw,30px)]" : "text-[clamp(14px,1.35vw,20px)]"} line-clamp-2 break-words font-black leading-[1.05]`}>{category.name}</span>
+                  <span className={`${props.orientation === "portrait" ? "text-[clamp(20px,2cqw,30px)]" : "text-[clamp(14px,1.35cqw,20px)]"} line-clamp-2 break-words font-black leading-[1.05]`}>{category.name}</span>
                 </span>
                 <ArrowRight size={26} className="shrink-0 text-white" />
               </span>
@@ -2127,7 +2133,7 @@ function KioskSectionHeading(props: LandscapeMenuLayoutProps & { title: string }
   if (!isPortrait) {
     return (
       <div className="flex min-h-[36px] shrink-0 items-center justify-between gap-3">
-        <h2 className={`min-w-0 truncate text-[clamp(18px,1.5vw,24px)] font-black leading-tight ${props.isDark ? "text-white" : "text-[#0F172A]"}`}>{props.title}</h2>
+        <h2 className={`min-w-0 truncate text-[clamp(18px,1.5cqw,24px)] font-black leading-tight ${props.isDark ? "text-white" : "text-[#0F172A]"}`}>{props.title}</h2>
         <div className="flex shrink-0 items-center gap-2">
           {props.activeCategory !== "all" && (
             <button type="button" onClick={() => props.onTab("all")} className="inline-flex min-h-9 items-center gap-2 rounded-xl border border-[#E2E8F0] bg-white px-3 text-xs font-black text-[var(--kiosk-accent)]">
@@ -2143,9 +2149,9 @@ function KioskSectionHeading(props: LandscapeMenuLayoutProps & { title: string }
     );
   }
   return (
-    <div className={`relative flex shrink-0 items-center justify-center gap-4 ${isPortrait ? "min-h-[clamp(44px,6vh,64px)]" : "min-h-[34px]"}`}>
+    <div className={`relative flex shrink-0 items-center justify-center gap-4 ${isPortrait ? "min-h-[clamp(44px,6cqh,64px)]" : "min-h-[34px]"}`}>
       <div className={`${isPortrait ? "px-[142px]" : "px-16"} min-w-0 text-center`}>
-        <h2 className={`truncate ${isPortrait ? "text-3xl" : "text-[clamp(18px,1.5vw,24px)]"} font-black leading-tight ${props.isDark ? "text-white" : "text-[#0F172A]"}`}>{props.title}</h2>
+        <h2 className={`truncate ${isPortrait ? "text-3xl" : "text-[clamp(18px,1.5cqw,24px)]"} font-black leading-tight ${props.isDark ? "text-white" : "text-[#0F172A]"}`}>{props.title}</h2>
       </div>
       <div className="absolute right-0 flex items-center gap-2">
         {props.activeCategory !== "all" && (
@@ -2242,7 +2248,7 @@ function KioskSideCategory(props: LandscapeMenuLayoutProps & { tab: CategoryTab;
         {!props.tab.imageUrl && props.tab.icon}
       </span>
       <span className={`${props.orientation === "portrait" ? "px-2 pb-3 pt-8" : "px-1.5 pb-1.5 pt-5"} absolute inset-x-0 bottom-0 flex min-h-[46%] items-end justify-center bg-gradient-to-t from-slate-950/92 via-slate-950/58 to-transparent text-center text-white`}>
-        <span className={`${props.orientation === "portrait" ? "text-[clamp(12px,1.05vw,18px)]" : "text-[clamp(9px,0.72vw,12px)]"} line-clamp-2 break-words font-black leading-tight`}>{props.tab.label}</span>
+        <span className={`${props.orientation === "portrait" ? "text-[clamp(12px,1.05cqw,18px)]" : "text-[clamp(9px,0.72cqw,12px)]"} line-clamp-2 break-words font-black leading-tight`}>{props.tab.label}</span>
       </span>
       {props.active && <span className="absolute inset-x-3 bottom-0 h-1 rounded-t-full bg-[var(--kiosk-accent)]" />}
     </button>
@@ -2551,8 +2557,8 @@ function CartScreen({
       <div ref={scrollContainerRef} className="kiosk-readable-text min-h-0 flex-1 overflow-y-auto px-[3%] py-[1%] no-scrollbar">
         <CheckoutStepper page={page} isContrast={isContrast} />
         <div className="mb-3 mt-2">
-          <h2 className="text-[clamp(28px,2.7vw,42px)] font-black leading-[1.1]">{stepTitle}</h2>
-          <p className={`mt-1 text-[clamp(15px,1.45vw,22px)] font-bold leading-[1.3] ${isContrast ? "text-white/68" : "text-[#64748B]"}`}>{stepSubtitle}</p>
+          <h2 className="text-[clamp(28px,2.7cqw,42px)] font-black leading-[1.1]">{stepTitle}</h2>
+          <p className={`mt-1 text-[clamp(15px,1.45cqw,22px)] font-bold leading-[1.3] ${isContrast ? "text-white/68" : "text-[#64748B]"}`}>{stepSubtitle}</p>
         </div>
         {!isOpen && (
           <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
@@ -2743,13 +2749,13 @@ function CartScreen({
         >
           <span className={`flex min-w-0 items-center ${isPortraitCheckout ? "gap-4" : "gap-3"}`}>
             {placing ? <Loader2 size={isPortraitCheckout ? 34 : 26} className="shrink-0 animate-spin" /> : <ShoppingCart size={isPortraitCheckout ? 34 : 26} className="shrink-0" strokeWidth={2.15} />}
-            <span className={`${isPortraitCheckout ? "text-[clamp(24px,2.35vw,37px)]" : "text-[clamp(17px,1.55vw,24px)]"} truncate font-black leading-none`}>{primaryActionLabel}</span>
+            <span className={`${isPortraitCheckout ? "text-[clamp(24px,2.35cqw,37px)]" : "text-[clamp(17px,1.55cqw,24px)]"} truncate font-black leading-none`}>{primaryActionLabel}</span>
           </span>
-          <span className={`whitespace-nowrap rounded-[16px] bg-white font-black text-[#111827] shadow-[0_2px_7px_rgba(0,0,0,0.18)] ${isPortraitCheckout ? "px-5 py-3 text-[clamp(16px,1.35vw,22px)]" : "px-3 py-2 text-[clamp(11px,0.95vw,14px)]"}`}>
+          <span className={`whitespace-nowrap rounded-[16px] bg-white font-black text-[#111827] shadow-[0_2px_7px_rgba(0,0,0,0.18)] ${isPortraitCheckout ? "px-5 py-3 text-[clamp(16px,1.35cqw,22px)]" : "px-3 py-2 text-[clamp(11px,0.95cqw,14px)]"}`}>
             {quantity} {quantity === 1 ? "item" : "items"}
           </span>
           <span className={`flex min-w-0 items-center border-l border-white/35 ${isPortraitCheckout ? "pl-5" : "pl-3"}`}>
-            <span className={`${isPortraitCheckout ? "text-[clamp(26px,2.7vw,42px)]" : "text-[clamp(17px,1.55vw,24px)]"} truncate font-black leading-none`}>{money(payableTotal, symbol)}</span>
+            <span className={`${isPortraitCheckout ? "text-[clamp(26px,2.7cqw,42px)]" : "text-[clamp(17px,1.55cqw,24px)]"} truncate font-black leading-none`}>{money(payableTotal, symbol)}</span>
           </span>
         </button>
       </footer>
@@ -2854,7 +2860,7 @@ function CheckoutSummaryPanel({
             </span>
           )}
           <div className="min-w-0">
-            <h3 className="text-[clamp(20px,1.75vw,28px)] font-black leading-[1.15]">{title}</h3>
+            <h3 className="text-[clamp(20px,1.75cqw,28px)] font-black leading-[1.15]">{title}</h3>
             <p className={`mt-1 truncate text-sm font-bold leading-[1.35] ${isContrast ? "text-white/64" : "text-[#64748B]"}`}>{receiptSettings.business_name || business.name}</p>
           </div>
         </div>
@@ -2897,7 +2903,7 @@ function CheckoutSummaryPanel({
 
       <div className="mt-4 rounded-[20px] bg-[#F8FAFC] p-3">
         <p className="text-sm font-black uppercase leading-[1.35] text-[#64748B]">{totalLabel}</p>
-        <p className="mt-1 text-[clamp(30px,2.55vw,40px)] font-black leading-none text-[#0F172A]">{money(total, symbol)}</p>
+        <p className="mt-1 text-[clamp(30px,2.55cqw,40px)] font-black leading-none text-[#0F172A]">{money(total, symbol)}</p>
       </div>
 
     </aside>

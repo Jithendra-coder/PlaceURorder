@@ -2,6 +2,8 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type Dispatch, type SetStateAction } from "react";
+import Image from "next/image";
+import QRCode from "qrcode";
 import { Avatar } from "@astryxdesign/core/Avatar";
 import { Button } from "@astryxdesign/core/Button";
 import { ClickableCard } from "@astryxdesign/core/ClickableCard";
@@ -422,6 +424,27 @@ function Devices({ business, data, failed, setData }: OpsProps & { setData: Sett
   const [selected, setSelected] = useState<DeviceRecord | null>(null);
   const [type, setType] = useState("kiosk");
   const [pairing, setPairing] = useState<DevicePairingRequest | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [qr, setQr] = useState<{ link: string; url: string } | null>(null);
+  // The link opens the pairing screen with the code already filled in, so a device can pair from one tap or scan.
+  const pairingLink = pairing && typeof window !== "undefined" ? `${window.location.origin}/device/start?code=${encodeURIComponent(pairing.pairing_code)}` : "";
+  useEffect(() => {
+    if (!pairingLink) return;
+    let live = true;
+    QRCode.toDataURL(pairingLink, { errorCorrectionLevel: "M", margin: 2, width: 240, color: { dark: "#101828", light: "#ffffff" } })
+      .then((url) => { if (live) setQr({ link: pairingLink, url }); })
+      .catch(() => { if (live) setQr(null); });
+    return () => { live = false; };
+  }, [pairingLink]);
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(pairingLink);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard access can be blocked; the link stays visible and can be selected by hand.
+    }
+  };
   const [removing, setRemoving] = useState<DeviceRecord | null>(null);
   const [removeError, setRemoveError] = useState("");
   const removeDevice = async () => {
@@ -450,40 +473,34 @@ function Devices({ business, data, failed, setData }: OpsProps & { setData: Sett
         <ModeSwitch label="Device view" value={view} onChange={setView} options={[{ value: "manage", label: "Manage Devices" }, { value: "add", label: "Add Devices" }]} />
       </PageHeader>
       {view === "add" ? (
-        <Grid columns={{ minWidth: 340, max: 2, repeat: "fit" }} gap={4} align="start">
-          <Panel title="Add a device" description="Choose the device type, then generate a one-time pairing code.">
-            <VStack gap={4}>
+        <Panel title="Add a device" description="Choose the device type and generate a one-time code. Open the link on that device to pair it.">
+          <VStack gap={4}>
+            <HStack gap={3} vAlign="end" wrap="wrap">
               <Selector label="Device type" value={type} onChange={setType} options={[{ value: "kiosk", label: "Kiosk" }, { value: "counter", label: "Counter" }, { value: "kitchen", label: "Kitchen" }]} />
-              <HStack gap={2}><Button label="Generate pairing code" variant="primary" onClick={() => void generate()} /></HStack>
-              {pairing && (
-                <Panel title="Pairing code" padding={4}>
-                  <VStack gap={2}>
-                    <Text type="label" color="primary">{pairing.pairing_code}</Text>
-                    <Text type="supporting" color="secondary">{`Expires ${formatDateTime(pairing.expires_at)}`}</Text>
-                  </VStack>
-                </Panel>
-              )}
-            </VStack>
-          </Panel>
-          <Panel title="How pairing works" description="Three steps on the device you are adding.">
-            <VStack gap={3}>
-              <Text type="body" color="primary">1. Choose the device type and generate a code.</Text>
-              <Text type="body" color="primary">2. On the new device, open its pairing screen. A counter opens /device/start.</Text>
-              <Text type="body" color="primary">3. Enter the code. The device appears under Manage Devices once it connects.</Text>
-            </VStack>
-          </Panel>
-        </Grid>
+              <Button label="Generate pairing code" variant="primary" onClick={() => void generate()} />
+            </HStack>
+            {pairing && (
+              <Grid columns={{ minWidth: 260, max: 2, repeat: "fit" }} gap={5} align="center">
+                <VStack gap={3}>
+                  <Text type="label" color="primary">{pairing.pairing_code}</Text>
+                  <Text type="supporting" color="secondary">{`Expires ${formatDateTime(pairing.expires_at)}`}</Text>
+                  <Text type="body" color="primary">Open this link on the new device, or scan the code with it. The code fills in automatically.</Text>
+                  <HStack gap={2} wrap="wrap">
+                    <Button label="Open pairing screen" variant="primary" href={pairingLink} />
+                    <Button label={copied ? "Link copied" : "Copy link"} variant="secondary" onClick={() => void copyLink()} />
+                  </HStack>
+                  <Text type="supporting" color="secondary">{pairingLink}</Text>
+                </VStack>
+                {qr?.link === pairingLink && <Image src={qr.url} alt={`QR code that opens the pairing screen for code ${pairing.pairing_code}`} width={220} height={220} unoptimized style={{ justifySelf: "center", borderRadius: 12 }} />}
+              </Grid>
+            )}
+          </VStack>
+        </Panel>
       ) : (
         <>
           <FailureNotice failed={failed} name="devices" />
           {!failed.includes("devices") && (
             <VStack gap={4}>
-              <MetricGrid>
-                <Metric label="Online" value={data.devices.filter((device) => device.status === "online").length} hint="Connected now" />
-                <Metric label="Offline" value={data.devices.filter((device) => device.status === "offline").length} hint="Were connected, not now" />
-                <Metric label="Never connected" value={data.devices.filter((device) => device.status === "never_connected").length} hint="Paired but not yet started" />
-                <Metric label="Other" value={data.devices.filter((device) => !["online", "offline", "never_connected"].includes(device.status)).length} hint="Disabled or pending" />
-              </MetricGrid>
               {Object.entries(groups).map(([name, devices]) => (
                 <Panel key={name} title={name}>
                   <HStack gap={3} wrap="wrap" vAlign="start">

@@ -1273,3 +1273,4 @@ class DashboardStats(BaseModel):
 class HomeActivation(BaseModel):
     state: Literal["new", "returning"]
     completed_order_count: int
+    mode: Literal["setup", "first_order", "active"] = "setup"

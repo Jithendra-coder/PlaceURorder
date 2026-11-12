@@ -4,6 +4,7 @@ from uuid import UUID
 
 from database import DbClient
 from schemas import OrderStatus
+from services.home_mode_service import home_mode
 from services.order_service import ACTIVE_STATUSES
 
 
@@ -27,6 +28,7 @@ def home_activation(client: DbClient, business_id: UUID, location_id: UUID | Non
     return {
         "state": "returning" if completed_order_count > 1 else "new",
         "completed_order_count": completed_order_count,
+        "mode": home_mode(client, business_id, completed_order_count),
     }
 
 

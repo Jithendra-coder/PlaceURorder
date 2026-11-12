@@ -106,7 +106,7 @@ def test_home_activation_counts_only_completed_production_orders():
     )
     client.rows["orders"][2]["payment_status"] = "failed"
 
-    assert analytics_service.home_activation(client, business_id) == {"state": "new", "completed_order_count": 1}
+    assert analytics_service.home_activation(client, business_id) == {"state": "new", "completed_order_count": 1, "mode": "active"}
 
 
 def test_items_are_limited_to_selected_orders_and_business(monkeypatch):
