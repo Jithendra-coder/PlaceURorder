@@ -6,6 +6,7 @@ export const LANDING_HTML = String.raw`<!-- ════════════
 
   <ul class="nav-links">
     <li><a href="#demo">Live Demo</a></li>
+    <li><a href="https://tasty-bug-app.vercel.app" target="_blank" rel="noopener noreferrer">Demo Account</a></li>
     <li><a href="#industries">Menu Setups</a></li>
     <li><a href="#hardware">Hardware</a></li>
     <li><a href="#roi">Savings Calculator</a></li>
@@ -17,6 +18,7 @@ export const LANDING_HTML = String.raw`<!-- ════════════
     </summary>
     <div class="mobile-nav">
       <a href="#demo">Live Demo</a>
+      <a href="https://tasty-bug-app.vercel.app" target="_blank" rel="noopener noreferrer">Demo Account</a>
       <a href="#industries">Menu Setups</a>
       <a href="#hardware">Hardware</a>
       <a href="#roi">Savings Calculator</a>
@@ -1093,6 +1095,7 @@ export const LANDING_HTML = String.raw`<!-- ════════════
   <div>Built for fast casual restaurants, cafes, and hospitality counters.</div>
   <nav class="footer-links" aria-label="Footer navigation">
     <a href="#demo">Live Demo</a>
+    <a href="https://tasty-bug-app.vercel.app" target="_blank" rel="noopener noreferrer">Demo Account</a>
     <a href="#industries">Menu Setups</a>
     <a href="#hardware">Hardware</a>
     <a href="#roi">Savings Calculator</a>
