@@ -107,7 +107,8 @@ export function HomePage() {
     );
   }
 
-  if (!business || !data || !mode) return <PageContainer width="standard"><DataState kind="permission-denied" title="No business selected" description="Complete business setup before opening the owner dashboard." action={<Link className="mt-card-link" href="/setup/business-details">Open setup</Link>} /></PageContainer>;
+  // Until the business, its data and its mode are all known, show the loading skeleton; never an empty-state screen.
+  if (!business || !data || !mode) return <PageContainer width="maximum" className="mt-home-page"><DashboardHomeSkeleton /></PageContainer>;
   return <PageContainer width="maximum" className="mt-home-page"><HomeLayout mode={mode} businessName={business.name}>{mode === "setup" ? <SetupHome business={business} setup={data.setup} products={data.products} /> : <BusinessHome business={business} data={data} mode={mode} locationId={selectedLocationId} locations={locations} />}</HomeLayout></PageContainer>;
 }
 
