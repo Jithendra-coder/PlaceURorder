@@ -14,11 +14,17 @@ export async function GET(request: Request) {
     return NextResponse.redirect(signInUrl, 303);
   }
 
+  // Pass the visitor's browser through so the session shows the real device in Security & sessions.
+  const userAgent = request.headers.get("user-agent");
   let upstream: Response;
   try {
     upstream = await fetch(`${backend}/api/auth/login`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        ...(userAgent ? { "User-Agent": userAgent } : {}),
+      },
       body: JSON.stringify({ email, password }),
       cache: "no-store",
     });
