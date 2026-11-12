@@ -190,3 +190,19 @@ def test_daily_revenue_covers_the_selected_period(monkeypatch):
     assert days[1] == {"date": "2026-07-09", "orders": 2, "revenue": 150.0, "average_order_value": 75.0}
     assert days[2] == {"date": "2026-07-10", "orders": 0, "revenue": 0.0, "average_order_value": 0.0}
     assert days[3]["revenue"] == 30.0
+
+
+class _LocationScopedClient(FakeClient):
+    def fetch_one(self, sql, params=None):
+        has_completed = any(row.get("status") == "completed" for row in self.rows["orders"])
+        return {"ok": 1} if has_completed else None
+
+
+def test_a_location_without_orders_does_not_make_an_established_business_look_new():
+    business_id = uuid4()
+    client = _LocationScopedClient([order(str(uuid4()), str(business_id), "2026-07-11T10:00:00+00:00")])
+
+    result = analytics_service.home_activation(client, business_id, location_id=uuid4())
+
+    assert result["completed_order_count"] == 0
+    assert result["mode"] == "active"
