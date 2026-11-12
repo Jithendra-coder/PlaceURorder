@@ -54,6 +54,9 @@ class Settings(BaseSettings):
 
     redis_url: str | None = None
     redis_menu_ttl_seconds: int = 120
+    # Explicit risk acceptance: without Redis, rate limits are kept per serverless instance,
+    # so they are weaker than shared limits. Off by default; enable only while REDIS_URL is not set.
+    rate_limit_accept_process_local_in_production: bool = False
 
     gemini_api_key: str | None = None
     gemini_model: str = "gemini-3.1-flash-lite"
@@ -117,8 +120,11 @@ class Settings(BaseSettings):
             or len(self.payment_expiry_cron_secret) < 24
         ):
             raise ValueError("PAYMENT_EXPIRY_CRON_SECRET must be set to a strong secret in production.")
-        if not self.redis_url:
-            raise ValueError("REDIS_URL must be set in production so rate limits are shared across instances.")
+        if not self.redis_url and not self.rate_limit_accept_process_local_in_production:
+            raise ValueError(
+                "REDIS_URL must be set in production so rate limits are shared across instances. "
+                "To run without it, set RATE_LIMIT_ACCEPT_PROCESS_LOCAL_IN_PRODUCTION=true and accept per-instance limits."
+            )
         if self.legacy_device_token_routes:
             raise ValueError("LEGACY_DEVICE_TOKEN_ROUTES must be false in production.")
         if self.dev_expose_reset_links:

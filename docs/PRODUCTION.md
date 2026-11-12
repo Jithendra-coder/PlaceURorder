@@ -13,7 +13,7 @@ This document is the deploy checklist and the record of the security review. The
 | `JWT_SECRET` | At least 32 random characters. Not a placeholder. |
 | `FRONTEND_BASE_URL` | Public `https://` app URL. Customer QR links and auth emails are built from it. |
 | `ALLOWED_ORIGINS` | Explicit origins only. No `*`. |
-| `REDIS_URL` | Required. Rate limits are shared across instances through Redis. |
+| `REDIS_URL` | Recommended. Rate limits are shared across instances through Redis. Without it, the backend refuses to start unless `RATE_LIMIT_ACCEPT_PROCESS_LOCAL_IN_PRODUCTION=true`, which accepts per-instance limits (weaker, see accepted risks). |
 | `PAYMENT_EXPIRY_CRON_SECRET` | At least 24 random characters. |
 | `ALLOW_DEV_AUTH_BYPASS` | `false` |
 | `DEV_EXPOSE_RESET_LINKS` | `false` |
@@ -51,7 +51,7 @@ Apply the migrations in `backend/migrations/` in date order, including `20261112
 | F8 | Medium | The payment-status token could be sent in the URL query string, where logs record it. | Fixed. The query parameter is ignored. The token is accepted only in the header or body. |
 | F9 | Medium | The assistant accepted any staff role, including kitchen, kiosk and cashier device accounts. | Fixed. Dashboard roles only (owner, admin, manager, viewer). |
 | F10 | Medium | API responses had no HSTS, no CSP and no `no-store`. The frontend had no security headers at all. | Fixed for both backend and frontend. |
-| F11 | Low | Production did not require a shared rate-limit store, so limits were per process. | Fixed. `REDIS_URL` is required in production. |
+| F11 | Low | Production did not require a shared rate-limit store, so limits were per process. | Fixed. `REDIS_URL` is required in production unless the per-instance risk is explicitly accepted. |
 | F12 | Low | The image build could copy environment files. Container default environment was not production. | Fixed. `.dockerignore` excludes env files at any depth. The Dockerfile sets `ENVIRONMENT=production`. |
 | F13 | Low | Dynamic SQL column names were built from request model keys (QR updates). | Fixed with an explicit allow-list. Other dynamic SQL uses fixed table names and keys defined in code. |
 | F14 | Low | The public order token had 32 bits of randomness. | Fixed. 64 bits for new orders. Nothing looks orders up by this token. |
@@ -66,6 +66,9 @@ and size.
 
 ## 5. Accepted risks (documented, with mitigations)
 
+- **No shared rate-limit store (no Redis).** Each serverless instance counts requests separately, so a caller spread
+  across instances can exceed a limit. Enabled only by `RATE_LIMIT_ACCEPT_PROCESS_LOCAL_IN_PRODUCTION=true`. Mitigation:
+  add `REDIS_URL` (Upstash or similar) and remove the flag. This is the first thing to fix after launch.
 - **Owner PIN lockout is business-wide.** Anyone can lock a kiosk owner PIN by failing it repeatedly. The lock lasts
   a fixed time, an owner alert is raised, and an owner can reset it by setting a new PIN in the dashboard. Blocking
   this entirely would weaken PIN brute-force protection, so the trade-off stays.
@@ -80,7 +83,7 @@ and size.
 
 ## 6. Verification
 
-- Backend: `pytest` (318 passed, 3 live-database tests skipped unless `RUN_LIVE_DB_TESTS=1`).
+- Backend: `pytest` (336 passed, 3 live-database tests skipped unless `RUN_LIVE_DB_TESTS=1`).
 - Frontend: `tsc --noEmit`, `eslint`, the style and typography checks, and the Playwright suite.
 - Known external blocker: the Supabase project was unreachable from the development machine during the review, so
   the three sign-up specs could not pass there. They depend on Supabase, not on this code.

@@ -102,8 +102,15 @@ def test_token_in_path_routes_are_off_by_default(method, path, monkeypatch):
 
 
 def test_body_based_device_exchange_is_the_supported_path(monkeypatch):
-    # The new route exists and rejects a malformed token before touching the database.
-    response = api.post("/api/devices/live/session/exchange", json={"device_token": "short"})
+    # The new route exists and rejects a malformed token. The database dependency is stubbed so the
+    # assertion does not depend on whether this machine can reach the database.
+    from database import get_db_client
+
+    app.dependency_overrides[get_db_client] = lambda: None
+    try:
+        response = api.post("/api/devices/live/session/exchange", json={"device_token": "short"})
+    finally:
+        app.dependency_overrides.pop(get_db_client, None)
     assert response.status_code == 422
 
 
@@ -155,6 +162,12 @@ def test_production_requires_shared_rate_limit_storage():
     with pytest.raises(ValidationError) as exc:
         Settings(**_production(redis_url=None))
     assert "REDIS_URL must be set in production" in str(exc.value)
+
+
+def test_production_without_redis_boots_only_with_explicit_risk_acceptance():
+    settings = Settings(**_production(redis_url=None, rate_limit_accept_process_local_in_production=True))
+    assert settings.redis_url is None
+    assert settings.rate_limit_accept_process_local_in_production is True
 
 
 def test_production_refuses_legacy_device_token_routes():
