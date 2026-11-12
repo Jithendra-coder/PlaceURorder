@@ -75,7 +75,8 @@ export function HomePage() {
   }, [business?.id, reloadToken, requestKey, selectedLocationId]);
 
   // Decided by the server together with the activation response, so the first paint is already final.
-  const mode = data ? data.activation.mode : null;
+  // A business with any completed order is never shown the setup or first-order screens, whatever mode arrives.
+  const mode = data ? (data.activation.completed_order_count > 0 ? "active" : data.activation.mode) : null;
   useEffect(() => {
     if (!business?.id || !mode || mode === "setup") return;
     let current = true;
