@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { Button } from "@astryxdesign/core/Button";
+import { CheckboxInput } from "@astryxdesign/core/CheckboxInput";
 import { Selector } from "@astryxdesign/core/Selector";
 import { Grid } from "@astryxdesign/core/Grid";
 import { HStack, VStack } from "@astryxdesign/core/Stack";
@@ -11,6 +12,7 @@ import { Text } from "@astryxdesign/core/Text";
 import { TextInput } from "@astryxdesign/core/TextInput";
 import { ConfirmDialog, DashboardPage, DetailDrawer, DetailRow, EmptyBlock, LoadingBlock, Metric, NoticeBanner, PageHeader, Panel, StatusBadge, Toolbar, type Tone, useLiveTick, DashboardPageWithPanel } from "@/components/dashboard/kit";
 import { DailyBars, RankedBars } from "@/components/dashboard/charts";
+import { useSearchParams } from "next/navigation";
 import { useBusiness } from "@/components/layout/BusinessProvider";
 import { api } from "@/lib/api";
 import type { AdministrationActivity, BusinessLocation, DevicePairingRequest, DeviceRecord, PaymentAccount, PaymentRecord, StaffMember, StaffRole } from "@/lib/types";
@@ -371,7 +373,8 @@ function LocationDrawer({ businessId, location, onClose, onSaved }: { businessId
 }
 
 function Team({ business }: { business: Business }) {
-  const [tab, setTab] = useState<"members" | "roles" | "invitations">("members");
+  const search = useSearchParams();
+  const [tab, setTab] = useState<"members" | "roles" | "invitations" | "security">(() => (search.get("tab") === "security" ? "security" : "members"));
   const [invite, setInvite] = useState(false);
   return (
     <DashboardPage>
@@ -380,8 +383,9 @@ function Team({ business }: { business: Business }) {
         <Tab value="members" label="Members" />
         <Tab value="roles" label="Roles" />
         <Tab value="invitations" label="Invitations" />
+        <Tab value="security" label="Security & sessions" />
       </TabList>
-      {tab === "members" ? <Members business={business} /> : tab === "roles" ? <Roles businessId={business.id} /> : <Invitations businessId={business.id} />}
+      {tab === "members" ? <Members business={business} /> : tab === "roles" ? <Roles businessId={business.id} /> : tab === "security" ? <Security businessId={business.id} /> : <Invitations businessId={business.id} />}
       {invite && <Invite businessId={business.id} onClose={() => setInvite(false)} />}
     </DashboardPage>
   );
@@ -468,45 +472,189 @@ function Invite({ businessId, onClose }: { businessId: string; onClose: () => vo
   );
 }
 
+const permissionOptions: Array<{ value: string; label: string }> = [
+  { value: "home.read", label: "View home" },
+  { value: "insights.read", label: "View insights" },
+  { value: "operations.read", label: "View operations" },
+  { value: "kiosk.manage", label: "Manage kiosk & menu" },
+  { value: "payments.manage", label: "Manage payments" },
+  { value: "administration.manage", label: "Manage administration" },
+  { value: "team.manage", label: "Manage team" },
+  { value: "security.manage", label: "Manage security" },
+];
+const permissionLabel = (value: unknown) => permissionOptions.find((option) => option.value === value)?.label ?? human(value);
+
 function Roles({ businessId }: { businessId: string }) {
   const tick = useAdminTick();
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [createError, setCreateError] = useState("");
   const [name, setName] = useState("");
+  const [picked, setPicked] = useState<string[]>(["home.read", "operations.read"]);
+  const [saving, setSaving] = useState(false);
   useEffect(() => {
-    api.customRoles(businessId).then((result) => setRows(result.roles)).catch((cause) => setError(explain(cause, "Could not load roles."))).finally(() => setLoading(false));
+    api.customRoles(businessId)
+      .then((result) => { setRows(result.roles); setLoadError(""); })
+      .catch((cause) => setLoadError(explain(cause, "Could not load roles.")))
+      .finally(() => setLoading(false));
   }, [businessId, tick]);
   const create = async () => {
+    setSaving(true);
+    setCreateError("");
     try {
-      const role = await api.createCustomRole(businessId, { name, permissions: ["insights.read"] });
+      const role = await api.createCustomRole(businessId, { name: name.trim(), permissions: picked });
       setRows((current) => [...current, role]);
       setName("");
     } catch (cause) {
-      setError(explain(cause, "Could not create role."));
+      setCreateError(explain(cause, "Could not create role."));
+    } finally {
+      setSaving(false);
     }
   };
+  const toggle = (value: string, checked: boolean) => setPicked((current) => checked ? [...new Set([...current, value])] : current.filter((item) => item !== value));
   return (
-    <Panel title="Roles & permissions">
-      <Toolbar>
-        <TextInput label="Custom role name" value={name} onChange={setName} />
-        <Button label="Create role" variant="primary" isDisabled={!name.trim()} onClick={() => void create()} />
-      </Toolbar>
-      {loading ? <LoadingBlock rows={3} /> : error ? <NoticeBanner tone="danger" title="Could not load roles" description="We could not retrieve role configuration." /> : (
-        <>
+    <Panel title="Roles & permissions" description="Give a custom role only the areas it needs. The owner always keeps full access.">
+      <VStack gap={4}>
+        <Toolbar>
+          <TextInput label="Custom role name" value={name} onChange={setName} />
+          <Button label={saving ? "Creating…" : "Create role"} variant="primary" isDisabled={saving || name.trim().length < 2 || picked.length === 0} onClick={() => void create()} />
+        </Toolbar>
+        <Grid columns={{ minWidth: 220, repeat: "fit" }} gap={2}>
+          {permissionOptions.map((option) => (
+            <CheckboxInput key={option.value} label={option.label} value={picked.includes(option.value)} onChange={(checked) => toggle(option.value, checked)} />
+          ))}
+        </Grid>
+        {createError && <NoticeBanner tone="danger" title="Could not create role" description={createError} />}
+        {loading ? <LoadingBlock rows={3} /> : loadError ? <NoticeBanner tone="danger" title="Could not load roles" description={loadError} /> : rows.length ? (
           <Table
             idKey={(row) => String(row.id)}
             data={rows as Array<Row & Record<string, unknown>>}
             columns={[
               { key: "name", header: "Role", renderCell: (row: Row) => String(row.name || "Unnamed role") },
-              { key: "permissions", header: "Permissions", renderCell: (row: Row) => Array.isArray(row.permissions) ? (row.permissions as unknown[]).map(human).join(", ") : "Unavailable" },
+              { key: "permissions", header: "Permissions", renderCell: (row: Row) => Array.isArray(row.permissions) ? (row.permissions as unknown[]).map(permissionLabel).join(", ") : "Unavailable" },
             ]}
           />
-          {!rows.length && <EmptyBlock title="No custom roles yet" />}
-        </>
-      )}
-      {error && <NoticeBanner tone="danger" title="Could not create role" description={error} />}
+        ) : <EmptyBlock title="No custom roles yet" description="Create a role above to group permissions for your team." />}
+      </VStack>
     </Panel>
+  );
+}
+
+type SecurityPolicy = { session_duration_minutes: number; reauthentication_minutes: number; invitation_expiry_days: number; inactive_account_days: number; two_factor_required: boolean };
+type AdminSession = { id: string; email?: string | null; user_agent?: string | null; ip_address?: string | null; created_at?: string | null; last_active_at?: string | null; revoked_at?: string | null; is_current?: boolean };
+
+// Short, readable device label from the browser user-agent string (Chrome is checked before Safari).
+function deviceLabel(agent?: string | null) {
+  if (!agent) return "Unknown device";
+  const browser = /Edg\//.test(agent) ? "Edge" : /Chrome\//.test(agent) ? "Chrome" : /Firefox\//.test(agent) ? "Firefox" : /Safari\//.test(agent) ? "Safari" : "Browser";
+  const system = /Windows/.test(agent) ? "Windows" : /Android/.test(agent) ? "Android" : /iPhone|iPad/.test(agent) ? "iOS" : /Mac OS/.test(agent) ? "macOS" : /Linux/.test(agent) ? "Linux" : "unknown system";
+  return `${browser} on ${system}`;
+}
+
+function Security({ businessId }: { businessId: string }) {
+  const tick = useAdminTick();
+  const [saved, setSaved] = useState<SecurityPolicy | null>(null);
+  const [draft, setDraft] = useState<SecurityPolicy | null>(null);
+  const [sessions, setSessions] = useState<AdminSession[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    Promise.all([api.securityPolicy(businessId), api.administrationSessions(businessId)])
+      .then(([policy, result]) => {
+        const next = policy as unknown as SecurityPolicy;
+        setSaved(next);
+        setDraft(next);
+        setSessions(result.sessions as AdminSession[]);
+        setError("");
+      })
+      .catch((cause) => setError(explain(cause, "Could not load security settings.")))
+      .finally(() => setLoading(false));
+  }, [businessId, tick]);
+  const reloadSessions = async () => {
+    const result = await api.administrationSessions(businessId);
+    setSessions(result.sessions as AdminSession[]);
+  };
+  const save = async () => {
+    if (!draft) return;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await api.updateSecurityPolicy(businessId, { ...draft });
+      setSaved(draft);
+      setNotice("Security settings saved.");
+    } catch (cause) {
+      setError(explain(cause, "Could not save security settings."));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const signOut = async (sessionId: string | null) => {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      if (sessionId) await api.revokeAdministrationSession(businessId, sessionId);
+      else await api.revokeOtherAdministrationSessions(businessId);
+      await reloadSessions();
+      setNotice(sessionId ? "Session signed out." : "Other sessions signed out.");
+    } catch (cause) {
+      setError(explain(cause, "Could not sign out that session."));
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (loading) return <LoadingBlock rows={4} />;
+  if (!draft || !saved) return <NoticeBanner tone="danger" title="Could not load security settings" description={error || "We could not retrieve security configuration."} />;
+  const changed = JSON.stringify(draft) !== JSON.stringify(saved);
+  const active = sessions.filter((session) => !session.revoked_at);
+  const others = active.filter((session) => !session.is_current).length;
+  const numberField = (label: string, key: "session_duration_minutes" | "reauthentication_minutes" | "invitation_expiry_days" | "inactive_account_days") => (
+    <TextInput label={label} value={String(draft[key])} onChange={(value) => setDraft({ ...draft, [key]: Math.max(1, Math.round(Number(value) || 0)) })} />
+  );
+  return (
+    <VStack gap={4}>
+      {error && <NoticeBanner tone="danger" title="Something needs attention" description={error} />}
+      {notice && <NoticeBanner tone="success" title={notice} />}
+      <Panel title="Sign-in & session policy" description="Applies to everyone who signs in to this business.">
+        <VStack gap={4}>
+          <Grid columns={{ minWidth: 220, repeat: "fit" }} gap={4}>
+            {numberField("Session length (minutes)", "session_duration_minutes")}
+            {numberField("Re-authenticate after (minutes)", "reauthentication_minutes")}
+            {numberField("Invitation expires after (days)", "invitation_expiry_days")}
+            {numberField("Deactivate inactive accounts after (days)", "inactive_account_days")}
+          </Grid>
+          <HStack gap={2} hAlign="end">
+            <Button label="Discard" variant="ghost" isDisabled={!changed || busy} onClick={() => setDraft(saved)} />
+            <Button label={busy ? "Saving…" : "Save changes"} variant="primary" isDisabled={!changed || busy} onClick={() => void save()} />
+          </HStack>
+        </VStack>
+      </Panel>
+      <Panel title="Active sessions" description="Devices currently signed in to this business account.">
+        <VStack gap={4}>
+          <Toolbar>
+            <Button label="Sign out other sessions" variant="secondary" isDisabled={busy || others === 0} onClick={() => void signOut(null)} />
+          </Toolbar>
+          {active.length ? (
+            <Table
+              idKey="id"
+              data={active as Array<AdminSession & Record<string, unknown>>}
+              columns={[
+                { key: "account", header: "Account", renderCell: (row: AdminSession) => row.email || "Unavailable" },
+                { key: "device", header: "Device", renderCell: (row: AdminSession) => deviceLabel(row.user_agent) },
+                { key: "ip", header: "IP address", renderCell: (row: AdminSession) => row.ip_address || "Unavailable" },
+                { key: "signed", header: "Signed in", renderCell: (row: AdminSession) => date(row.created_at) },
+                { key: "last", header: "Last active", renderCell: (row: AdminSession) => date(row.last_active_at) },
+                { key: "action", header: "", align: "end", renderCell: (row: AdminSession) => row.is_current ? <StatusBadge tone="success">This device</StatusBadge> : <Button label="Sign out" variant="ghost" size="sm" isDisabled={busy} onClick={() => void signOut(row.id)} /> },
+              ]}
+            />
+          ) : <EmptyBlock title="No active sessions" description="Devices appear here after someone signs in." />}
+        </VStack>
+      </Panel>
+    </VStack>
   );
 }
 
