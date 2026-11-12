@@ -24,6 +24,8 @@ type HomeData = {
   activeOrders: Order[];
   alerts: { alerts: AlertRecord[]; summary: { unresolved_count: number; critical_count: number; warning_count: number } } | null;
   devices: DeviceRecord[] | null;
+  // False until the second request (orders, stats, alerts, devices) has finished. Empty-state cards must never show before then.
+  detailsReady: boolean;
 };
 
 type GrowthState = { scope: string; data: GrowthRecommendations | null; error: string; refreshing: boolean };
@@ -69,7 +71,7 @@ export function HomePage() {
     if (!business?.id) return;
     let current = true;
     void Promise.all([api.homeActivation(business.id, selectedLocationId), api.kioskSetup(business.id), api.products(business.id)])
-      .then(([activation, setup, products]) => { if (current) { setData({ activation, setup, products: products.products, stats: null, orders: [], activeOrders: [], alerts: null, devices: null }); setError(""); setLoadedKey(requestKey); } })
+      .then(([activation, setup, products]) => { if (current) { setData({ activation, setup, products: products.products, stats: null, orders: [], activeOrders: [], alerts: null, devices: null, detailsReady: false }); setError(""); setLoadedKey(requestKey); } })
       .catch((cause) => { if (current) { setError(cause instanceof Error ? cause.message : "Could not load Home."); setLoadedKey(requestKey); } });
     return () => { current = false; };
   }, [business?.id, reloadToken, requestKey, selectedLocationId]);
@@ -83,7 +85,7 @@ export function HomePage() {
     void Promise.allSettled([api.dashboard(business.id, { ...rangeFor("today"), locationId: selectedLocationId }), api.orders(business.id, { limit: 5 }), api.orders(business.id, "active"), api.alerts(business.id), api.devices(business.id)])
       .then(([stats, orders, activeOrders, alerts, devices]) => {
         if (!current) return;
-        setData((value) => value && ({ ...value, stats: stats.status === "fulfilled" ? stats.value : null, orders: orders.status === "fulfilled" ? orders.value.orders : [], activeOrders: activeOrders.status === "fulfilled" ? activeOrders.value.orders : [], alerts: alerts.status === "fulfilled" ? alerts.value : null, devices: devices.status === "fulfilled" ? devices.value.devices : null }));
+        setData((value) => value && ({ ...value, stats: stats.status === "fulfilled" ? stats.value : null, orders: orders.status === "fulfilled" ? orders.value.orders : [], activeOrders: activeOrders.status === "fulfilled" ? activeOrders.value.orders : [], alerts: alerts.status === "fulfilled" ? alerts.value : null, devices: devices.status === "fulfilled" ? devices.value.devices : null, detailsReady: true }));
       });
     return () => { current = false; };
   }, [business?.id, data?.activation.completed_order_count, mode, reloadToken, selectedLocationId]);
@@ -170,7 +172,7 @@ function BusinessHome({ business, data, mode, locationId, locations }: { busines
       <button type="button" aria-pressed={view === "overview"} onClick={() => setView("overview")}>Overview</button>
       <button type="button" aria-pressed={view === "productive"} onClick={() => setView("productive")}>Productive</button>
     </div>
-    {view === "overview" ? <>
+    {!data.detailsReady ? <DashboardHomeSkeleton /> : view === "overview" ? <>
       {statuses.length > 0 && <div className="mt-home-contextual-status">{statuses.map((item) => <Link className="mt-home-status-link" key={item.label} href={item.href}><StatusBadge status={item.status}>{item.label}</StatusBadge></Link>)}</div>}
       <div className="mt-home-grid"><SalesCard business={business} stats={stats} period={salesPeriod} onPeriod={changeSalesPeriod} loading={updating} /><MenuCard business={business} stats={stats} products={data.products} /><KitchenCard orders={data.activeOrders} filter={kitchenFilter} setFilter={setKitchenFilter} onOrder={setSelectedOrder} /><DevicesCard devices={data.devices} /><AlertsCard alerts={alerts} total={data.alerts?.summary.unresolved_count || 0} /><OrdersCard business={business} orders={data.orders} completedOrders={data.activation.completed_order_count} onOrder={setSelectedOrder} /></div>
       {mode === "first_order" && <FirstOrderJourney setup={data.setup} products={data.products} />}
