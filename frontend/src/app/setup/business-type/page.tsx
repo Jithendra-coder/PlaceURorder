@@ -68,7 +68,7 @@ export default function BusinessTypePage() {
   };
 
   return (
-    <SetupShell
+    <SetupShell headerContinue={false}
       step={1}
       title=""
       description=""

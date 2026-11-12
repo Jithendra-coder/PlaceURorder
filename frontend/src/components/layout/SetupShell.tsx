@@ -13,6 +13,7 @@ export function SetupShell({
   onContinue,
   continueDisabled = false,
   continueBusy = false,
+  headerContinue = true,
   className = "",
 }: {
   step: SetupStep;
@@ -22,11 +23,13 @@ export function SetupShell({
   onContinue: () => void;
   continueDisabled?: boolean;
   continueBusy?: boolean;
+  // Screens with their own primary button turn the header action off, so each step has one clear action.
+  headerContinue?: boolean;
   className?: string;
 }) {
   return (
     <main className={`mt-setup-page ${className}`.trim()} data-step={step}>
-      <OnboardingTopBar currentStep={step} onContinue={onContinue} disabled={continueDisabled} busy={continueBusy} />
+      <OnboardingTopBar currentStep={step} onContinue={onContinue} disabled={continueDisabled} busy={continueBusy} showContinue={headerContinue} />
       <div className="mt-setup-page__shell">
         {title && (
           <header className="mt-setup-heading">
