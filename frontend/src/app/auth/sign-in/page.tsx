@@ -80,9 +80,10 @@ export default function SignInPage() {
             <Button label="Fill demo account" variant="ghost" size="sm" width="100%" onClick={() => { setIdentifier(DEV_DEMO_EMAIL); setPassword(DEV_DEMO_PASSWORD); }} />
           )}
           {process.env.NEXT_PUBLIC_DEMO_ACCOUNT === "true" && (
-            <HStack gap={2} hAlign="center">
+            <VStack gap={2} hAlign="center">
               <AuthLink href="/demo" label="Open the Tasty Bug demo" />
-            </HStack>
+              <AuthLink href="/demo/onboarding" label="Open the onboarding demo" />
+            </VStack>
           )}
           <AuthSubmit label="Sign in" disabled={!valid} busy={busy} />
 

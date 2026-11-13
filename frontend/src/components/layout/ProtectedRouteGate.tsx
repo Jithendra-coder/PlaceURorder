@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@astryxdesign/core/Button";
 import { useBusiness } from "@/components/layout/BusinessProvider";
 import { safeSetupRoute } from "@/lib/protected-routing";
+import { onboardingPreviewActive } from "@/lib/onboarding-preview";
 import { DashboardPage, DashboardPageSkeleton, NoticeBanner } from "@/components/dashboard/kit";
 
 import { AutoRecoveringState } from "@/components/ui/AutoRecoveringState";
@@ -23,7 +24,8 @@ export function ProtectedRouteGate({ area, children }: { area: ProtectedArea; ch
   const redirectTarget = useMemo(() => {
     if (unresolved || loadError || !onboardingStatus) return null;
     if (area === "dashboard" && !onboardingStatus.onboarding_completed) return safeSetupRoute(onboardingStatus.next_route);
-    if (area === "setup" && onboardingStatus.onboarding_completed) {
+    // The onboarding demo previews the setup screens for a business that already exists; it never redirects.
+    if (area === "setup" && onboardingStatus.onboarding_completed && !onboardingPreviewActive()) {
       return pathname === "/setup/test-kiosk" ? "/dashboard/kiosk-experience/publish?test=1" : "/dashboard";
     }
     return null;

@@ -1,6 +1,7 @@
-"use client";
-
 import Link from "next/link";
+import { Button } from "@astryxdesign/core/Button";
+import { Step, Stepper } from "@astryxdesign/core/Stepper";
+import { Text } from "@astryxdesign/core/Text";
 
 const steps = ["Business Type", "Business Details", "Menu Items", "Kiosk Layout", "Welcome Screen", "Test Kiosk"];
 
@@ -33,43 +34,42 @@ export function OnboardingTopBar({
   onContinue,
   disabled,
   busy = false,
+  showContinue = true,
 }: {
   currentStep: number;
   onContinue: () => void;
   disabled: boolean;
   busy?: boolean;
+  showContinue?: boolean;
 }) {
   return (
     <header className="mt-onboarding-topbar">
       <div className="mt-onboarding-topbar__inner">
-        <div className="mt-onboarding-progress" aria-hidden="true">
-          {steps.map((_, index) => {
-            const step = index + 1;
-            if (step < currentStep) {
-              return (
-                <svg key={step} className="mt-onboarding-progress__tick" viewBox="0 0 14 14" fill="none">
-                  <path d="M1 7l4 4 8-9" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              );
-            }
-            return <span key={step} className={step === currentStep ? "mt-onboarding-progress__current" : "mt-onboarding-progress__future"} />;
-          })}
+        <div className="mt-onboarding-progress">
+          <Text type="supporting" color="secondary">{`Step ${currentStep} of ${steps.length} · ${steps[currentStep - 1]}`}</Text>
+          <Stepper
+            activeStep={currentStep - 1}
+            label="Setup progress"
+            density="compact"
+            horizontalOptions={{ minimumStepWidth: 9999, collapsedVariant: "hiddenLabel" }}
+          >
+            {steps.map((label, index) => (
+              <Step key={label} step={index} label={label} indicator="none" />
+            ))}
+          </Stepper>
         </div>
-        <span className="mt-sr-only">Step {currentStep} of 6: {steps[currentStep - 1]}</span>
         <Link href="/dashboard" className="mt-onboarding-topbar__logo" aria-label="PlaceURorder dashboard"><PlaceURorderLogo wordmarkOnly /></Link>
-        <button
-          type="button"
-          className="mt-onboarding-topbar__continue"
-          onClick={onContinue}
-          disabled={disabled || busy}
-          aria-busy={busy}
-          aria-label="Continue"
-        >
-          <span>Continue</span>
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
+        <div className="mt-onboarding-topbar__action">
+          {showContinue && (
+            <Button
+              label="Continue"
+              variant="primary"
+              onClick={onContinue}
+              isDisabled={disabled || busy}
+              isLoading={busy}
+            />
+          )}
+        </div>
       </div>
     </header>
   );

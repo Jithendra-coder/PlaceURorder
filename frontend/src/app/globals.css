@@ -784,11 +784,29 @@
   }
 
   .mt-onboarding-progress {
-    height: 24px;
-    display: inline-flex;
-    align-items: center;
+    width: min(320px, 100%);
+    display: flex;
+    flex-direction: column;
     justify-self: start;
-    gap: 10px;
+    gap: 6px;
+  }
+
+  .mt-menu-selection-card__fallback {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    font-size: 32px;
+    font-weight: 700;
+    color: #667085;
+    background: #f2f4f7;
+  }
+
+  .mt-onboarding-topbar__action {
+    justify-self: end;
+    min-width: 150px;
+    display: flex;
+    justify-content: flex-end;
   }
 
   .mt-onboarding-progress__future,
@@ -1503,7 +1521,9 @@
   }
 
   .mt-setup-page--test .mt-setup-heading {
-    width: min(620px, calc(100vw - 48px));
+    /* Same left edge and width as the other setup screens; the completion card below stays centred. */
+    width: min(1368px, calc(100% - 72px));
+    justify-self: center;
     margin-bottom: 16px;
   }
 

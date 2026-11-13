@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { Button } from "@astryxdesign/core/Button";
 import { SetupShell } from "@/components/layout/SetupShell";
 import { api } from "@/services/api";
 
@@ -68,7 +69,7 @@ export default function BusinessTypePage() {
   };
 
   return (
-    <SetupShell
+    <SetupShell headerContinue={false}
       step={1}
       title=""
       description=""
@@ -120,9 +121,7 @@ export default function BusinessTypePage() {
                 </label>
               )}
             </fieldset>
-            <button type="button" className="mt-business-type-continue" onClick={() => void save()} disabled={loading || !selected || busy}>
-              {busy ? "Saving..." : "Continue"}
-            </button>
+            <Button label={busy ? "Saving…" : "Continue"} variant="primary" width="100%" isDisabled={loading || !selected || busy} isLoading={busy} onClick={() => void save()} />
             {error && <p className="mt-business-type-error" role="alert">{error}</p>}
           </section>
         </div>

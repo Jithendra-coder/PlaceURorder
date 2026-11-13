@@ -108,7 +108,7 @@ export default function BusinessDetailsPage() {
   };
 
   return (
-    <SetupShell step={2} title="Business Details" description="Add the essential information for your kiosk." onContinue={() => void save()} continueDisabled={loading || !valid} continueBusy={busy} className="mt-setup-page--details">
+    <SetupShell headerContinue={false} step={2} title="Business Details" description="Add the essential information for your kiosk." onContinue={() => void save()} continueDisabled={loading || !valid} continueBusy={busy} className="mt-setup-page--details">
       <section className="mt-business-details-card">
         <div className="mt-business-details-card__heading">
           <div className="mt-setup-heading">
