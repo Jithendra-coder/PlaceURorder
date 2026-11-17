@@ -20,7 +20,7 @@ import {
 } from "@/components/AuthShell";
 import { postLoginDestination, rememberPostLoginReturnPath, takePostLoginReturnPath } from "@/lib/protected-routing";
 import { AuthService } from "@/services/auth";
-import { DEV_DEMO_EMAIL, DEV_DEMO_PASSWORD } from "@/lib/dev-demo";
+import { DEV_DEMO_EMAIL, DEV_DEMO_PASSWORD, devDemoConfigured } from "@/lib/dev-demo";
 
 export default function SignInPage() {
   const router = useRouter();
@@ -76,7 +76,7 @@ export default function SignInPage() {
             </VStack>
           </VStack>
 
-          {process.env.NODE_ENV !== "production" && (
+          {devDemoConfigured() && (
             <Button label="Fill demo account" variant="ghost" size="sm" width="100%" onClick={() => { setIdentifier(DEV_DEMO_EMAIL); setPassword(DEV_DEMO_PASSWORD); }} />
           )}
           {process.env.NEXT_PUBLIC_DEMO_ACCOUNT === "true" && (
