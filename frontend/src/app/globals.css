@@ -2344,6 +2344,8 @@
 
   .mt-virtual-kiosk-frame--test {
     min-width: 0;
+    /* The frame is height: 100% of an auto-height parent, which collapses to 0 and hides the kiosk. */
+    min-height: min(640px, 80dvh);
   }
 
   .mt-virtual-kiosk-frame--test .mt-virtual-kiosk-frame__viewport {
