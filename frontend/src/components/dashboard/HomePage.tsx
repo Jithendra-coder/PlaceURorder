@@ -10,6 +10,7 @@ import { PageContainer, SectionHeader } from "@/components/layout/DashboardPrimi
 import { Button, DataState, DetailsDrawer, SearchInput, Select, Skeleton, StatusBadge, StatusPill } from "@/components/ui/DashboardUI";
 import { AutoRecoveringState } from "@/components/ui/AutoRecoveringState";
 import { DashboardHomeSkeleton } from "@/components/ui/Skeletons";
+import { DemoShowcase } from "@/components/dashboard/DemoShowcase";
 import { api, assetUrl } from "@/lib/api";
 import { formatCurrency, formatDateTime, formatDuration, formatOrderStatus } from "@/lib/formatters";
 import type { AlertRecord, DashboardStats, DeviceRecord, GrowthRecommendations, HomeActivation, KioskSetupOverview, Order, Product } from "@/lib/types";
@@ -176,6 +177,7 @@ function BusinessHome({ business, data, mode, locationId, locations }: { busines
       {statuses.length > 0 && <div className="mt-home-contextual-status">{statuses.map((item) => <Link className="mt-home-status-link" key={item.label} href={item.href}><StatusBadge status={item.status}>{item.label}</StatusBadge></Link>)}</div>}
       <div className="mt-home-grid"><SalesCard business={business} stats={stats} period={salesPeriod} onPeriod={changeSalesPeriod} loading={updating} /><MenuCard business={business} stats={stats} products={data.products} /><KitchenCard orders={data.activeOrders} filter={kitchenFilter} setFilter={setKitchenFilter} onOrder={setSelectedOrder} /><DevicesCard devices={data.devices} /><AlertsCard alerts={alerts} total={data.alerts?.summary.unresolved_count || 0} /><OrdersCard business={business} orders={data.orders} completedOrders={data.activation.completed_order_count} onOrder={setSelectedOrder} /></div>
       {mode === "first_order" && <FirstOrderJourney setup={data.setup} products={data.products} />}
+      <DemoShowcase />
     </> : <ProductiveHome business={business} locations={locations} locationId={coachLocationId} onLocationChange={changeCoachLocation} alerts={data.alerts?.alerts ?? null} growth={growth.scope === scopeKey ? growth : null} onRefresh={() => void refreshGrowth()} />}
     {selectedOrder && <OrderDrawer business={business} order={selectedOrder} close={() => setSelectedOrder(null)} />}
   </section>;
