@@ -1,12 +1,12 @@
 "use client";
 
-// Local development demo account. Every export is inert in production builds:
-// the NODE_ENV guard is constant-folded, so the demo credentials are not shipped.
-// The backend only honours the x-user-id header when ALLOW_DEV_AUTH_BYPASS=true
-// and the environment is local.
+// Local development demo account. The credentials come from NEXT_PUBLIC_DEV_DEMO_EMAIL and
+// NEXT_PUBLIC_DEV_DEMO_PASSWORD in a local frontend/.env.local file, which is never committed.
+// They are unset in production, so no demo credential is compiled into the production bundle.
+// The backend only honours the x-user-id header when ALLOW_DEV_AUTH_BYPASS=true and the environment is local.
 
-export const DEV_DEMO_EMAIL = "demo@placeurorder.local";
-export const DEV_DEMO_PASSWORD = "PlaceURorder-Demo-2026";
+export const DEV_DEMO_EMAIL = process.env.NEXT_PUBLIC_DEV_DEMO_EMAIL?.trim() ?? "";
+export const DEV_DEMO_PASSWORD = process.env.NEXT_PUBLIC_DEV_DEMO_PASSWORD ?? "";
 export const DEV_DEMO_USER_ID = "7e570000-0000-4000-8000-000000000001";
 const DEV_USER_KEY = "menutap.dev_user_id";
 
@@ -19,8 +19,13 @@ function storage(): Storage | null {
   }
 }
 
+/** True only in development builds where both demo credentials were provided. */
+export function devDemoConfigured() {
+  return process.env.NODE_ENV !== "production" && DEV_DEMO_EMAIL !== "" && DEV_DEMO_PASSWORD !== "";
+}
+
 export function isDevDemoCredentials(identifier: string, password: string) {
-  return process.env.NODE_ENV !== "production" && identifier.trim().toLowerCase() === DEV_DEMO_EMAIL && password === DEV_DEMO_PASSWORD;
+  return devDemoConfigured() && identifier.trim().toLowerCase() === DEV_DEMO_EMAIL.toLowerCase() && password === DEV_DEMO_PASSWORD;
 }
 
 export function activateDevDemoSession() {
