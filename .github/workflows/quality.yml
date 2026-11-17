@@ -45,4 +45,8 @@ jobs:
       - run: npm run lint
       - run: npm run check:styles
       - run: npm run check:typography
+      # Build the production bundle so a broken build fails the PR, not the Vercel deploy.
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_DEMO_ACCOUNT: "false"
       - run: docker compose -f ../compose.yaml config --quiet
